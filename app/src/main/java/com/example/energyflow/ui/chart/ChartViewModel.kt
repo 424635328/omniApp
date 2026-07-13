@@ -586,14 +586,19 @@ class ChartViewModel @Inject constructor(
                 (current.electricTotal ?: 0.0) - (prev.electricTotal ?: 0.0)
             if (totalConsumption < 0.0) continue
 
-            val days = ChronoUnit.DAYS.between(prev.timestamp, current.timestamp)
-                .coerceAtLeast(1)
+            val rawDays = ChronoUnit.DAYS.between(
+                prev.timestamp.toLocalDate().atStartOfDay(),
+                current.timestamp.toLocalDate().atStartOfDay()
+            )
+            // 以日历日为基准，避免时分秒导致的 off-by-one
+            val days = rawDays.coerceAtLeast(1)
 
             val dailyAvg = totalConsumption / days
 
             // 为缺口中的每一天生成数据点
+            val baseDate = prev.timestamp.toLocalDate()
             for (d in 1..days) {
-                val pointDate = prev.timestamp.plusDays(d)
+                val pointDate = baseDate.plusDays(d).atTime(12, 0)
                 val isLast = d == days
 
                 result.add(

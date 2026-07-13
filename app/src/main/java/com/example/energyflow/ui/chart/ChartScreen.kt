@@ -1580,12 +1580,9 @@ private fun EventImpactPanel(
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        aiAnalysis,
-                        color = TextSecondary,
-                        fontFamily = MonoFontFamily,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
+                    MarkdownText(
+                        text = aiAnalysis,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -1726,6 +1723,51 @@ private fun EmptyChartPlaceholder() {
                 fontFamily = MonoFontFamily,
                 fontSize = 13.sp
             )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 简易 Markdown 渲染
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun MarkdownText(text: String, modifier: Modifier = Modifier) {
+    val lines = text.split("\n")
+    Column(modifier = modifier) {
+        lines.forEach { line ->
+            val trimmed = line.trim()
+            when {
+                trimmed.isEmpty() -> Spacer(modifier = Modifier.height(4.dp))
+                trimmed.startsWith("- ") || trimmed.startsWith("· ") -> {
+                    Row(modifier = Modifier.padding(start = 4.dp)) {
+                        Text("•", color = NeonBlue.copy(alpha = 0.7f), fontFamily = MonoFontFamily, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            trimmed.removePrefix("- ").removePrefix("· ").replace("**", ""),
+                            color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 12.sp, lineHeight = 18.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                trimmed.startsWith("①") || trimmed.startsWith("②") || trimmed.startsWith("③") ||
+                trimmed.startsWith("④") || trimmed.startsWith("⑤") -> {
+                    Text(trimmed, color = TextPrimary, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp, lineHeight = 18.sp)
+                }
+                else -> {
+                    val display = trimmed.replace("**", "")
+                    val isBold = trimmed.startsWith("**") || line.contains("**")
+                    Text(
+                        display,
+                        color = if (isBold) TextPrimary else TextSecondary,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
         }
     }
 }
