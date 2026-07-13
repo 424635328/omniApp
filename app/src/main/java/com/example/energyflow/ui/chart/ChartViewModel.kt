@@ -193,9 +193,17 @@ class ChartViewModel @Inject constructor(
         // 月度预测
         val pred = predictiveAnalyzer.predictMonth(electricRecords.value)
         if (pred != null) {
-            val predBill = costEngine.calculateSimple(pred.predictedTotalKwh)
-            _prediction.value = pred.copy(predictedTotalKwh = pred.predictedTotalKwh + 0) // keep original
-            // Store bill prediction separately
+            val totalInRange = _billResult.value?.totalKwh ?: 0.0
+            val peakRatio = if (totalInRange > 0.0) (_billResult.value?.peakKwh ?: 0.0) / totalInRange else 0.0
+            val valleyRatio = if (totalInRange > 0.0) (_billResult.value?.valleyKwh ?: 0.0) / totalInRange else 0.0
+            val predictedPeak = pred.predictedTotalKwh * peakRatio
+            val predictedValley = pred.predictedTotalKwh * valleyRatio
+            val predBill = costEngine.calculateBill(
+                totalKwh = pred.predictedTotalKwh,
+                peakKwh = predictedPeak,
+                valleyKwh = predictedValley
+            ).electricTotalCost
+            _prediction.value = pred
             _predictedBill.value = PredictedBill(
                 totalKwh = pred.predictedTotalKwh,
                 predictedCost = predBill

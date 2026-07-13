@@ -50,6 +50,7 @@ class MainViewModel @Inject constructor(
 
     private val _pendingSaveData = MutableStateFlow<RecordData?>(null)
     val pendingSaveData: StateFlow<RecordData?> = _pendingSaveData.asStateFlow()
+    private var pendingMutation: PendingMutation? = null
 
     private val _showAnomalyDialog = MutableStateFlow(false)
     val showAnomalyDialog: StateFlow<Boolean> = _showAnomalyDialog.asStateFlow()
@@ -74,29 +75,12 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = UiState.Loading
             try {
-                // 异常检测
-                val warnings = mutableListOf<AnomalyWarning>()
-
-                if (data.isElectric && data.electricTotal != null) {
-                    val monotonicWarning = anomalyDetector.checkElectricMonotonic(data.electricTotal, data.timestamp)
-                    if (monotonicWarning != null) {
-                        warnings.add(AnomalyWarning.ReadingLowerThanPrevious(monotonicWarning))
-                    }
-                    val spikeWarning = anomalyDetector.checkElectricSpike(data.electricTotal, data.timestamp)
-                    if (spikeWarning != null) {
-                        warnings.add(AnomalyWarning.SpikeDetected(spikeWarning))
-                    }
-                }
-                if (data.isWater && data.waterTotal != null) {
-                    val monotonicWarning = anomalyDetector.checkWaterMonotonic(data.waterTotal, data.timestamp)
-                    if (monotonicWarning != null) {
-                        warnings.add(AnomalyWarning.ReadingLowerThanPrevious(monotonicWarning))
-                    }
-                }
+                val warnings = collectAnomalyWarnings(data)
 
                 if (warnings.isNotEmpty()) {
                     _anomalyWarnings.value = warnings
                     _pendingSaveData.value = data
+                    pendingMutation = PendingMutation.Insert(data)
                     _showAnomalyDialog.value = true
                     _uiState.value = UiState.Idle
                     return@launch
@@ -114,12 +98,13 @@ class MainViewModel @Inject constructor(
      * 用户点击了"确认保存"（无视异常警告）。
      */
     fun confirmSaveWithAnomaly() {
-        val data = _pendingSaveData.value ?: return
+        val mutation = pendingMutation ?: _pendingSaveData.value?.let { PendingMutation.Insert(it) } ?: return
         viewModelScope.launch {
-            performSave(data)
-            _showAnomalyDialog.value = false
-            _pendingSaveData.value = null
-            _anomalyWarnings.value = emptyList()
+            when (mutation) {
+                is PendingMutation.Insert -> performSave(mutation.data)
+                is PendingMutation.Update -> performUpdate(mutation.original, mutation.data)
+            }
+            clearAnomalyPending()
         }
     }
 
@@ -127,9 +112,7 @@ class MainViewModel @Inject constructor(
      * 用户点击了"取消"（返回修改）。
      */
     fun cancelSaveWithAnomaly() {
-        _showAnomalyDialog.value = false
-        _pendingSaveData.value = null
-        _anomalyWarnings.value = emptyList()
+        clearAnomalyPending()
     }
 
     private suspend fun performSave(data: RecordData) {
@@ -183,21 +166,32 @@ class MainViewModel @Inject constructor(
     }
 
     fun updateRecord(original: MeterRecord, data: RecordData) {
+        if (!data.isElectric && !data.isWater) {
+            _uiState.value = UiState.Error("请至少输入电表或水表数据")
+            return
+        }
+        if (data.isElectric && data.electricTotal == null) {
+            _uiState.value = UiState.Error("请输入电表读数")
+            return
+        }
+        if (data.isWater && data.waterTotal == null) {
+            _uiState.value = UiState.Error("请输入水表读数")
+            return
+        }
+
         viewModelScope.launch {
             _uiState.value = UiState.Loading
             try {
-                val updated = original.copy(
-                    timestamp = data.timestamp,
-                    isElectricRecorded = data.isElectric,
-                    electricTotal = data.electricTotal,
-                    electricPeak = data.electricPeak,
-                    electricValley = data.electricValley,
-                    isWaterRecorded = data.isWater,
-                    waterTotal = data.waterTotal,
-                    note = data.note
-                )
-                repository.update(updated)
-                _uiState.value = UiState.Success("记录已更新")
+                val warnings = collectAnomalyWarnings(data)
+                if (warnings.isNotEmpty()) {
+                    _anomalyWarnings.value = warnings
+                    _pendingSaveData.value = data
+                    pendingMutation = PendingMutation.Update(original, data)
+                    _showAnomalyDialog.value = true
+                    _uiState.value = UiState.Idle
+                    return@launch
+                }
+                performUpdate(original, data)
             } catch (e: Exception) {
                 _uiState.value = UiState.Error("更新失败: ${e.message}")
             }
@@ -235,9 +229,9 @@ class MainViewModel @Inject constructor(
                     is BatchInsertResult.Success -> {
                         _uiState.value = UiState.Success("成功导入 ${result.count} 条记录")
                     }
-                    is BatchInsertResult.SuccessWithWarnings -> {
+                    is BatchInsertResult.Warning -> {
                         val msg = buildString {
-                            append("成功导入 ${result.count} 条记录")
+                            append("导入已拦截，请先检查异常读数")
                             if (result.warnings.isNotEmpty()) {
                                 append("\n⚠️ ${result.warnings.first()}")
                             }
@@ -281,6 +275,48 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+    private suspend fun collectAnomalyWarnings(data: RecordData): List<AnomalyWarning> {
+        val warnings = mutableListOf<AnomalyWarning>()
+
+        if (data.isElectric && data.electricTotal != null) {
+            anomalyDetector.checkElectricMonotonic(data.electricTotal, data.timestamp)?.let {
+                warnings.add(AnomalyWarning.ReadingLowerThanPrevious(it))
+            }
+            anomalyDetector.checkElectricSpike(data.electricTotal, data.timestamp)?.let {
+                warnings.add(AnomalyWarning.SpikeDetected(it))
+            }
+        }
+        if (data.isWater && data.waterTotal != null) {
+            anomalyDetector.checkWaterMonotonic(data.waterTotal, data.timestamp)?.let {
+                warnings.add(AnomalyWarning.ReadingLowerThanPrevious(it))
+            }
+        }
+
+        return warnings
+    }
+
+    private suspend fun performUpdate(original: MeterRecord, data: RecordData) {
+        val updated = original.copy(
+            timestamp = data.timestamp,
+            isElectricRecorded = data.isElectric,
+            electricTotal = data.electricTotal,
+            electricPeak = data.electricPeak,
+            electricValley = data.electricValley,
+            isWaterRecorded = data.isWater,
+            waterTotal = data.waterTotal,
+            note = data.note
+        )
+        repository.update(updated)
+        _uiState.value = UiState.Success("记录已更新")
+    }
+
+    private fun clearAnomalyPending() {
+        _showAnomalyDialog.value = false
+        _pendingSaveData.value = null
+        pendingMutation = null
+        _anomalyWarnings.value = emptyList()
+    }
 }
 
 sealed class UiState {
@@ -289,4 +325,9 @@ sealed class UiState {
     data class Success(val message: String) : UiState()
     data class Warning(val message: String) : UiState()
     data class Error(val message: String) : UiState()
+}
+
+private sealed class PendingMutation {
+    data class Insert(val data: RecordData) : PendingMutation()
+    data class Update(val original: MeterRecord, val data: RecordData) : PendingMutation()
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -38,100 +39,96 @@ fun ConsumptionLineChart(
         modifier = modifier
             .fillMaxWidth()
             .height(220.dp)
-    ) {
-        val paddingLeft = 50f
-        val paddingBottom = 40f
-        val paddingTop = 16f
-        val paddingRight = 16f
+            .drawWithCache {
+                val paddingLeft = 50f
+                val paddingBottom = 40f
+                val paddingTop = 16f
+                val paddingRight = 16f
 
-        val chartWidth = size.width - paddingLeft - paddingRight
-        val chartHeight = size.height - paddingTop - paddingBottom
+                val chartWidth = size.width - paddingLeft - paddingRight
+                val chartHeight = size.height - paddingTop - paddingBottom
+                if (chartWidth <= 0f || chartHeight <= 0f) {
+                    onDrawBehind {}
+                } else {
+                    val values = consumptions.map { if (showCost) it.estimatedCost else it.dailyConsumption }
+                    val maxValue = values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+                    val minValue = 0.0
+                    val valueRange = maxValue - minValue
+                    val pointCount = consumptions.size
+                    val xStep = if (pointCount > 1) chartWidth / (pointCount - 1) else chartWidth
+                    val path = Path()
+                    val points = consumptions.mapIndexed { index, consumption ->
+                        val x = paddingLeft + index * xStep
+                        val value = if (showCost) consumption.estimatedCost else consumption.dailyConsumption
+                        val y = paddingTop + chartHeight - ((value - minValue) / valueRange * chartHeight).toFloat()
+                        if (index == 0) {
+                            path.moveTo(x, y)
+                        } else {
+                            path.lineTo(x, y)
+                        }
+                        Offset(x, y)
+                    }
+                    val pointStep = (consumptions.size / 120).coerceAtLeast(1)
+                    val visiblePoints = points.filterIndexed { index, _ ->
+                        index % pointStep == 0 || index == points.lastIndex
+                    }
 
-        val values = consumptions.map { if (showCost) it.estimatedCost else it.dailyConsumption }
-        val maxValue = values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
-        val minValue = 0.0
-        val valueRange = maxValue - minValue
+                    onDrawBehind {
+                        drawGridLines(
+                            topLeft = Offset(paddingLeft, paddingTop),
+                            width = chartWidth,
+                            height = chartHeight,
+                            gridColor = gridColor,
+                            maxValue = maxValue,
+                            labelColor = labelColor,
+                            showCost = showCost
+                        )
 
-        // Draw grid lines
-        drawGridLines(
-            topLeft = Offset(paddingLeft, paddingTop),
-            width = chartWidth,
-            height = chartHeight,
-            gridColor = gridColor,
-            maxValue = maxValue,
-            labelColor = labelColor,
-            showCost = showCost
-        )
+                        // A translucent stroke is substantially cheaper than a BlurMaskFilter and
+                        // keeps Canvas scrolling smooth on long histories.
+                        drawPath(
+                            path = path,
+                            color = chartColor.copy(alpha = 0.3f),
+                            style = Stroke(
+                                width = 6f,
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
+                        )
+                        drawPath(
+                            path = path,
+                            color = chartColor,
+                            style = Stroke(
+                                width = 2.5f,
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
+                        )
 
-        // Draw the line
-        val path = Path()
-        val pointCount = consumptions.size
-        val xStep = if (pointCount > 1) chartWidth / (pointCount - 1) else chartWidth
+                        visiblePoints.forEach { point ->
+                            drawCircle(
+                                color = chartColor.copy(alpha = 0.3f),
+                                radius = 6f,
+                                center = point
+                            )
+                            drawCircle(
+                                color = chartColor,
+                                radius = 3f,
+                                center = point
+                            )
+                        }
 
-        consumptions.forEachIndexed { index, consumption ->
-            val x = paddingLeft + index * xStep
-            val value = if (showCost) consumption.estimatedCost else consumption.dailyConsumption
-            val y = paddingTop + chartHeight - ((value - minValue) / valueRange * chartHeight).toFloat()
-
-            if (index == 0) {
-                path.moveTo(x, y)
-            } else {
-                path.lineTo(x, y)
+                        drawDateLabels(
+                            consumptions = consumptions,
+                            topLeft = Offset(paddingLeft, paddingTop),
+                            chartWidth = chartWidth,
+                            chartHeight = chartHeight,
+                            labelColor = labelColor
+                        )
+                    }
+                }
             }
-        }
-
-        // A translucent stroke is substantially cheaper than a BlurMaskFilter and
-        // keeps Canvas scrolling smooth on long histories.
-        drawPath(
-            path = path,
-            color = chartColor.copy(alpha = 0.3f),
-            style = Stroke(
-                width = 6f,
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
-        )
-        drawPath(
-            path = path,
-            color = chartColor,
-            style = Stroke(
-                width = 2.5f,
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
-        )
-
-        // Draw data points
-        val pointStep = (consumptions.size / 120).coerceAtLeast(1)
-        consumptions.forEachIndexed { index, consumption ->
-            if (index % pointStep != 0 && index != consumptions.lastIndex) return@forEachIndexed
-            val x = paddingLeft + index * xStep
-            val value = if (showCost) consumption.estimatedCost else consumption.dailyConsumption
-            val y = paddingTop + chartHeight - ((value - minValue) / valueRange * chartHeight).toFloat()
-
-            // Outer glow
-            drawCircle(
-                color = chartColor.copy(alpha = 0.3f),
-                radius = 6f,
-                center = Offset(x, y)
-            )
-            // Inner point
-            drawCircle(
-                color = chartColor,
-                radius = 3f,
-                center = Offset(x, y)
-            )
-        }
-
-        // Draw date labels on X axis
-        drawDateLabels(
-            consumptions = consumptions,
-            topLeft = Offset(paddingLeft, paddingTop),
-            chartWidth = chartWidth,
-            chartHeight = chartHeight,
-            labelColor = labelColor
-        )
-    }
+    ) {}
 }
 
 private fun DrawScope.drawGridLines(

@@ -1,6 +1,7 @@
 package com.example.energyflow.data
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import java.time.Duration
 import java.time.LocalDateTime
 import javax.inject.Inject
@@ -71,30 +72,26 @@ class MeterRepository @Inject constructor(
     suspend fun batchInsert(input: String, force: Boolean = false): BatchInsertResult {
         val thresholds = classifier.getThresholds()
         val results = parser.parseWithContext(input, thresholds)
+        val successes = results.filterIsInstance<ParseResult.Success>()
+        val parseErrors = results.filterIsInstance<ParseResult.Error>().map { it.message }
+
+        if (!force) {
+            val warnings = validateBatchCandidates(successes)
+            if (warnings.isNotEmpty()) {
+                return BatchInsertResult.Warning(warnings)
+            }
+        }
+
         val successRecords = mutableListOf<MeterRecord>()
-        val errors = mutableListOf<String>()
-        val warnings = mutableListOf<String>()
 
         results.forEach { result ->
             when (result) {
                 is ParseResult.Success -> {
-                    if (!force) {
-                        val warning = anomalyDetector.checkParseResult(result)
-                        if (warning != null) {
-                            warnings.add(warning)
-                        }
-                        val spikeWarning = anomalyDetector.checkParseResultForSpike(result)
-                        if (spikeWarning != null) {
-                            warnings.add(spikeWarning)
-                        }
-                    }
                     val record = result.toMeterRecord()
                     meterRecordDao.insert(record)
                     successRecords.add(record)
                 }
-                is ParseResult.Error -> {
-                    errors.add(result.message)
-                }
+                is ParseResult.Error -> Unit
             }
         }
 
@@ -103,10 +100,51 @@ class MeterRepository @Inject constructor(
         }
 
         return when {
-            errors.isEmpty() && warnings.isEmpty() -> BatchInsertResult.Success(successRecords.size)
-            errors.isEmpty() -> BatchInsertResult.SuccessWithWarnings(successRecords.size, warnings)
-            else -> BatchInsertResult.PartialSuccess(successRecords.size, errors)
+            parseErrors.isEmpty() -> BatchInsertResult.Success(successRecords.size)
+            else -> BatchInsertResult.PartialSuccess(successRecords.size, parseErrors)
         }
+    }
+
+    private suspend fun validateBatchCandidates(successes: List<ParseResult.Success>): List<String> {
+        val warnings = mutableListOf<String>()
+        successes.forEach { result ->
+            anomalyDetector.checkParseResult(result)?.let(warnings::add)
+            anomalyDetector.checkParseResultForSpike(result)?.let(warnings::add)
+        }
+
+        val candidates = successes.map { it.toMeterRecord() }
+        warnings += findBatchDropWarning(
+            records = meterRecordDao.getElectricRecords().first() + candidates.filter { it.isElectricRecorded },
+            valueOf = { it.electricTotal },
+            label = "当前读数"
+        )
+        warnings += findBatchDropWarning(
+            records = meterRecordDao.getWaterRecords().first() + candidates.filter { it.isWaterRecorded },
+            valueOf = { it.waterTotal },
+            label = "当前水表读数"
+        )
+
+        return warnings.filter { it.isNotBlank() }.distinct()
+    }
+
+    private fun findBatchDropWarning(
+        records: List<MeterRecord>,
+        valueOf: (MeterRecord) -> Double?,
+        label: String
+    ): List<String> {
+        val pair = records
+            .filter { valueOf(it) != null }
+            .sortedBy { it.timestamp }
+            .zipWithNext()
+            .firstOrNull { (previous, current) ->
+                current.timestamp > previous.timestamp &&
+                    (valueOf(current) ?: 0.0) < (valueOf(previous) ?: 0.0)
+            }
+            ?: return emptyList()
+
+        val previous = valueOf(pair.first) ?: return emptyList()
+        val current = valueOf(pair.second) ?: return emptyList()
+        return listOf("$label ${format(current)} 低于历史记录 ${format(previous)}，请检查是否输入错误")
     }
 
     suspend fun insert(record: MeterRecord): Long {
@@ -180,8 +218,14 @@ sealed class InsertResult {
 
 sealed class BatchInsertResult {
     data class Success(val count: Int) : BatchInsertResult()
-    data class SuccessWithWarnings(val count: Int, val warnings: List<String>) : BatchInsertResult()
+    data class Warning(val warnings: List<String>) : BatchInsertResult()
     data class PartialSuccess(val successCount: Int, val errors: List<String>) : BatchInsertResult()
+}
+
+private fun format(value: Double): String = if (value == value.toLong().toDouble()) {
+    value.toLong().toString()
+} else {
+    "%.1f".format(value)
 }
 
 sealed class ConsumptionResult {

@@ -58,10 +58,15 @@ class SmartInputParser {
                     }
                 }
                 is ContextParseResult.PendingPeakValley -> {
-                    pendingElectric?.let { pe ->
-                        results.add(pe.toSuccess(currentMonth!!, currentDay!!))
+                    if (result.pending.peak != null && result.pending.valley != null) {
+                        results.add(result.pending.toSuccess(currentMonth!!, currentDay!!))
+                        pendingElectric = null
+                    } else {
+                        pendingElectric?.let { pe ->
+                            results.add(pe.toSuccess(currentMonth!!, currentDay!!))
+                        }
+                        pendingElectric = result.pending
                     }
-                    pendingElectric = result.pending
                 }
                 is ContextParseResult.Error -> {
                     results.add(ParseResult.Error(result.message))
@@ -279,7 +284,7 @@ class SmartInputParser {
                     else -> pendingElectric.copy(valley = value, total = null)
                 }
                 if (next.peak != null && next.valley != null) {
-                    return ContextParseResult.Record(next.copy(total = next.peak + next.valley).toSuccess(currentMonth, currentDay))
+                    return ContextParseResult.PendingPeakValley(next.copy(total = next.peak + next.valley))
                 }
                 return ContextParseResult.PendingPeakValley(next)
             }

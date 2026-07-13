@@ -10,16 +10,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -68,6 +61,7 @@ import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.theme.WaterColor
 import com.example.energyflow.ui.utils.Formatters
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
 @Composable
 fun ChartScreen(
@@ -115,11 +109,16 @@ fun ChartScreen(
                     )
                 }
 
-                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth()
+                        .height(220.dp)
+                ) {
                     ConsumptionLineChart(
                         consumptions = chartData.dailyConsumptions,
                         showCost = showCost,
-                        modifier = Modifier.matchParentSize()
+                        modifier = Modifier.fillMaxSize()
                     )
 
                     if (showWeather && weatherData.isNotEmpty()) {
@@ -556,13 +555,16 @@ private fun DataSummary(chartData: ChartData) {
             SummaryCard("最新水表", Formatters.formatWater(latestWater.waterTotal), WaterColor)
         }
 
-        if (chartData.dailyConsumptions.isNotEmpty()) {
+        if (chartData.records.size >= 2) {
             Spacer(modifier = Modifier.height(8.dp))
-            val avgDaily = chartData.dailyConsumptions.map { it.dailyConsumption }.average()
+            val first = chartData.records.first()
+            val last = chartData.records.last()
+            val totalCons = (last.electricTotal ?: 0.0) - (first.electricTotal ?: 0.0)
+            val totalDays = ChronoUnit.DAYS.between(first.timestamp, last.timestamp)
+            val avgDaily = if (totalDays > 0) totalCons / totalDays else totalCons
             SummaryCard("日均用电", Formatters.formatDailyConsumption(avgDaily), NeonYellow)
 
             Spacer(modifier = Modifier.height(8.dp))
-            val totalCons = chartData.dailyConsumptions.sumOf { it.consumption }
             SummaryCard("总用电量", "${Formatters.formatDecimal1(totalCons)} 度", ElectricColor)
         }
     }
