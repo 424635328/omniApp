@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 应用名称 -->
+    <string name="app_name">能耗手记</string>
+
+    <!-- 相机界面 -->
+    <string name="grant_permission">授予权限</string>
+    <string name="camera_permission_required">需要相机权限</string>
+    <string name="camera_permission_desc">授予相机权限以开始拍摄</string>
+
+    <!-- 闪光灯模式 -->
+    <string name="flash_auto">自动</string>
+    <string name="flash_on">开启</string>
+    <string name="flash_off">关闭</string>
+    <string name="flash_torch">手电</string>
+
+    <!-- 镜头标识 -->
+    <string name="lens_wide">广角</string>
+    <string name="lens_ultra_wide">超广</string>
+    <string name="lens_telephoto">长焦</string>
+    <string name="lens_macro">微距</string>
+
+    <!-- 拍摄模式 -->
+    <string name="mode_photo">拍照</string>
+    <string name="mode_portrait">人像</string>
+    <string name="mode_night">夜景</string>
+    <string name="mode_pro">专业</string>
+
+    <!-- 模板/滤镜 -->
+    <string name="filter_none">无</string>
+    <string name="template_original">原图</string>
+
+    <!-- 图库界面 -->
+    <string name="gallery_title">图库</string>
+    <string name="gallery_empty">暂无照片</string>
+    <string name="gallery_empty_hint">去拍照吧 📸</string>
+
+    <!-- 照片查看 -->
+    <string name="share">分享</string>
+    <string name="delete">删除</string>
+
+    <!-- 设置界面 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_back">返回</string>
+
+    <!-- 设置 - 拍摄 -->
+    <string name="section_capture">拍摄</string>
+    <string name="photo_quality">照片质量</string>
+    <string name="photo_quality_high">高</string>
+    <string name="photo_quality_medium">中</string>
+    <string name="photo_quality_low">低</string>
+    <string name="photo_format">照片格式</string>
+    <string name="photo_format_jpeg">JPEG</string>
+    <string name="photo_format_png">PNG</string>
+    <string name="photo_resolution">照片分辨率</string>
+    <string name="photo_resolution_max">最大</string>
+    <string name="photo_resolution_medium">中等</string>
+    <string name="photo_resolution_standard">标准</string>
+    <string name="tap_to_capture">触摸拍照</string>
+    <string name="tap_to_capture_desc">点击预览区域直接拍照</string>
+    <string name="shutter_sound">快门声音</string>
+    <string name="shutter_sound_desc">拍照时播放快门音效</string>
+    <string name="auto_enhance">自动增强</string>
+    <string name="auto_enhance_desc">自动优化曝光和色彩</string>
+    <string name="save_raw">保存 RAW</string>
+    <string name="save_raw_desc">同时保存 DNG 原始文件</string>
+
+    <!-- 设置 - 显示 -->
+    <string name="section_display">显示</string>
+    <string name="grid_lines">网格线</string>
+    <string name="grid_lines_off">关闭</string>
+    <string name="grid_lines_rule_of_thirds">三等分</string>
+    <string name="grid_lines_golden_ratio">黄金比例</string>
+    <string name="grid_lines_square">正方形</string>
+    <string name="focus_peaking">峰值对焦</string>
+    <string name="focus_peaking_desc">手动对焦时显示合焦区域</string>
+    <string name="histogram">直方图</string>
+    <string name="histogram_desc">显示亮度分布</string>
+    <string name="level_indicator">水平仪</string>
+    <string name="level_indicator_desc">显示水平校准</string>
+
+    <!-- 设置 - 输出 -->
+    <string name="section_output">输出</string>
+    <string name="watermark">水印</string>
+    <string name="watermark_desc">添加版权标识</string>
+    <string name="watermark_style">水印样式</string>
+    <string name="watermark_text">文字</string>
+    <string name="watermark_logo">Logo</string>
+    <string name="watermark_date">日期</string>
+    <string name="save_location">保存位置</string>
+    <string name="save_location_desc">照片存储路径</string>
+    <string name="keep_exif">保留 EXIF</string>
+    <string name="keep_exif_desc">保留相机参数信息</string>
+    <string name="geo_tagging">地理位置</string>
+    <string name="geo_tagging_desc">嵌入 GPS 坐标</string>
+
+    <!-- 设置 - 关于 -->
+    <string name="section_about">关于</string>
+    <string name="version_info">版本</string>
+    <string name="about_footer">OmniCamera · 精心打造</string>
+
+    <!-- 照片命名前缀 -->
+    <string name="photo_prefix">IMG_</string>
+</resources>
