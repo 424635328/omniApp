@@ -47,7 +47,8 @@ fun ConsumptionLineChart(
         val chartWidth = size.width - paddingLeft - paddingRight
         val chartHeight = size.height - paddingTop - paddingBottom
 
-        val maxValue = consumptions.maxOf { it.dailyConsumption }.coerceAtLeast(1.0)
+        val values = consumptions.map { if (showCost) it.estimatedCost else it.dailyConsumption }
+        val maxValue = values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
         val minValue = 0.0
         val valueRange = maxValue - minValue
 
@@ -69,7 +70,8 @@ fun ConsumptionLineChart(
 
         consumptions.forEachIndexed { index, consumption ->
             val x = paddingLeft + index * xStep
-            val y = paddingTop + chartHeight - ((consumption.dailyConsumption - minValue) / valueRange * chartHeight).toFloat()
+            val value = if (showCost) consumption.estimatedCost else consumption.dailyConsumption
+            val y = paddingTop + chartHeight - ((value - minValue) / valueRange * chartHeight).toFloat()
 
             if (index == 0) {
                 path.moveTo(x, y)
@@ -78,7 +80,8 @@ fun ConsumptionLineChart(
             }
         }
 
-        // Draw the line with glow effect
+        // A translucent stroke is substantially cheaper than a BlurMaskFilter and
+        // keeps Canvas scrolling smooth on long histories.
         drawPath(
             path = path,
             color = chartColor.copy(alpha = 0.3f),
@@ -99,9 +102,12 @@ fun ConsumptionLineChart(
         )
 
         // Draw data points
+        val pointStep = (consumptions.size / 120).coerceAtLeast(1)
         consumptions.forEachIndexed { index, consumption ->
+            if (index % pointStep != 0 && index != consumptions.lastIndex) return@forEachIndexed
             val x = paddingLeft + index * xStep
-            val y = paddingTop + chartHeight - ((consumption.dailyConsumption - minValue) / valueRange * chartHeight).toFloat()
+            val value = if (showCost) consumption.estimatedCost else consumption.dailyConsumption
+            val y = paddingTop + chartHeight - ((value - minValue) / valueRange * chartHeight).toFloat()
 
             // Outer glow
             drawCircle(

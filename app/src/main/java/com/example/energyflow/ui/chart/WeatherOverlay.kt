@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.sp
 import com.example.energyflow.data.DailyWeather
 import com.example.energyflow.ui.theme.NeonBlue
+import java.time.LocalDate
 
 /**
  * 天气温度曲线叠加层。
@@ -30,14 +31,14 @@ import com.example.energyflow.ui.theme.NeonBlue
 @Composable
 fun WeatherOverlay(
     weatherData: List<DailyWeather>,
-    dayCount: Int,
+    consumptionDates: List<LocalDate>,
     paddingLeft: Float = 50f,
     paddingTop: Float = 16f,
     paddingRight: Float = 16f,
     paddingBottom: Float = 40f,
     modifier: Modifier = Modifier
 ) {
-    if (weatherData.isEmpty() || dayCount < 2) return
+    if (weatherData.isEmpty() || consumptionDates.size < 2) return
 
     // Temperature range for scaling: 10°C ~ 40°C
     val tempRangeMin = 10.0
@@ -48,7 +49,7 @@ fun WeatherOverlay(
 
     Canvas(modifier = modifier) {
         val drawWidth = size.width - paddingLeft - paddingRight
-        val xStep = if (dayCount > 1) drawWidth / (dayCount - 1) else drawWidth
+        val xStep = drawWidth / (consumptionDates.size - 1)
         val effectiveHeight = size.height - paddingTop - paddingBottom
 
         // ── 高温区域标记 (>32°C) ──
@@ -78,16 +79,29 @@ fun WeatherOverlay(
         val maxPath = Path()
         val minPath = Path()
 
-        weatherData.take(dayCount).forEachIndexed { index, weather ->
+        val weatherByDate = weatherData.associateBy { it.date }
+        var maxPathStarted = false
+        var minPathStarted = false
+        consumptionDates.forEachIndexed { index, date ->
+            val weather = weatherByDate[date.toString()] ?: run {
+                maxPathStarted = false
+                minPathStarted = false
+                return@forEachIndexed
+            }
             val x = paddingLeft + index * xStep
             val maxY = paddingTop + effectiveHeight - ((weather.tempMax - tempRangeMin) / tempRange * effectiveHeight).toFloat()
             val minY = paddingTop + effectiveHeight - ((weather.tempMin - tempRangeMin) / tempRange * effectiveHeight).toFloat()
 
-            if (index == 0) {
+            if (!maxPathStarted) {
                 maxPath.moveTo(x, maxY)
-                minPath.moveTo(x, minY)
+                maxPathStarted = true
             } else {
                 maxPath.lineTo(x, maxY)
+            }
+            if (!minPathStarted) {
+                minPath.moveTo(x, minY)
+                minPathStarted = true
+            } else {
                 minPath.lineTo(x, minY)
             }
         }
@@ -107,7 +121,8 @@ fun WeatherOverlay(
         )
 
         // ── 温度标注（仅两端） ──
-        if (weatherData.size >= 2) {
+        val alignedWeather = consumptionDates.mapNotNull { weatherByDate[it.toString()] }
+        if (alignedWeather.size >= 2) {
             val textPaint = android.graphics.Paint().apply {
                 color = NeonBlue.copy(alpha = 0.7f).toArgb()
                 textSize = 9.sp.toPx()
@@ -116,7 +131,7 @@ fun WeatherOverlay(
             }
 
             // First day
-            val first = weatherData.first()
+            val first = alignedWeather.first()
             val firstMaxY = paddingTop + effectiveHeight - ((first.tempMax - tempRangeMin) / tempRange * effectiveHeight).toFloat()
             drawContext.canvas.nativeCanvas.drawText(
                 "${first.tempMax.toInt()}°",
@@ -126,8 +141,9 @@ fun WeatherOverlay(
             )
 
             // Last day
-            val last = weatherData.last()
-            val lastX = paddingLeft + (dayCount - 1) * xStep
+            val last = alignedWeather.last()
+            val lastIndex = consumptionDates.indexOfLast { it.toString() == last.date }
+            val lastX = paddingLeft + lastIndex * xStep
             val lastMaxY = paddingTop + effectiveHeight - ((last.tempMax - tempRangeMin) / tempRange * effectiveHeight).toFloat()
             drawContext.canvas.nativeCanvas.drawText(
                 "${last.tempMax.toInt()}°",

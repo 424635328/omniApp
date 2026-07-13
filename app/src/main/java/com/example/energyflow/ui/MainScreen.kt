@@ -84,6 +84,7 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsState()
     val anomalyWarnings by viewModel.anomalyWarnings.collectAsState()
     val showAnomalyDialog by viewModel.showAnomalyDialog.collectAsState()
+    val peakValleyExpanded by viewModel.peakValleyExpanded.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -253,6 +254,8 @@ fun MainScreen(
             ) {
                 BottomSheetOverlay(onDismiss = { showAddSheet = false }) {
                     AddRecordSheet(
+                        initiallyShowPeakValley = peakValleyExpanded,
+                        onPeakValleyExpandedChange = viewModel::setPeakValleyExpanded,
                         onSave = { recordData ->
                             // 改用 validateAndSave → 先校验再决定是否保存
                             viewModel.validateAndSave(recordData)

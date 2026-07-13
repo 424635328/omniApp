@@ -88,6 +88,8 @@ import java.time.format.DateTimeFormatter
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddRecordSheet(
+    initiallyShowPeakValley: Boolean = false,
+    onPeakValleyExpandedChange: (Boolean) -> Unit = {},
     onSave: (RecordData) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -98,7 +100,7 @@ fun AddRecordSheet(
     var electricTotal by remember { mutableStateOf("") }
     var electricPeak by remember { mutableStateOf("") }
     var electricValley by remember { mutableStateOf("") }
-    var showPeakValley by remember { mutableStateOf(false) }
+    var showPeakValley by remember(initiallyShowPeakValley) { mutableStateOf(initiallyShowPeakValley) }
 
     var isWaterEnabled by remember { mutableStateOf(false) }
     var waterTotal by remember { mutableStateOf("") }
@@ -227,7 +229,10 @@ fun AddRecordSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { showPeakValley = !showPeakValley }
+                    .clickable {
+                        showPeakValley = !showPeakValley
+                        onPeakValleyExpandedChange(showPeakValley)
+                    }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

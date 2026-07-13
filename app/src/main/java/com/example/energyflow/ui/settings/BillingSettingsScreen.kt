@@ -2,7 +2,6 @@ package com.example.energyflow.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,41 +16,35 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.energyflow.data.BillingRules
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
@@ -59,272 +52,156 @@ import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
 import com.example.energyflow.ui.theme.MonoFontFamily
+import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.NeonYellow
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.theme.WaterColor
-import kotlinx.coroutines.launch
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun BillingSettingsScreen(
-    viewModel: BillingSettingsViewModel = hiltViewModel(),
-    onBack: () -> Unit = {}
-) {
-    val peakPrice by viewModel.peakPriceFlow.collectAsState(initial = 0.6)
-    val valleyPrice by viewModel.valleyPriceFlow.collectAsState(initial = 0.3)
-    val flatPrice by viewModel.flatPriceFlow.collectAsState(initial = 0.5)
-    val waterPrice by viewModel.waterPriceFlow.collectAsState(initial = 3.5)
-
-    val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-
-    Scaffold(
-        containerColor = DarkBackground,
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { data ->
-                Snackbar(
-                    snackbarData = data,
-                    containerColor = DarkCard,
-                    contentColor = ElectricColor,
-                    shape = RoundedCornerShape(12.dp)
-                )
-            }
-        },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "计费规则",
-                        fontFamily = MonoFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        color = NeonYellow
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            tint = TextSecondary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkBackground
-                )
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
-            // ═══ 分时电费 ═══
-            SectionHeader(
-                icon = Icons.Default.Bolt,
-                title = "分时电价（元/度）",
-                color = ElectricColor
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            PriceInputRow(
-                label = "峰电",
-                value = peakPrice,
-                onValueChange = { viewModel.updatePeakPrice(it) },
-                color = ElectricPeakColor,
-                hint = "0.6"
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            PriceInputRow(
-                label = "谷电",
-                value = valleyPrice,
-                onValueChange = { viewModel.updateValleyPrice(it) },
-                color = ElectricValleyColor,
-                hint = "0.3"
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            PriceInputRow(
-                label = "平电",
-                value = flatPrice,
-                onValueChange = { viewModel.updateFlatPrice(it) },
-                color = ElectricColor,
-                hint = "0.5"
-            )
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // ═══ 水费 ═══
-            SectionHeader(
-                icon = Icons.Default.WaterDrop,
-                title = "水费单价（元/吨）",
-                color = WaterColor
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            PriceInputRow(
-                label = "水费",
-                value = waterPrice,
-                onValueChange = { viewModel.updateWaterPrice(it) },
-                color = WaterColor,
-                hint = "3.5"
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // ═══ 阶梯说明 ═══
-            TierExplanation()
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // ═══ 保存按钮 ═══
-            TextButton(
-                onClick = {
-                    coroutineScope.launch {
-                        viewModel.saveAll()
-                        snackbarHostState.showSnackbar("计费规则已保存")
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(ElectricColor)
-                        .padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "保存设置",
-                        fontFamily = MonoFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = DarkBackground
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
 
 @Composable
-private fun SectionHeader(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    color: androidx.compose.ui.graphics.Color
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            color = TextPrimary,
-            fontFamily = MonoFontFamily,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
+fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel()) {
+    val rules by viewModel.billingRulesFlow.collectAsState(initial = BillingRules())
+    val isDark by viewModel.isDarkThemeFlow.collectAsState(initial = true)
+    val followSystem by viewModel.followSystemThemeFlow.collectAsState(initial = false)
+    val savedApiKey by viewModel.weatherApiKeyFlow.collectAsState(initial = "")
+    val savedCityId by viewModel.weatherCityIdFlow.collectAsState(initial = "101010100")
+    val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsState(initial = false)
+    var weatherApiKey by remember(savedApiKey) { mutableStateOf(savedApiKey) }
+    var weatherCityId by remember(savedCityId) { mutableStateOf(savedCityId) }
 
-@Composable
-private fun PriceInputRow(
-    label: String,
-    value: Double,
-    onValueChange: (Double) -> Unit,
-    color: androidx.compose.ui.graphics.Color,
-    hint: String
-) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary,
-            fontFamily = MonoFontFamily,
-            modifier = Modifier.width(48.dp)
-        )
+        Text("设置", style = MaterialTheme.typography.headlineSmall, color = NeonYellow, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
+        Text("所有价格仅用于估算，按本地账单规则填写。", color = TextSecondary, fontFamily = MonoFontFamily, style = MaterialTheme.typography.bodySmall)
 
+        Spacer(Modifier.height(24.dp))
+        SectionHeader(Icons.Default.Bolt, "分时与阶梯电价", ElectricColor)
+        Spacer(Modifier.height(12.dp))
+        PriceInputRow("峰电", rules.peakPrice, viewModel::updatePeakPrice, ElectricPeakColor, "元/度")
+        Spacer(Modifier.height(8.dp))
+        PriceInputRow("谷电", rules.valleyPrice, viewModel::updateValleyPrice, ElectricValleyColor, "元/度")
+        Spacer(Modifier.height(8.dp))
+        PriceInputRow("平电", rules.flatPrice, viewModel::updateFlatPrice, ElectricColor, "元/度")
+        Spacer(Modifier.height(8.dp))
+        Text("电费阶梯固定为：0–${rules.electricTier1Limit.toInt()} 度 × 1.0；${rules.electricTier1Limit.toInt() + 1}–${rules.electricTier2Limit.toInt()} 度 × 1.5；其余 × 2.0。", color = TextSecondary, fontFamily = MonoFontFamily, style = MaterialTheme.typography.labelSmall)
+
+        Spacer(Modifier.height(28.dp))
+        SectionHeader(Icons.Default.WaterDrop, "阶梯水价", WaterColor)
+        Spacer(Modifier.height(12.dp))
+        PriceInputRow("一档上限", rules.waterTier1Limit, viewModel::updateWaterTier1Limit, WaterColor, "吨")
+        Spacer(Modifier.height(8.dp))
+        PriceInputRow("二档上限", rules.waterTier2Limit, viewModel::updateWaterTier2Limit, WaterColor, "吨")
+        Spacer(Modifier.height(8.dp))
+        PriceInputRow("一档单价", rules.waterTier1Price, viewModel::updateWaterTier1Price, WaterColor, "元/吨")
+        Spacer(Modifier.height(8.dp))
+        PriceInputRow("二档单价", rules.waterTier2Price, viewModel::updateWaterTier2Price, WaterColor, "元/吨")
+        Spacer(Modifier.height(8.dp))
+        PriceInputRow("三档单价", rules.waterTier3Price, viewModel::updateWaterTier3Price, WaterColor, "元/吨")
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = viewModel::saveBillingRules,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = ElectricColor, contentColor = DarkBackground),
+            shape = RoundedCornerShape(12.dp)
+        ) { Text("保存计费规则", fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold) }
+
+        Spacer(Modifier.height(28.dp))
+        SectionHeader(Icons.Default.Cloud, "天气叠层（和风天气）", NeonBlue)
+        Spacer(Modifier.height(12.dp))
+        TextInputRow("API Key", weatherApiKey, { weatherApiKey = it }, "粘贴你的和风天气 API Key", false)
+        Spacer(Modifier.height(8.dp))
+        TextInputRow("城市 ID", weatherCityId, { weatherCityId = it }, "北京：101010100", false)
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = { viewModel.setWeatherConfig(weatherApiKey, weatherCityId) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = DarkCard, contentColor = NeonBlue),
+            shape = RoundedCornerShape(12.dp)
+        ) { Text("保存天气配置", fontFamily = MonoFontFamily) }
+        Text("API Key 只保存在此设备的 DataStore 中；未填写时图表不会发起天气请求。", color = TextSecondary, fontFamily = MonoFontFamily, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 8.dp))
+
+        Spacer(Modifier.height(28.dp))
+        SectionHeader(Icons.Default.Palette, "显示偏好", NeonYellow)
+        Spacer(Modifier.height(12.dp))
+        PreferenceSwitch("跟随系统深色模式", followSystem, { viewModel.setTheme(isDark, it) })
+        if (!followSystem) {
+            Spacer(Modifier.height(8.dp))
+            PreferenceSwitch("使用深色模式", isDark, { viewModel.setTheme(it, false) })
+        }
+        Spacer(Modifier.height(8.dp))
+        PreferenceSwitch("新增读数时默认展开峰谷", peakValleyExpanded, viewModel::setPeakValleyExpanded)
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun SectionHeader(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun PriceInputRow(label: String, value: Double, onValueChange: (Double) -> Unit, color: Color, unit: String) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = TextSecondary, fontFamily = MonoFontFamily, modifier = Modifier.width(84.dp))
         OutlinedTextField(
             value = text,
             onValueChange = { newValue ->
                 if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
                     text = newValue
-                    newValue.toDoubleOrNull()?.let { onValueChange(it) }
+                    newValue.toDoubleOrNull()?.let(onValueChange)
                 }
             },
             modifier = Modifier.weight(1f),
-            placeholder = {
-                Text(hint, color = TextSecondary.copy(alpha = 0.5f), fontFamily = MonoFontFamily)
-            },
-            suffix = {
-                Text("元/度", color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 12.sp)
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = color,
-                unfocusedBorderColor = DarkSurface,
-                cursorColor = color,
-                focusedTextColor = TextPrimary,
-                unfocusedTextColor = TextPrimary
-            ),
-            shape = RoundedCornerShape(10.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            suffix = { Text(unit, color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 12.sp) },
             singleLine = true,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                fontFamily = MonoFontFamily,
-                fontWeight = FontWeight.Medium
-            )
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            shape = RoundedCornerShape(10.dp),
+            colors = fieldColors(color),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary, fontFamily = MonoFontFamily)
         )
     }
 }
 
 @Composable
-private fun TierExplanation() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
-            .padding(16.dp)
-    ) {
-        Text(
-            "阶梯电价说明",
-            style = MaterialTheme.typography.titleSmall,
-            color = TextPrimary,
-            fontFamily = MonoFontFamily,
-            fontWeight = FontWeight.Bold
+private fun TextInputRow(label: String, value: String, onValueChange: (String) -> Unit, hint: String, secret: Boolean) {
+    Column {
+        Text(label, color = TextSecondary, fontFamily = MonoFontFamily, style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(hint, color = TextSecondary.copy(alpha = 0.5f), fontFamily = MonoFontFamily) },
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            colors = fieldColors(NeonBlue),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary, fontFamily = MonoFontFamily)
         )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        TierRow("第一档", "0 - 200 度/月", "基准价 × 1.0")
-        Spacer(modifier = Modifier.height(6.dp))
-        TierRow("第二档", "201 - 400 度/月", "基准价 × 1.5")
-        Spacer(modifier = Modifier.height(6.dp))
-        TierRow("第三档", "> 400 度/月", "基准价 × 2.0")
     }
 }
 
 @Composable
-private fun TierRow(tier: String, range: String, multiplier: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(tier, color = ElectricColor, fontFamily = MonoFontFamily, style = MaterialTheme.typography.bodySmall)
-        Text(range, color = TextSecondary, fontFamily = MonoFontFamily, style = MaterialTheme.typography.bodySmall)
-        Text(multiplier, color = TextSecondary, fontFamily = MonoFontFamily, style = MaterialTheme.typography.bodySmall)
+private fun PreferenceSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(DarkCard).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = TextPrimary, fontFamily = MonoFontFamily, style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = ElectricColor, checkedTrackColor = ElectricColor.copy(alpha = 0.35f)))
     }
 }
+
+@Composable
+private fun fieldColors(color: Color) = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = color,
+    unfocusedBorderColor = DarkSurface,
+    cursorColor = color,
+    focusedTextColor = TextPrimary,
+    unfocusedTextColor = TextPrimary
+)

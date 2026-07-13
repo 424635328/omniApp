@@ -78,16 +78,22 @@ class ChartViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             electricRecords.collect { records ->
-                updateChartData(records)
-                if (records.isNotEmpty()) {
-                    recalculateAnalytics(records)
-                }
+                recalculateAnalytics(records)
             }
         }
-        // 初始化计费模式偏好
         viewModelScope.launch {
             userPreferences.chartShowCost.collect { show ->
                 _showCost.value = show
+            }
+        }
+        viewModelScope.launch {
+            userPreferences.billingRules.collect {
+                recalculateAnalytics(electricRecords.value)
+            }
+        }
+        viewModelScope.launch {
+            notesRecords.collect {
+                recalculateAnalytics(electricRecords.value)
             }
         }
     }
@@ -103,11 +109,11 @@ class ChartViewModel @Inject constructor(
     fun setTimeRange(range: TimeRange) {
         _timeRange.value = range
         viewModelScope.launch {
-            updateChartData(electricRecords.value)
+            recalculateAnalytics(electricRecords.value)
         }
     }
 
-    private fun updateChartData(records: List<MeterRecord>) {
+    private fun updateChartData(records: List<MeterRecord>, estimatedCostPerKwh: Double = 0.0) {
         if (records.isEmpty()) {
             _chartData.value = ChartData.Empty
             return
@@ -119,14 +125,14 @@ class ChartViewModel @Inject constructor(
             TimeRange.MONTH -> records.filter { ChronoUnit.DAYS.between(it.timestamp, now) <= 30 }
             TimeRange.YEAR  -> records.filter { ChronoUnit.DAYS.between(it.timestamp, now) <= 365 }
             TimeRange.ALL   -> records
-        }
+        }.sortedBy { it.timestamp }
 
         if (filtered.isEmpty()) {
             _chartData.value = ChartData.Empty
             return
         }
 
-        val dailies = calculateDailyConsumptions(filtered)
+        val dailies = calculateDailyConsumptions(filtered, estimatedCostPerKwh)
         val annotations = notesRecords.value.filter { nr -> filtered.any { it.id == nr.id } }
 
         _chartData.value = ChartData(
@@ -138,6 +144,14 @@ class ChartViewModel @Inject constructor(
     }
 
     private suspend fun recalculateAnalytics(records: List<MeterRecord>) {
+        if (records.isEmpty()) {
+            _chartData.value = ChartData.Empty
+            _billResult.value = null
+            _prediction.value = null
+            _predictedBill.value = null
+            _eventImpacts.value = emptyList()
+            return
+        }
         val filtered = when (_timeRange.value) {
             TimeRange.WEEK  -> records.filter { ChronoUnit.DAYS.between(it.timestamp, LocalDateTime.now()) <= 7 }
             TimeRange.MONTH -> records.filter { ChronoUnit.DAYS.between(it.timestamp, LocalDateTime.now()) <= 30 }
@@ -145,6 +159,7 @@ class ChartViewModel @Inject constructor(
             TimeRange.ALL   -> records
         }.sortedBy { it.timestamp }
 
+        var effectiveCostPerKwh = 0.0
         // 账单计算：取过滤后的总消耗
         if (filtered.size >= 2) {
             val first = filtered.first()
@@ -157,6 +172,7 @@ class ChartViewModel @Inject constructor(
             } else 0.0
 
             val bill = costEngine.calculateBill(totalKwh, peakKwh, valleyKwh, waterTons)
+            effectiveCostPerKwh = if (totalKwh > 0.0) bill.electricTotalCost / totalKwh else 0.0
             _billResult.value = BillData(
                 totalKwh = totalKwh,
                 peakKwh = peakKwh,
@@ -189,18 +205,22 @@ class ChartViewModel @Inject constructor(
             _predictedBill.value = null
         }
 
-        // 事件分析（"全部"时间范围才做）
-        if (_timeRange.value == TimeRange.ALL) {
-            _eventImpacts.value = eventImpactAnalyzer.analyzeWithRecords(electricRecords.value)
-        }
+        // 事件标记可以是没有读数的独立记录，需要同电表记录一起分析。
+        _eventImpacts.value = eventImpactAnalyzer.analyzeWithRecords(
+            (electricRecords.value + notesRecords.value).distinctBy { it.id }
+        )
+
+        updateChartData(records, effectiveCostPerKwh)
 
         // 天气数据加载（仅在"月"或"周"时加载，全量范围没必要）
         if (_timeRange.value == TimeRange.WEEK || _timeRange.value == TimeRange.MONTH) {
-            loadWeather()
+            loadWeather(filtered)
+        } else {
+            _weatherData.value = emptyList()
         }
     }
 
-    private fun loadWeather() {
+    private fun loadWeather(records: List<MeterRecord>) {
         viewModelScope.launch {
             _weatherLoading.value = true
             try {
@@ -208,7 +228,6 @@ class ChartViewModel @Inject constructor(
                 val cityId = userPreferences.weatherCityId.first()
                 if (apiKey.isBlank()) return@launch
 
-                val records = electricRecords.value.sortedBy { it.timestamp }
                 if (records.isEmpty()) return@launch
 
                 val startDate = records.first().timestamp.toLocalDate()
@@ -227,13 +246,23 @@ class ChartViewModel @Inject constructor(
     private val _predictedBill = MutableStateFlow<PredictedBill?>(null)
     val predictedBill: StateFlow<PredictedBill?> = _predictedBill.asStateFlow()
 
-    private fun calculateDailyConsumptions(records: List<MeterRecord>): List<DailyConsumption> {
+    private fun calculateDailyConsumptions(
+        records: List<MeterRecord>,
+        estimatedCostPerKwh: Double
+    ): List<DailyConsumption> {
         if (records.size < 2) return emptyList()
-        return records.windowed(2).map { (prev, current) ->
+        return records.sortedBy { it.timestamp }.windowed(2).mapNotNull { (prev, current) ->
             val days = ChronoUnit.DAYS.between(prev.timestamp, current.timestamp)
             val consumption = (current.electricTotal ?: 0.0) - (prev.electricTotal ?: 0.0)
+            if (consumption < 0.0) return@mapNotNull null
             val daily = if (days > 0) consumption / days else consumption
-            DailyConsumption(current.timestamp, consumption, daily, days)
+            DailyConsumption(
+                date = current.timestamp,
+                consumption = consumption,
+                dailyConsumption = daily,
+                daysBetween = days,
+                estimatedCost = daily * estimatedCostPerKwh
+            )
         }
     }
 }
@@ -255,7 +284,8 @@ data class DailyConsumption(
     val date: LocalDateTime,
     val consumption: Double,
     val dailyConsumption: Double,
-    val daysBetween: Long
+    val daysBetween: Long,
+    val estimatedCost: Double = 0.0
 )
 
 enum class TimeRange { WEEK, MONTH, YEAR, ALL }

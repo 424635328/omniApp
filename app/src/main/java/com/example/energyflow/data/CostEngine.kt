@@ -1,22 +1,27 @@
 package com.example.energyflow.data
 
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Local, user-configurable billing rules. Prices are yuan per unit. */
+data class BillingRules(
+    val peakPrice: Double = 0.6,
+    val valleyPrice: Double = 0.3,
+    val flatPrice: Double = 0.5,
+    val electricTier1Limit: Double = 200.0,
+    val electricTier2Limit: Double = 400.0,
+    val waterTier1Limit: Double = 15.0,
+    val waterTier2Limit: Double = 25.0,
+    val waterTier1Price: Double = 3.5,
+    val waterTier2Price: Double = 4.5,
+    val waterTier3Price: Double = 6.0
+)
+
 /**
- * 电费计算引擎。
- *
- * 支持：
- * - 阶梯电价（三档）
- * - 峰谷分时电价
- * - 水费计算
- *
- * 阶梯电价：
- *   第一档 (0-200 kWh/月): 基准价
- *   第二档 (201-400 kWh/月): 基准价 × 1.5
- *   第三档 (>400 kWh/月): 基准价 × 2.0
+ * Keeps pricing policy in one place so UI estimates and monthly predictions use
+ * exactly the same calculation. Electricity tiers apply to total monthly usage,
+ * never separately to peak, valley and flat usage.
  */
 @Singleton
 class CostEngine @Inject constructor(
@@ -27,108 +32,103 @@ class CostEngine @Inject constructor(
         peakKwh: Double = 0.0,
         valleyKwh: Double = 0.0,
         waterTons: Double = 0.0
-    ): BillResult {
-        val peakPrice = readPrice(userPreferences.peakPrice)
-        val valleyPrice = readPrice(userPreferences.valleyPrice)
-        val flatPrice = readPrice(userPreferences.flatPrice)
-        val waterPrice = readPrice(userPreferences.waterPrice)
+    ): BillResult = calculate(
+        rules = userPreferences.billingRules.first(),
+        totalKwh = totalKwh,
+        peakKwh = peakKwh,
+        valleyKwh = valleyKwh,
+        waterTons = waterTons
+    )
 
-        val flatKwh = (totalKwh - peakKwh - valleyKwh).coerceAtLeast(0.0)
+    suspend fun calculateSimple(totalKwh: Double): Double =
+        calculateBill(totalKwh = totalKwh).electricTotalCost
 
-        val peakTier = computeTiered(peakKwh, peakPrice)
-        val valleyTier = computeTiered(valleyKwh, valleyPrice)
-        val flatTier = computeTiered(flatKwh, flatPrice)
-
-        val electricTotalCost = peakTier.total + valleyTier.total + flatTier.total
-        val waterTotalCost = waterTons * waterPrice
-
-        return BillResult(
-            totalCost = electricTotalCost + waterTotalCost,
-            peakKwh = peakKwh,
-            peakCost = peakTier.total,
-            peakTier1Kwh = peakTier.tier1Kwh,
-            peakTier2Kwh = peakTier.tier2Kwh,
-            peakTier3Kwh = peakTier.tier3Kwh,
-            valleyKwh = valleyKwh,
-            valleyCost = valleyTier.total,
-            flatKwh = flatKwh,
-            flatCost = flatTier.total,
-            electricTotalCost = electricTotalCost,
-            waterTotalCost = waterTotalCost,
-            waterTons = waterTons,
-            peakPrice = peakPrice,
-            valleyPrice = valleyPrice,
-            flatPrice = flatPrice,
-            waterPrice = waterPrice
-        )
-    }
-
-    suspend fun calculateSimple(totalKwh: Double): Double {
-        val price = readPrice(userPreferences.flatPrice)
-        return computeTiered(totalKwh, price).total
-    }
-
-    suspend fun calculatePeakValleyBill(
-        peakKwh: Double,
-        valleyKwh: Double
-    ): PeakValleyBillResult {
-        val peakPrice = readPrice(userPreferences.peakPrice)
-        val valleyPrice = readPrice(userPreferences.valleyPrice)
-
-        val peakTier = computeTiered(peakKwh, peakPrice)
-        val valleyCost = valleyKwh * valleyPrice
-        val total = peakTier.total + valleyCost
-
+    suspend fun calculatePeakValleyBill(peakKwh: Double, valleyKwh: Double): PeakValleyBillResult {
+        val bill = calculateBill(totalKwh = peakKwh + valleyKwh, peakKwh = peakKwh, valleyKwh = valleyKwh)
+        val rules = userPreferences.billingRules.first()
         return PeakValleyBillResult(
             peakKwh = peakKwh,
-            peakCost = peakTier.total,
-            peakPrice = peakPrice,
+            peakCost = bill.peakCost,
+            peakPrice = rules.peakPrice,
             valleyKwh = valleyKwh,
-            valleyCost = valleyCost,
-            valleyPrice = valleyPrice,
-            totalCost = total,
-            savingsFromValley = peakKwh * (peakPrice - valleyPrice)
+            valleyCost = bill.valleyCost,
+            valleyPrice = rules.valleyPrice,
+            totalCost = bill.electricTotalCost,
+            savingsFromValley = valleyKwh.coerceAtLeast(0.0) * (rules.peakPrice - rules.valleyPrice)
         )
     }
 
-    /**
-     * 阶梯电价计算。@return 各档明细+总计。
-     */
-    private fun computeTiered(kwh: Double, basePrice: Double): TieredCalc {
-        val tier1Kwh = kwh.coerceAtMost(200.0)
-        val tier1Cost = tier1Kwh * basePrice
+    companion object {
+        fun calculate(
+            rules: BillingRules,
+            totalKwh: Double,
+            peakKwh: Double = 0.0,
+            valleyKwh: Double = 0.0,
+            waterTons: Double = 0.0
+        ): BillResult {
+            val safeTotal = totalKwh.coerceAtLeast(0.0)
+            val safePeak = peakKwh.coerceIn(0.0, safeTotal)
+            val safeValley = valleyKwh.coerceIn(0.0, safeTotal - safePeak)
+            val flatKwh = (safeTotal - safePeak - safeValley).coerceAtLeast(0.0)
 
-        val tier2Kwh = (kwh - 200.0).coerceIn(0.0, 200.0)
-        val tier2Cost = tier2Kwh * basePrice * 1.5
+            val tieredUsage = tieredUsage(
+                usage = safeTotal,
+                firstLimit = rules.electricTier1Limit,
+                secondLimit = rules.electricTier2Limit
+            )
+            val weightedMultiplier = if (safeTotal == 0.0) 1.0 else {
+                (tieredUsage.tier1 + tieredUsage.tier2 * 1.5 + tieredUsage.tier3 * 2.0) / safeTotal
+            }
+            val peakCost = safePeak * rules.peakPrice * weightedMultiplier
+            val valleyCost = safeValley * rules.valleyPrice * weightedMultiplier
+            val flatCost = flatKwh * rules.flatPrice * weightedMultiplier
+            val water = tieredWaterCost(waterTons.coerceAtLeast(0.0), rules)
 
-        val tier3Kwh = (kwh - 400.0).coerceAtLeast(0.0)
-        val tier3Cost = tier3Kwh * basePrice * 2.0
+            return BillResult(
+                totalCost = peakCost + valleyCost + flatCost + water.total,
+                peakKwh = safePeak,
+                peakCost = peakCost,
+                peakTier1Kwh = tieredUsage.tier1 * safePeak / safeTotal.orOne(),
+                peakTier2Kwh = tieredUsage.tier2 * safePeak / safeTotal.orOne(),
+                peakTier3Kwh = tieredUsage.tier3 * safePeak / safeTotal.orOne(),
+                valleyKwh = safeValley,
+                valleyCost = valleyCost,
+                flatKwh = flatKwh,
+                flatCost = flatCost,
+                electricTotalCost = peakCost + valleyCost + flatCost,
+                waterTotalCost = water.total,
+                waterTons = waterTons.coerceAtLeast(0.0),
+                peakPrice = rules.peakPrice,
+                valleyPrice = rules.valleyPrice,
+                flatPrice = rules.flatPrice,
+                waterPrice = water.effectivePrice
+            )
+        }
 
-        return TieredCalc(
-            tier1Kwh = tier1Kwh,
-            tier1Cost = tier1Cost,
-            tier2Kwh = tier2Kwh,
-            tier2Cost = tier2Cost,
-            tier3Kwh = tier3Kwh,
-            tier3Cost = tier3Cost,
-            total = tier1Cost + tier2Cost + tier3Cost
-        )
-    }
+        private fun tieredUsage(usage: Double, firstLimit: Double, secondLimit: Double): TieredUsage {
+            val first = firstLimit.coerceAtLeast(0.0)
+            val second = secondLimit.coerceAtLeast(first)
+            return TieredUsage(
+                tier1 = usage.coerceAtMost(first),
+                tier2 = (usage - first).coerceIn(0.0, second - first),
+                tier3 = (usage - second).coerceAtLeast(0.0)
+            )
+        }
 
-    private suspend fun readPrice(flow: Flow<Double>): Double {
-        return flow.first()
+        private fun tieredWaterCost(tons: Double, rules: BillingRules): WaterCost {
+            val usage = tieredUsage(tons, rules.waterTier1Limit, rules.waterTier2Limit)
+            val total = usage.tier1 * rules.waterTier1Price +
+                usage.tier2 * rules.waterTier2Price +
+                usage.tier3 * rules.waterTier3Price
+            return WaterCost(total = total, effectivePrice = if (tons == 0.0) rules.waterTier1Price else total / tons)
+        }
+
+        private fun Double.orOne(): Double = if (this == 0.0) 1.0 else this
     }
 }
 
-data class TieredCalc(
-    val tier1Kwh: Double,
-    val tier1Cost: Double,
-    val tier2Kwh: Double,
-    val tier2Cost: Double,
-    val tier3Kwh: Double,
-    val tier3Cost: Double,
-    val total: Double
-)
+private data class TieredUsage(val tier1: Double, val tier2: Double, val tier3: Double)
+private data class WaterCost(val total: Double, val effectivePrice: Double)
 
 data class BillResult(
     val totalCost: Double,

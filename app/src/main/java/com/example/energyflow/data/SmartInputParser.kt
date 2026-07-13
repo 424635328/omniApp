@@ -28,20 +28,26 @@ class SmartInputParser {
 
             when (result) {
                 is ContextParseResult.DateHeader -> {
+                    pendingElectric?.let { pe ->
+                        if (currentMonth != null && currentDay != null) {
+                            results.add(pe.toSuccess(currentMonth, currentDay))
+                        } else {
+                            results.add(ParseResult.Error("缺少日期上下文"))
+                        }
+                    }
                     currentMonth = result.month
                     currentDay = result.day
-                    pendingElectric?.let { pe ->
-                        results.add(pe.toSuccess(currentMonth!!, currentDay!!))
-                        pendingElectric = null
-                    }
+                    pendingElectric = null
                 }
                 is ContextParseResult.RecordWithDate -> {
+                    pendingElectric?.let { pe ->
+                        if (currentMonth != null && currentDay != null) {
+                            results.add(pe.toSuccess(currentMonth, currentDay))
+                        }
+                    }
                     currentMonth = result.month
                     currentDay = result.day
-                    pendingElectric?.let { pe ->
-                        results.add(pe.toSuccess(currentMonth!!, currentMonth!!.let { currentDay!! }))
-                        pendingElectric = null
-                    }
+                    pendingElectric = null
                     results.add(result.result)
                 }
                 is ContextParseResult.Record -> {
@@ -81,7 +87,10 @@ class SmartInputParser {
     ): ContextParseResult {
         // 模式1: 纯日期头
         Regex("""^(\d{1,2})\.(\d{1,2})$""").matchEntire(line)?.let { match ->
-            return ContextParseResult.DateHeader(match.groupValues[1].toInt(), match.groupValues[2].toInt())
+            val month = match.groupValues[1].toInt()
+            val day = match.groupValues[2].toInt()
+            return if (isValidDate(month, day)) ContextParseResult.DateHeader(month, day)
+            else ContextParseResult.Error("日期无效: $line")
         }
 
         // 模式2: 日期 + 时间 + 数值
@@ -90,6 +99,7 @@ class SmartInputParser {
             val day = match.groupValues[2].toInt()
             val hour = match.groupValues[3].toInt()
             val minute = match.groupValues[4].toInt()
+            if (!isValidDateTime(month, day, hour, minute)) return ContextParseResult.Error("日期或时间无效: $line")
             val value = match.groupValues[5].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
             val note = match.groupValues[6].trim().ifEmpty { null }
             return ContextParseResult.RecordWithDate(month, day, classifyValue(month, day, hour, minute, value, note, thresholds))
@@ -101,6 +111,7 @@ class SmartInputParser {
             val day = match.groupValues[2].toInt()
             val hour = match.groupValues[3].toInt()
             val minute = match.groupValues[4].toInt()
+            if (!isValidDateTime(month, day, hour, minute)) return ContextParseResult.Error("日期或时间无效: $line")
             val value = match.groupValues[5].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
             val note = match.groupValues[6].trim().ifEmpty { null }
             return ContextParseResult.RecordWithDate(month, day, classifyValue(month, day, hour, minute, value, note, thresholds))
@@ -112,6 +123,7 @@ class SmartInputParser {
             val day = match.groupValues[2].toInt()
             val value1 = match.groupValues[3].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
             val value2 = match.groupValues[4].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
+            if (!isValidDate(month, day)) return ContextParseResult.Error("日期无效: $line")
             val note = match.groupValues[5].trim().ifEmpty { null }
             // 较大的是电表，较小的是水表
             val (electric, water) = if (value1 > value2) value1 to value2 else value2 to value1
@@ -126,7 +138,27 @@ class SmartInputParser {
             )
         }
 
-        // 模式5: 日期 + 中文时间 + 备注
+        // 模式5: 日期 + 中文时间 + 备注。先按中文数词解析，避免“二十分”被逐字替换成 210 分。
+        Regex("""^(\d{1,2})\.(\d{1,2})\s*(上午|下午)?([零〇一二两三四五六七八九十壹贰叁肆伍陆柒捌玖拾]+)[点时]([零〇一二两三四五六七八九十壹贰叁肆伍陆柒捌玖拾]*)分?\s*(.*)$""").matchEntire(line)?.let { match ->
+            val month = match.groupValues[1].toInt()
+            val day = match.groupValues[2].toInt()
+            val period = match.groupValues[3]
+            var hour = chineseNumber(match.groupValues[4]) ?: return ContextParseResult.Error("时间格式错误: $line")
+            val minute = match.groupValues[5].takeIf { it.isNotBlank() }?.let(::chineseNumber) ?: 0
+            val note = match.groupValues[6].trim().ifEmpty { null }
+            if (period == "下午" && hour < 12) hour += 12
+            if (period == "上午" && hour == 12) hour = 0
+            if (!isValidDateTime(month, day, hour, minute)) return ContextParseResult.Error("日期或时间无效: $line")
+            return ContextParseResult.RecordWithDate(
+                month, day,
+                ParseResult.Success(
+                    timestamp = LocalDateTime.of(currentYear, month, day, hour, minute),
+                    isElectric = false, isWater = false, note = note
+                )
+            )
+        }
+
+        // 模式5 兼容阿拉伯数字和旧输入格式。
         val convertedLine = convertChineseNumerals(line)
         Regex("""^(\d{1,2})\.(\d{1,2})\s*(上午|下午)?(\d{1,2})[点时](\d{0,2})分?\s*(.*)$""").matchEntire(convertedLine)?.let { match ->
             val month = match.groupValues[1].toInt()
@@ -137,6 +169,7 @@ class SmartInputParser {
             val note = match.groupValues[6].trim().ifEmpty { null }
             if (period == "下午" && hour < 12) hour += 12
             if (period == "上午" && hour == 12) hour = 0
+            if (!isValidDateTime(month, day, hour, minute)) return ContextParseResult.Error("日期或时间无效: $line")
             return ContextParseResult.RecordWithDate(
                 month, day,
                 ParseResult.Success(
@@ -150,7 +183,12 @@ class SmartInputParser {
 
         // 模式5b: 日期 + 时间 无数值
         Regex("""^(\d{1,2})\.(\d{1,2})\s+(\d{1,2})\.(\d{2})$""").matchEntire(line)?.let { match ->
-            return ContextParseResult.DateHeader(match.groupValues[1].toInt(), match.groupValues[2].toInt())
+            val month = match.groupValues[1].toInt()
+            val day = match.groupValues[2].toInt()
+            val hour = match.groupValues[3].toInt()
+            val minute = match.groupValues[4].toInt()
+            return if (isValidDateTime(month, day, hour, minute)) ContextParseResult.DateHeader(month, day)
+            else ContextParseResult.Error("日期或时间无效: $line")
         }
 
         // 模式6: 日期 + 时间 + 备注
@@ -159,6 +197,7 @@ class SmartInputParser {
             val day = match.groupValues[2].toInt()
             val hour = match.groupValues[3].toInt()
             val minute = match.groupValues[4].toInt()
+            if (!isValidDateTime(month, day, hour, minute)) return ContextParseResult.Error("日期或时间无效: $line")
             val note = match.groupValues[5].trim()
             return ContextParseResult.RecordWithDate(
                 month, day,
@@ -178,6 +217,7 @@ class SmartInputParser {
             val value = match.groupValues[3].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
             val note = match.groupValues[4].trim().ifEmpty { null }
             if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
+            if (!isValidTime(hour, minute)) return ContextParseResult.Error("时间无效: $line")
             return ContextParseResult.Record(classifyValue(currentMonth, currentDay, hour, minute, value, note, thresholds))
         }
 
@@ -188,6 +228,7 @@ class SmartInputParser {
             val value = match.groupValues[3].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
             val note = match.groupValues[4].trim().ifEmpty { null }
             if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
+            if (!isValidTime(hour, minute)) return ContextParseResult.Error("时间无效: $line")
             return ContextParseResult.Record(classifyValue(currentMonth, currentDay, hour, minute, value, note, thresholds))
         }
 
@@ -197,6 +238,7 @@ class SmartInputParser {
             val minute = match.groupValues[2].toInt()
             val note = match.groupValues[3].trim()
             if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
+            if (!isValidTime(hour, minute)) return ContextParseResult.Error("时间无效: $line")
             return ContextParseResult.Record(
                 ParseResult.Success(
                     timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
@@ -224,20 +266,23 @@ class SmartInputParser {
         // 模式11: 纯数值（智能识别）
         Regex("""^(\d+\.?\d*)$""").matchEntire(line)?.let { match ->
             val value = match.groupValues[1].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
-
-            // 峰谷值配对逻辑（批量导入时，两个 4000-9000 的数值配对为峰+谷）
-            if (value in PENDING_PEAK_VALLEY_MIN..PENDING_PEAK_VALLEY_MAX) {
-                if (pendingElectric == null) {
-                    return ContextParseResult.PendingPeakValley(PendingElectric(peak = value, valley = null, total = null))
-                } else if (pendingElectric.valley == null && pendingElectric.peak != null) {
-                    val completed = pendingElectric.copy(valley = value, total = pendingElectric.peak!! + value)
-                    if (currentMonth != null && currentDay != null) {
-                        return ContextParseResult.Record(completed.toSuccess(currentMonth, currentDay))
-                    }
-                }
-            }
-
             if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文: $line")
+
+            val t = thresholds ?: ClassificationThresholds.DEFAULTS
+            val isPeak = value in t.peakMin..t.peakMax
+            val isValley = value in t.valleyMin..t.valleyMax
+            if (isPeak || isValley || value in PENDING_PEAK_VALLEY_MIN..PENDING_PEAK_VALLEY_MAX) {
+                val next = when {
+                    isPeak -> PendingElectric(peak = value, valley = pendingElectric?.valley, total = null)
+                    isValley -> PendingElectric(peak = pendingElectric?.peak, valley = value, total = null)
+                    pendingElectric == null -> PendingElectric(peak = value, valley = null, total = null)
+                    else -> pendingElectric.copy(valley = value, total = null)
+                }
+                if (next.peak != null && next.valley != null) {
+                    return ContextParseResult.Record(next.copy(total = next.peak + next.valley).toSuccess(currentMonth, currentDay))
+                }
+                return ContextParseResult.PendingPeakValley(next)
+            }
             return ContextParseResult.Record(classifyValue(currentMonth, currentDay, 12, 0, value, null, thresholds))
         }
 
@@ -260,11 +305,7 @@ class SmartInputParser {
         thresholds: ClassificationThresholds? = null
     ): ParseResult.Success {
         val t = thresholds ?: ClassificationThresholds.DEFAULTS
-        val timestamp = try {
-            LocalDateTime.of(currentYear, month, day, hour, minute)
-        } catch (e: Exception) {
-            LocalDateTime.of(currentYear, month, day.coerceAtMost(28), hour, minute)
-        }
+        val timestamp = LocalDateTime.of(currentYear, month, day, hour, minute)
 
         return when {
             // 水表
@@ -329,6 +370,30 @@ class SmartInputParser {
         result = result.replace(Regex("10(\\d)"), "1$1")
         return result
     }
+
+    private fun chineseNumber(text: String): Int? {
+        if (text.isBlank()) return null
+        val digits = mapOf(
+            '零' to 0, '〇' to 0, '一' to 1, '壹' to 1, '二' to 2, '贰' to 2, '两' to 2,
+            '三' to 3, '叁' to 3, '四' to 4, '肆' to 4, '五' to 5, '伍' to 5, '六' to 6,
+            '陆' to 6, '七' to 7, '柒' to 7, '八' to 8, '捌' to 8, '九' to 9, '玖' to 9
+        )
+        if (text.length == 1 && text[0] != '十' && text[0] != '拾') return digits[text[0]]
+        val tenIndex = text.indexOfFirst { it == '十' || it == '拾' }
+        if (tenIndex < 0) return null
+        val tens = if (tenIndex == 0) 1 else digits[text[tenIndex - 1]] ?: return null
+        val ones = if (tenIndex == text.lastIndex) 0 else digits[text[tenIndex + 1]] ?: return null
+        return tens * 10 + ones
+    }
+
+    private fun isValidDate(month: Int, day: Int): Boolean = runCatching {
+        LocalDateTime.of(currentYear, month, day, 0, 0)
+    }.isSuccess
+
+    private fun isValidTime(hour: Int, minute: Int): Boolean = hour in 0..23 && minute in 0..59
+
+    private fun isValidDateTime(month: Int, day: Int, hour: Int, minute: Int): Boolean =
+        isValidDate(month, day) && isValidTime(hour, minute)
 }
 
 data class PendingElectric(

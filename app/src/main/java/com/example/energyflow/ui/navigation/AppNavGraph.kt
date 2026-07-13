@@ -114,10 +114,7 @@ fun AppNavGraph() {
 
             composable(Screen.Settings.route) {
                 val settingsVM: BillingSettingsViewModel = hiltViewModel()
-                BillingSettingsScreen(
-                    viewModel = settingsVM,
-                    onBack = { navController.popBackStack() }
-                )
+                BillingSettingsScreen(viewModel = settingsVM)
             }
         }
     }

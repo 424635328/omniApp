@@ -125,7 +125,7 @@ fun ChartScreen(
                     if (showWeather && weatherData.isNotEmpty()) {
                         WeatherOverlay(
                             weatherData = weatherData,
-                            dayCount = chartData.dailyConsumptions.size,
+                            consumptionDates = chartData.dailyConsumptions.map { it.date.toLocalDate() },
                             modifier = Modifier.matchParentSize()
                         )
                     }

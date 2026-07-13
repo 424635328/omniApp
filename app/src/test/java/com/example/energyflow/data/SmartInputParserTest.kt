@@ -287,20 +287,13 @@ class SmartInputParserTest {
 
     @Test
     fun `pattern11 - valley electric value`() {
-        // 7298 is in both VALLEY (7000-8000) and PENDING (4000-9000) ranges.
-        // PENDING logic intercepts first → treated as peak pending pair.
-        // Use a value in valley range but OUTSIDE pending range: pending max is 9000,
-        // valley range is 7000-8000. Values 7000-8000 are within both.
-        // So standalone pure values in 7000-8000 won't be classified as valley.
-        // This is expected parser behavior.
         val input = """
             7.14
             7298
         """.trimIndent()
         val results = parser.parseWithContext(input, defaults)
         val success = results.filterIsInstance<ParseResult.Success>().first()
-        // Pending logic intercepts: 7298 → PendingElectric(peak=7298)
-        assertEquals(7298.0, success.electricPeak!!, 0.01)
+        assertEquals(7298.0, success.electricValley!!, 0.01)
     }
 
     @Test
@@ -388,25 +381,18 @@ class SmartInputParserTest {
 
     @Test
     fun `extreme - decimal values`() {
-        // 9310.75 > 9000, not in PENDING range → classifyValue → PEAK (default range 9000-10000)
-        // 7298.66 in PENDING (4000-9000) AND VALLEY (7000-8000) → PENDING intercepts first
-        // Result: 9310.75 as peak+eTotal, 7298.66 as pending→peak
-        // So we get 2 records, not paired
         val results = parser.parseWithContext("7.14\n9310.75\n7298.66", defaults)
         val successes = results.filterIsInstance<ParseResult.Success>()
-        assertEquals(2, successes.size)
+        assertEquals(1, successes.size)
         assertEquals(9310.75, successes[0].electricPeak!!, 0.001)
-        assertEquals(7298.66, successes[1].electricPeak!!, 0.001)
+        assertEquals(7298.66, successes[0].electricValley!!, 0.001)
+        assertEquals(16609.41, successes[0].electricTotal!!, 0.001)
     }
 
     @Test
-    fun `extreme - date out of range coerces`() {
-        // 2.31 is invalid date, should coerce
+    fun `extreme - invalid date is rejected rather than silently coerced`() {
         val results = parser.parseWithContext("2.31\n16776", defaults)
-        val success = results.filterIsInstance<ParseResult.Success>().first()
-        // Should coerce day to 28
-        assertEquals(28, success.timestamp.dayOfMonth)
-        assertEquals(2, success.timestamp.month.value)
+        assertTrue(results.all { it is ParseResult.Error })
     }
 
     @Test
@@ -431,6 +417,24 @@ class SmartInputParserTest {
         // Tabs are treated as whitespace (trim doesn't remove tabs but regex \s+ does)
         val success = results.filterIsInstance<ParseResult.Success>().first()
         assertEquals(16672.0, success.electricTotal!!, 0.01)
+    }
+
+    @Test
+    fun `extreme - invalid clock is rejected`() {
+        val results = parser.parseWithContext("7.14 25.61 16776", defaults)
+        assertTrue(results.single() is ParseResult.Error)
+    }
+
+    @Test
+    fun `extreme - inverted month and day is rejected`() {
+        val results = parser.parseWithContext("14.7\n16776", defaults)
+        assertTrue(results.all { it is ParseResult.Error })
+    }
+
+    @Test
+    fun `extreme - value before date context is not assigned to a later date`() {
+        val results = parser.parseWithContext("9310\n7.14", defaults)
+        assertTrue(results.single() is ParseResult.Error)
     }
 
     @Test

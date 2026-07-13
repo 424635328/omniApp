@@ -8,6 +8,7 @@ import com.example.energyflow.data.BatchInsertResult
 import com.example.energyflow.data.InsertResult
 import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.data.MeterRepository
+import com.example.energyflow.data.UserPreferences
 import com.example.energyflow.ui.components.RecordData
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -23,7 +24,8 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val repository: MeterRepository,
-    private val anomalyDetector: AnomalyDetector
+    private val anomalyDetector: AnomalyDetector,
+    private val userPreferences: UserPreferences
 ) : ViewModel() {
 
     val allRecords: StateFlow<List<MeterRecord>> = repository.getAllRecords()
@@ -31,6 +33,13 @@ class MainViewModel @Inject constructor(
 
     val recordCount: StateFlow<Int> = repository.getRecordCount()
         .stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = 0)
+
+    val peakValleyExpanded: StateFlow<Boolean> = userPreferences.peakValleyExpanded
+        .stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = false)
+
+    fun setPeakValleyExpanded(expanded: Boolean) {
+        viewModelScope.launch { userPreferences.setPeakValleyExpanded(expanded) }
+    }
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -69,17 +78,17 @@ class MainViewModel @Inject constructor(
                 val warnings = mutableListOf<AnomalyWarning>()
 
                 if (data.isElectric && data.electricTotal != null) {
-                    val monotonicWarning = anomalyDetector.checkElectricMonotonic(data.electricTotal)
+                    val monotonicWarning = anomalyDetector.checkElectricMonotonic(data.electricTotal, data.timestamp)
                     if (monotonicWarning != null) {
                         warnings.add(AnomalyWarning.ReadingLowerThanPrevious(monotonicWarning))
                     }
-                    val spikeWarning = anomalyDetector.checkElectricSpike(data.electricTotal)
+                    val spikeWarning = anomalyDetector.checkElectricSpike(data.electricTotal, data.timestamp)
                     if (spikeWarning != null) {
                         warnings.add(AnomalyWarning.SpikeDetected(spikeWarning))
                     }
                 }
                 if (data.isWater && data.waterTotal != null) {
-                    val monotonicWarning = anomalyDetector.checkWaterMonotonic(data.waterTotal)
+                    val monotonicWarning = anomalyDetector.checkWaterMonotonic(data.waterTotal, data.timestamp)
                     if (monotonicWarning != null) {
                         warnings.add(AnomalyWarning.ReadingLowerThanPrevious(monotonicWarning))
                     }
