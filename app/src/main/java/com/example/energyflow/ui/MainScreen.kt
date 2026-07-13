@@ -1,16 +1,21 @@
 package com.example.energyflow.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.SwipeUp
 import androidx.compose.material3.AlertDialog
@@ -59,6 +65,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -68,12 +75,11 @@ import com.example.energyflow.ui.components.BatchImportSheet
 import com.example.energyflow.ui.components.EditRecordSheet
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
-import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.MonoFontFamily
-import com.example.energyflow.ui.theme.NeonYellow
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
+import com.example.energyflow.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
 
 @Composable
@@ -91,9 +97,22 @@ fun MainScreen(
 
     var showAddSheet by remember { mutableStateOf(false) }
     var showBatchImport by remember { mutableStateOf(false) }
+    var pendingBatchImport by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<com.example.energyflow.data.MeterRecord?>(null) }
 
-    // FAB动画
+    // ── 返回键拦截：有底部表单打开时 → 关闭表单而不是退出应用 ──
+    androidx.activity.compose.BackHandler(enabled = editingRecord != null) {
+        editingRecord = null
+    }
+    androidx.activity.compose.BackHandler(enabled = showBatchImport) {
+        showBatchImport = false
+        pendingBatchImport = false
+    }
+    androidx.activity.compose.BackHandler(enabled = showAddSheet) {
+        showAddSheet = false
+    }
+
+    // FAB 动画 — 主按钮 + 小按钮缩放
     val fabScale by animateFloatAsState(
         targetValue = if (showAddSheet || showBatchImport) 0f else 1f,
         animationSpec = spring(
@@ -103,20 +122,31 @@ fun MainScreen(
         label = "fab_scale"
     )
 
-    // 处理UI状态 → Snackbar
+    // 处理 UI 状态 → Snackbar
     LaunchedEffect(uiState) {
         when (val state = uiState) {
             is UiState.Success -> {
                 snackbarHostState.showSnackbar(state.message)
                 viewModel.clearState()
+                if (pendingBatchImport) {
+                    showBatchImport = false
+                    pendingBatchImport = false
+                }
             }
             is UiState.Warning -> {
                 snackbarHostState.showSnackbar("⚠️ ${state.message}")
                 viewModel.clearState()
+                if (pendingBatchImport) {
+                    showBatchImport = false
+                    pendingBatchImport = false
+                }
             }
             is UiState.Error -> {
                 snackbarHostState.showSnackbar(state.message)
                 viewModel.clearState()
+                if (pendingBatchImport) {
+                    pendingBatchImport = false
+                }
             }
             else -> {}
         }
@@ -126,12 +156,8 @@ fun MainScreen(
     if (showAnomalyDialog && anomalyWarnings.isNotEmpty()) {
         AnomalyWarningDialog(
             warnings = anomalyWarnings,
-            onConfirm = {
-                viewModel.confirmSaveWithAnomaly()
-            },
-            onDismiss = {
-                viewModel.cancelSaveWithAnomaly()
-            }
+            onConfirm = { viewModel.confirmSaveWithAnomaly() },
+            onDismiss = { viewModel.cancelSaveWithAnomaly() }
         )
     }
 
@@ -148,40 +174,11 @@ fun MainScreen(
         },
         floatingActionButton = {
             if (!showAddSheet && !showBatchImport) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.scale(fabScale)
-                ) {
-                    SmallFloatingActionButton(
-                        onClick = { showBatchImport = true },
-                        containerColor = DarkCard,
-                        contentColor = ElectricColor
-                    ) {
-                        Icon(
-                            Icons.Default.ContentPaste,
-                            contentDescription = "批量导入",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    FloatingActionButton(
-                        onClick = { showAddSheet = true },
-                        containerColor = ElectricColor,
-                        contentColor = DarkBackground,
-                        shape = CircleShape,
-                        elevation = FloatingActionButtonDefaults.elevation(
-                            defaultElevation = 6.dp,
-                            pressedElevation = 12.dp
-                        )
-                    ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = "添加记录",
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
+                FABColumn(
+                    scale = fabScale,
+                    onBatchImport = { showBatchImport = true },
+                    onAddRecord = { showAddSheet = true }
+                )
             }
         }
     ) { paddingValues ->
@@ -191,16 +188,11 @@ fun MainScreen(
                 .background(DarkBackground)
                 .padding(paddingValues)
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                TopBar(
-                    recordCount = records.size,
-                    onAddClick = { showAddSheet = true }
-                )
+            Column(modifier = Modifier.fillMaxSize()) {
+                HomeTopBar(recordCount = records.size)
 
                 if (records.isEmpty() && !showAddSheet && !showBatchImport) {
-                    EmptyState(onAddClick = { showAddSheet = true })
+                    HomeEmptyState(onAddClick = { showAddSheet = true })
                 } else {
                     LazyColumn(
                         modifier = Modifier
@@ -208,17 +200,11 @@ fun MainScreen(
                             .fillMaxWidth(),
                         state = listState,
                         contentPadding = PaddingValues(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = 8.dp,
-                            bottom = 88.dp
+                            start = 16.dp, end = 16.dp, top = 4.dp, bottom = 88.dp
                         ),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(
-                            items = records,
-                            key = { it.id }
-                        ) { record ->
+                        items(items = records, key = { it.id }) { record ->
                             TimelineItem(
                                 record = record,
                                 onDelete = { viewModel.deleteRecord(it) },
@@ -237,7 +223,7 @@ fun MainScreen(
                 }
             }
 
-            // 添加记录底部表单
+            // ── 底部表单 — 添加记录 ──
             AnimatedVisibility(
                 visible = showAddSheet,
                 enter = slideInVertically(
@@ -257,19 +243,16 @@ fun MainScreen(
                         initiallyShowPeakValley = peakValleyExpanded,
                         onPeakValleyExpandedChange = viewModel::setPeakValleyExpanded,
                         onSave = { recordData ->
-                            // 改用 validateAndSave → 先校验再决定是否保存
                             viewModel.validateAndSave(recordData)
                             showAddSheet = false
-                            coroutineScope.launch {
-                                listState.animateScrollToItem(0)
-                            }
+                            coroutineScope.launch { listState.animateScrollToItem(0) }
                         },
                         onDismiss = { showAddSheet = false }
                     )
                 }
             }
 
-            // 批量导入
+            // ── 底部表单 — 批量导入 ──
             AnimatedVisibility(
                 visible = showBatchImport,
                 enter = slideInVertically(
@@ -287,18 +270,17 @@ fun MainScreen(
                 BottomSheetOverlay(onDismiss = { showBatchImport = false }) {
                     BatchImportSheet(
                         onImport = { text ->
+                            pendingBatchImport = true
                             viewModel.batchImport(text)
-                            showBatchImport = false
-                            coroutineScope.launch {
-                                listState.animateScrollToItem(0)
-                            }
+                            coroutineScope.launch { listState.animateScrollToItem(0) }
                         },
+                        importing = pendingBatchImport,
                         onDismiss = { showBatchImport = false }
                     )
                 }
             }
 
-            // 编辑记录
+            // ── 底部表单 — 编辑记录 ──
             AnimatedVisibility(
                 visible = editingRecord != null,
                 enter = slideInVertically(
@@ -330,9 +312,9 @@ fun MainScreen(
     }
 }
 
-// ════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // 🚨 异常警告弹窗
-// ════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 @Composable
 private fun AnomalyWarningDialog(
@@ -347,7 +329,7 @@ private fun AnomalyWarningDialog(
         textContentColor = TextSecondary,
         title = {
             Text(
-                text = "⚠️ 输入异常",
+                "⚠️ 输入异常",
                 color = Color(0xFFFF6B6B),
                 fontFamily = MonoFontFamily,
                 fontWeight = FontWeight.Bold
@@ -359,7 +341,7 @@ private fun AnomalyWarningDialog(
                     when (warning) {
                         is AnomalyWarning.ReadingLowerThanPrevious -> {
                             Text(
-                                text = warning.message,
+                                warning.message,
                                 color = Color(0xFFFF6B6B),
                                 fontFamily = MonoFontFamily,
                                 style = MaterialTheme.typography.bodyMedium
@@ -368,7 +350,7 @@ private fun AnomalyWarningDialog(
                         is AnomalyWarning.SpikeDetected -> {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "⚡ ${warning.detail}",
+                                "⚡ ${warning.detail}",
                                 color = Color(0xFFFFA500),
                                 fontFamily = MonoFontFamily,
                                 style = MaterialTheme.typography.bodySmall
@@ -378,7 +360,7 @@ private fun AnomalyWarningDialog(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "请确认读数是否正确，或返回修改。",
+                    "请确认读数是否正确，或返回修改。",
                     color = TextSecondary,
                     fontFamily = MonoFontFamily,
                     style = MaterialTheme.typography.bodySmall
@@ -398,9 +380,109 @@ private fun AnomalyWarningDialog(
     )
 }
 
-// ════════════════════════════════════════════════════════
-// 原有组件保持不变
-// ════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// FAB 列 — 带按压动效
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun FABColumn(
+    scale: Float,
+    onBatchImport: () -> Unit,
+    onAddRecord: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.scale(scale)
+    ) {
+        // 小 FAB — 批量导入
+        SmallFAB(onClick = onBatchImport) {
+            Icon(
+                Icons.Default.ContentPaste,
+                contentDescription = "批量导入",
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        // 主 FAB — 添加记录
+        MainFAB(onClick = onAddRecord) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "添加记录",
+                modifier = Modifier.size(28.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MainFAB(onClick: () -> Unit, content: @Composable () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val btnScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "mainFabScale"
+    )
+
+    FloatingActionButton(
+        onClick = onClick,
+        modifier = Modifier.scale(btnScale),
+        containerColor = ElectricColor,
+        contentColor = DarkBackground,
+        shape = CircleShape,
+        interactionSource = interactionSource,
+        elevation = FloatingActionButtonDefaults.elevation(
+            defaultElevation = if (isPressed) 2.dp else 6.dp,
+            pressedElevation = 2.dp
+        )
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SmallFAB(onClick: () -> Unit, content: @Composable () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val btnScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.88f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "smallFabScale"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .scale(btnScale)
+            .shadow(
+                elevation = if (isPressed) 2.dp else 5.dp,
+                shape = CircleShape,
+                ambientColor = ElectricColor.copy(alpha = 0.2f),
+                spotColor = ElectricColor.copy(alpha = 0.2f)
+            )
+            .clip(CircleShape)
+            .background(DarkCard)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 底部表单遮罩
+// ═══════════════════════════════════════════════════════════════
 
 @Composable
 private fun BottomSheetOverlay(
@@ -425,92 +507,157 @@ private fun BottomSheetOverlay(
                     ambientColor = ElectricColor.copy(alpha = 0.1f),
                     spotColor = ElectricColor.copy(alpha = 0.1f)
                 )
-                .clickable { /* 阻止点击穿透 */ }
+                .clickable { /* 阻止穿透 */ }
         ) {
             content()
         }
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// 顶栏 — 重新设计
+// ═══════════════════════════════════════════════════════════════
+
 @Composable
-private fun TopBar(
-    recordCount: Int,
-    onAddClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun HomeTopBar(recordCount: Int) {
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
                         DarkBackground,
-                        DarkBackground.copy(alpha = 0.98f),
-                        DarkBackground.copy(alpha = 0.9f),
+                        DarkBackground.copy(alpha = 0.97f),
+                        DarkBackground.copy(alpha = 0.85f),
                         DarkBackground.copy(alpha = 0f)
                     )
                 )
             )
-            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 10.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
+        Column {
+            // 标题行
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 图标徽标
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(ElectricColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Bolt,
+                        contentDescription = null,
+                        tint = ElectricColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "能耗手记",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = NeonYellow,
+                    "能耗手记",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = TextPrimary,
                     fontFamily = MonoFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 28.sp
+                    fontSize = 24.sp
                 )
+            }
 
-                Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-                Text(
-                    text = "共 $recordCount 条记录",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
-                    fontFamily = MonoFontFamily
-                )
+            // 统计行
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 记录计数 pill
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(ElectricColor.copy(alpha = 0.08f))
+                        .border(1.dp, ElectricColor.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "$recordCount",
+                            color = ElectricColor,
+                            fontFamily = MonoFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "条记录",
+                            color = TextTertiary,
+                            fontFamily = MonoFontFamily,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                if (recordCount == 0) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        "添加第一条能耗数据",
+                        color = TextTertiary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// 空状态 — 呼吸动画
+// ═══════════════════════════════════════════════════════════════
+
 @Composable
-private fun EmptyState(onAddClick: () -> Unit) {
-    val pulseScale by animateFloatAsState(
-        targetValue = 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
+private fun HomeEmptyState(onAddClick: () -> Unit) {
+    val infiniteTransition = rememberInfiniteTransition(label = "breathe")
+    val breatheScale by infiniteTransition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "pulse_scale"
+        label = "breathe_scale"
+    )
+    val breatheAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathe_alpha"
     )
 
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // 呼吸光环
             Box(
                 modifier = Modifier
-                    .size(80.dp)
-                    .scale(pulseScale)
+                    .size(88.dp)
+                    .scale(breatheScale)
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
                             colors = listOf(
-                                ElectricColor.copy(alpha = 0.2f),
+                                ElectricColor.copy(alpha = breatheAlpha),
+                                ElectricColor.copy(alpha = breatheAlpha * 0.3f),
                                 DarkCard
                             )
                         )
+                    )
+                    .border(
+                        1.dp,
+                        ElectricColor.copy(alpha = breatheAlpha * 0.5f),
+                        CircleShape
                     )
                     .clickable(onClick = onAddClick),
                 contentAlignment = Alignment.Center
@@ -518,7 +665,7 @@ private fun EmptyState(onAddClick: () -> Unit) {
                 Icon(
                     Icons.Default.SwipeUp,
                     contentDescription = null,
-                    tint = ElectricColor,
+                    tint = ElectricColor.copy(alpha = breatheAlpha + 0.2f),
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -526,63 +673,24 @@ private fun EmptyState(onAddClick: () -> Unit) {
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "开始记录能耗",
+                "开始记录能耗",
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
                 fontFamily = MonoFontFamily,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "点击右下角 + 号添加记录\n或使用粘贴按钮批量导入",
+                "点击右下角 ＋ 添加第一条记录\n或使用粘贴按钮批量导入数据",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                fontFamily = MonoFontFamily
+                color = TextTertiary,
+                fontFamily = MonoFontFamily,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center
             )
         }
-    }
-}
-
-@Composable
-private fun SmallFloatingActionButton(
-    onClick: () -> Unit,
-    containerColor: Color,
-    contentColor: Color,
-    content: @Composable () -> Unit
-) {
-    var isPressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.9f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessHigh
-        ),
-        label = "small_fab_scale"
-    )
-
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .scale(scale)
-            .shadow(
-                elevation = 4.dp,
-                shape = CircleShape,
-                ambientColor = contentColor.copy(alpha = 0.2f),
-                spotColor = contentColor.copy(alpha = 0.2f)
-            )
-            .clip(CircleShape)
-            .background(containerColor)
-            .clickable(
-                onClick = {
-                    isPressed = true
-                    onClick()
-                    isPressed = false
-                }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        content()
     }
 }

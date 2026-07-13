@@ -47,7 +47,8 @@ import com.example.energyflow.ui.theme.TextSecondary
 @Composable
 fun BatchImportSheet(
     onImport: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    importing: Boolean = false
 ) {
     var text by remember { mutableStateOf("") }
 
@@ -176,7 +177,7 @@ fun BatchImportSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
-            enabled = text.isNotBlank(),
+            enabled = text.isNotBlank() && !importing,
             colors = ButtonDefaults.buttonColors(
                 containerColor = ElectricColor,
                 contentColor = DarkBackground,
@@ -185,18 +186,27 @@ fun BatchImportSheet(
             ),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(
-                Icons.Default.ContentPaste,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.size(8.dp))
-            Text(
-                text = "开始导入",
-                fontFamily = MonoFontFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
+            if (importing) {
+                Text(
+                    text = "导入中...",
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            } else {
+                Icon(
+                    Icons.Default.ContentPaste,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(
+                    text = "开始导入",
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))

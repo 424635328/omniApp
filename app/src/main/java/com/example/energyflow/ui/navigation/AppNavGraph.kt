@@ -1,6 +1,12 @@
 package com.example.energyflow.ui.navigation
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -14,7 +20,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -38,7 +46,7 @@ import com.example.energyflow.ui.theme.TextSecondary
 sealed class Screen(
     val route: String,
     val title: String,
-    val icon: ImageVector? = null  // null = hidden from bottom bar
+    val icon: ImageVector? = null
 ) {
     object Home : Screen("home", "记录", Icons.Default.Home)
     object Chart : Screen("chart", "分析", Icons.AutoMirrored.Filled.List)
@@ -62,11 +70,24 @@ fun AppNavGraph() {
                 bottomBarScreens.forEach { screen ->
                     val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
 
+                    // ── 图标弹跳动画 ──
+                    val iconScale by animateFloatAsState(
+                        targetValue = if (selected) 1.18f else 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "navIconScale"
+                    )
+
                     NavigationBarItem(
                         icon = {
                             Icon(
                                 imageVector = screen.icon!!,
-                                contentDescription = screen.title
+                                contentDescription = screen.title,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .scale(iconScale)
                             )
                         },
                         label = {

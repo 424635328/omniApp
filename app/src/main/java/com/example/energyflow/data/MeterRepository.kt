@@ -87,13 +87,19 @@ class MeterRepository @Inject constructor(
         results.forEach { result ->
             when (result) {
                 is ParseResult.Success -> {
-                    val record = result.toMeterRecord()
-                    meterRecordDao.insert(record)
-                    successRecords.add(record)
+                    successRecords.add(result.toMeterRecord())
                 }
                 is ParseResult.Error -> Unit
             }
         }
+
+        // ═══ 插值填补日期缺口 ═══
+        val interpolatedRecords = interpolateGaps(successRecords)
+        successRecords.addAll(interpolatedRecords)
+
+        // 按时间排序后插入
+        val allRecords = (successRecords).sortedBy { it.timestamp }
+        allRecords.forEach { meterRecordDao.insert(it) }
 
         if (successRecords.isNotEmpty()) {
             classifier.reLearn()
@@ -105,6 +111,82 @@ class MeterRepository @Inject constructor(
         }
     }
 
+    /**
+     * 检测导入记录中的日期缺口并生成插值记录。
+     *
+     * 当两条电表记录间隔 N 天（N≥2），在中间每一天生成一条插值记录，
+     * 电表读数均匀分布。水表同理（独立插值）。
+     */
+    private fun interpolateGaps(records: List<MeterRecord>): List<MeterRecord> {
+        val electricRecords = records
+            .filter { it.isElectricRecorded && it.electricTotal != null }
+            .sortedBy { it.timestamp }
+
+        val waterRecords = records
+            .filter { it.isWaterRecorded && it.waterTotal != null }
+            .sortedBy { it.timestamp }
+
+        val result = mutableListOf<MeterRecord>()
+
+        // 电表插值
+        for (i in 0 until electricRecords.size - 1) {
+            val prev = electricRecords[i]
+            val curr = electricRecords[i + 1]
+            val span = java.time.temporal.ChronoUnit.DAYS.between(
+                prev.timestamp.toLocalDate(), curr.timestamp.toLocalDate()
+            )
+            if (span <= 1) continue
+
+            val prevTotal = prev.electricTotal!!
+            val currTotal = curr.electricTotal!!
+            val totalDelta = currTotal - prevTotal
+            val dailyStep = totalDelta / span
+
+            for (d in 1 until span) {
+                val interpDate = prev.timestamp.toLocalDate().plusDays(d)
+                result.add(
+                    MeterRecord(
+                        timestamp = interpDate.atTime(12, 0),
+                        isElectricRecorded = true,
+                        electricTotal = prevTotal + dailyStep * d,
+                        isWaterRecorded = false,
+                        note = null  // 插值记录不加备注
+                    )
+                )
+            }
+        }
+
+        // 水表插值
+        for (i in 0 until waterRecords.size - 1) {
+            val prev = waterRecords[i]
+            val curr = waterRecords[i + 1]
+            val span = java.time.temporal.ChronoUnit.DAYS.between(
+                prev.timestamp.toLocalDate(), curr.timestamp.toLocalDate()
+            )
+            if (span <= 1) continue
+
+            val prevTotal = prev.waterTotal!!
+            val currTotal = curr.waterTotal!!
+            val totalDelta = currTotal - prevTotal
+            val dailyStep = totalDelta / span
+
+            for (d in 1 until span) {
+                val interpDate = prev.timestamp.toLocalDate().plusDays(d)
+                result.add(
+                    MeterRecord(
+                        timestamp = interpDate.atTime(12, 0),
+                        isElectricRecorded = false,
+                        isWaterRecorded = true,
+                        waterTotal = prevTotal + dailyStep * d,
+                        note = null
+                    )
+                )
+            }
+        }
+
+        return result
+    }
+
     private suspend fun validateBatchCandidates(successes: List<ParseResult.Success>): List<String> {
         val warnings = mutableListOf<String>()
         successes.forEach { result ->
@@ -113,31 +195,46 @@ class MeterRepository @Inject constructor(
         }
 
         val candidates = successes.map { it.toMeterRecord() }
-        warnings += findBatchDropWarning(
-            records = meterRecordDao.getElectricRecords().first() + candidates.filter { it.isElectricRecorded },
-            valueOf = { it.electricTotal },
-            label = "当前读数"
-        )
-        warnings += findBatchDropWarning(
-            records = meterRecordDao.getWaterRecords().first() + candidates.filter { it.isWaterRecorded },
-            valueOf = { it.waterTotal },
-            label = "当前水表读数"
-        )
+        val existingElectric = meterRecordDao.getElectricRecords().first()
+        if (existingElectric.isNotEmpty()) {
+            warnings += findBatchDropWarning(
+                records = existingElectric + candidates.filter { it.isElectricRecorded },
+                valueOf = { it.electricTotal },
+                label = "当前读数"
+            )
+        }
+        val existingWater = meterRecordDao.getWaterRecords().first()
+        if (existingWater.isNotEmpty()) {
+            warnings += findBatchDropWarning(
+                records = existingWater + candidates.filter { it.isWaterRecorded },
+                valueOf = { it.waterTotal },
+                label = "当前水表读数"
+            )
+        }
 
         return warnings.filter { it.isNotBlank() }.distinct()
     }
 
+    /**
+     * 检查相邻记录之间的读数递减。
+     * 只检查包含已有记录的对（previous 来自历史），导入候选内部的自有递减忽略，
+     * 因为用户可能按任意顺序录入数据。
+     */
     private fun findBatchDropWarning(
         records: List<MeterRecord>,
         valueOf: (MeterRecord) -> Double?,
         label: String
     ): List<String> {
-        val pair = records
+        val indexed = records
             .filter { valueOf(it) != null }
             .sortedBy { it.timestamp }
+
+        // 找到第一个来自历史记录的递减对（id > 0 表示已持久化的记录）
+        val pair = indexed
             .zipWithNext()
             .firstOrNull { (previous, current) ->
                 current.timestamp > previous.timestamp &&
+                    previous.id > 0L &&
                     (valueOf(current) ?: 0.0) < (valueOf(previous) ?: 0.0)
             }
             ?: return emptyList()

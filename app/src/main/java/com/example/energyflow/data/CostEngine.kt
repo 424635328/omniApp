@@ -4,24 +4,45 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Local, user-configurable billing rules. Prices are yuan per unit. */
+/**
+ * 南京建邺区居民水电计费规则（2026年现行）。
+ *
+ * 用电：峰谷分时 + 阶梯加价
+ *   - 峰 0.5583 / 谷 0.3583 / 平 0.5283 元/度（第一档）
+ *   - 第二档（年 >2760 度）加价 0.05 元/度
+ *   - 第三档（年 >4800 度）加价 0.30 元/度
+ *   - 按月估算时，月阶梯上限 = 年上限 / 12
+ *
+ * 用水：阶梯水价（年计量，按月估算）
+ *   - 第一档 ≤200 吨/年 → 3.42 元/吨（月均 16.67 吨）
+ *   - 第二档 200-270 吨/年 → 4.32 元/吨（月均 22.5 吨）
+ *   - 第三档 >270 吨/年 → 7.02 元/吨
+ */
 data class BillingRules(
-    val peakPrice: Double = 0.6,
-    val valleyPrice: Double = 0.3,
-    val flatPrice: Double = 0.5,
-    val electricTier1Limit: Double = 200.0,
-    val electricTier2Limit: Double = 400.0,
-    val waterTier1Limit: Double = 15.0,
-    val waterTier2Limit: Double = 25.0,
-    val waterTier1Price: Double = 3.5,
-    val waterTier2Price: Double = 4.5,
-    val waterTier3Price: Double = 6.0
+    // ── 电价（分时） ──
+    val peakPrice: Double = 0.5583,
+    val valleyPrice: Double = 0.3583,
+    val flatPrice: Double = 0.5283,
+
+    // ── 用电阶梯（月估算 = 年上限 / 12） ──
+    val electricTier1Limit: Double = 230.0,   // 2760 / 12
+    val electricTier2Limit: Double = 400.0,   // 4800 / 12
+    val electricTier2Surcharge: Double = 0.05,  // 第二档加价（元/度）
+    val electricTier3Surcharge: Double = 0.30,  // 第三档加价（元/度）
+
+    // ── 水价（阶梯，月估算 = 年上限 / 12） ──
+    val waterTier1Limit: Double = 16.67,  // 200 / 12
+    val waterTier2Limit: Double = 22.5,   // 270 / 12
+    val waterTier1Price: Double = 3.42,
+    val waterTier2Price: Double = 4.32,
+    val waterTier3Price: Double = 7.02
 )
 
 /**
- * Keeps pricing policy in one place so UI estimates and monthly predictions use
- * exactly the same calculation. Electricity tiers apply to total monthly usage,
- * never separately to peak, valley and flat usage.
+ * 统一计费引擎。
+ *
+ * 用电 = 分时电价 × 阶梯加价（"先峰谷、后阶梯"）
+ * 用水 = 阶梯水价（分段累进）
  */
 @Singleton
 class CostEngine @Inject constructor(
@@ -71,17 +92,20 @@ class CostEngine @Inject constructor(
             val safeValley = valleyKwh.coerceIn(0.0, safeTotal - safePeak)
             val flatKwh = (safeTotal - safePeak - safeValley).coerceAtLeast(0.0)
 
-            val tieredUsage = tieredUsage(
-                usage = safeTotal,
-                firstLimit = rules.electricTier1Limit,
-                secondLimit = rules.electricTier2Limit
-            )
-            val weightedMultiplier = if (safeTotal == 0.0) 1.0 else {
-                (tieredUsage.tier1 + tieredUsage.tier2 * 1.5 + tieredUsage.tier3 * 2.0) / safeTotal
-            }
-            val peakCost = safePeak * rules.peakPrice * weightedMultiplier
-            val valleyCost = safeValley * rules.valleyPrice * weightedMultiplier
-            val flatCost = flatKwh * rules.flatPrice * weightedMultiplier
+            // ── 用电阶梯加价（"先峰谷、后阶梯"） ──
+            val tieredUsage = tieredUsage(safeTotal, rules.electricTier1Limit, rules.electricTier2Limit)
+
+            // 计算加权平均加价：每度电的阶梯附加费
+            val avgSurcharge = if (safeTotal > 0.0) {
+                (tieredUsage.tier2 * rules.electricTier2Surcharge +
+                 tieredUsage.tier3 * rules.electricTier3Surcharge) / safeTotal
+            } else 0.0
+
+            val peakCost = safePeak * (rules.peakPrice + avgSurcharge)
+            val valleyCost = safeValley * (rules.valleyPrice + avgSurcharge)
+            val flatCost = flatKwh * (rules.flatPrice + avgSurcharge)
+
+            // ── 阶梯水价 ──
             val water = tieredWaterCost(waterTons.coerceAtLeast(0.0), rules)
 
             return BillResult(
@@ -98,9 +122,9 @@ class CostEngine @Inject constructor(
                 electricTotalCost = peakCost + valleyCost + flatCost,
                 waterTotalCost = water.total,
                 waterTons = waterTons.coerceAtLeast(0.0),
-                peakPrice = rules.peakPrice,
-                valleyPrice = rules.valleyPrice,
-                flatPrice = rules.flatPrice,
+                peakPrice = rules.peakPrice + avgSurcharge,
+                valleyPrice = rules.valleyPrice + avgSurcharge,
+                flatPrice = rules.flatPrice + avgSurcharge,
                 waterPrice = water.effectivePrice
             )
         }
@@ -120,7 +144,10 @@ class CostEngine @Inject constructor(
             val total = usage.tier1 * rules.waterTier1Price +
                 usage.tier2 * rules.waterTier2Price +
                 usage.tier3 * rules.waterTier3Price
-            return WaterCost(total = total, effectivePrice = if (tons == 0.0) rules.waterTier1Price else total / tons)
+            return WaterCost(
+                total = total,
+                effectivePrice = if (tons == 0.0) rules.waterTier1Price else total / tons
+            )
         }
 
         private fun Double.orOne(): Double = if (this == 0.0) 1.0 else this

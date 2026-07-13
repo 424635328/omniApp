@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "NIKO-Portfolio"
+rootProject.name = "EnergyFlow"
 include(":app")
  
