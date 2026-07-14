@@ -17,10 +17,17 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val repository: MeterRepository,
@@ -28,14 +35,54 @@ class MainViewModel @Inject constructor(
     private val userPreferences: UserPreferences
 ) : ViewModel() {
 
-    val allRecords: StateFlow<List<MeterRecord>> = repository.getAllRecords()
-        .stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList())
+    // ── 分页加载：首屏只取最近 150 条 ──
+    // 增大此值 → Room 自动以更大 LIMIT 重新查询（保持响应性）
+    private val _loadLimit = MutableStateFlow(150)
+    val allRecords: StateFlow<List<MeterRecord>> = _loadLimit
+        .flatMapLatest { limit: Int ->
+            kotlinx.coroutines.flow.flow {
+                kotlinx.coroutines.delay(80) // 让 SplashScreen 先完成渲染
+                emitAll(repository.getRecordsLimited(limit))
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // 筛选栏计数（轻量 COUNT 查询，不检索全表数据）
+    val filterCounts: StateFlow<Map<String, Int>> = combine(
+        repository.getRecordCount(),
+        repository.getElectricCount(),
+        repository.getWaterCount(),
+        repository.getGasCount(),
+        repository.getNoteCount()
+    ) { total: Int, elec: Int, water: Int, gas: Int, notes: Int ->
+        mapOf(
+            "total" to total,
+            "electric" to elec,
+            "water" to water,
+            "gas" to gas,
+            "notes" to notes
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     val recordCount: StateFlow<Int> = repository.getRecordCount()
         .stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = 0)
 
     val peakValleyExpanded: StateFlow<Boolean> = userPreferences.peakValleyExpanded
         .stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = false)
+
+    // 加载更多：增大 LIMIT → flatMapLatest 自动重新查询
+    private val _isLoadingMore = MutableStateFlow(false)
+    val isLoadingMore: StateFlow<Boolean> = _isLoadingMore.asStateFlow()
+
+    fun loadMore() {
+        if (_isLoadingMore.value) return
+        _isLoadingMore.value = true
+        _loadLimit.value += 50  // 触发 flatMapLatest 以新 LIMIT 重新查询
+        _isLoadingMore.value = false
+    }
+
+    // 重置为初始化数量
+    fun reloadAll() { _loadLimit.value = 150 }
 
     fun setPeakValleyExpanded(expanded: Boolean) {
         viewModelScope.launch { userPreferences.setPeakValleyExpanded(expanded) }
@@ -59,8 +106,8 @@ class MainViewModel @Inject constructor(
      * 校验并保存记录。如果发现异常则弹出确认框，不直接保存。
      */
     fun validateAndSave(data: RecordData) {
-        if (!data.isElectric && !data.isWater) {
-            _uiState.value = UiState.Error("请至少输入电表或水表数据")
+        if (!data.isElectric && !data.isWater && !data.isGas) {
+            _uiState.value = UiState.Error("请至少输入电表、水表或燃气数据")
             return
         }
         if (data.isElectric && data.electricTotal == null) {
@@ -69,6 +116,10 @@ class MainViewModel @Inject constructor(
         }
         if (data.isWater && data.waterTotal == null) {
             _uiState.value = UiState.Error("请输入水表读数")
+            return
+        }
+        if (data.isGas && data.gasTotal == null) {
+            _uiState.value = UiState.Error("请输入燃气读数")
             return
         }
 
@@ -124,6 +175,8 @@ class MainViewModel @Inject constructor(
             electricValley = data.electricValley,
             isWaterRecorded = data.isWater,
             waterTotal = data.waterTotal,
+            isGasRecorded = data.isGas,
+            gasTotal = data.gasTotal,
             note = data.note
         )
         repository.insert(record)
@@ -131,8 +184,8 @@ class MainViewModel @Inject constructor(
     }
 
     fun insertFromRecordData(data: RecordData) {
-        if (!data.isElectric && !data.isWater) {
-            _uiState.value = UiState.Error("请至少输入电表或水表数据")
+        if (!data.isElectric && !data.isWater && !data.isGas) {
+            _uiState.value = UiState.Error("请至少输入电表、水表或燃气数据")
             return
         }
         if (data.isElectric && data.electricTotal == null) {
@@ -141,6 +194,10 @@ class MainViewModel @Inject constructor(
         }
         if (data.isWater && data.waterTotal == null) {
             _uiState.value = UiState.Error("请输入水表读数")
+            return
+        }
+        if (data.isGas && data.gasTotal == null) {
+            _uiState.value = UiState.Error("请输入燃气读数")
             return
         }
 
@@ -155,6 +212,8 @@ class MainViewModel @Inject constructor(
                     electricValley = data.electricValley,
                     isWaterRecorded = data.isWater,
                     waterTotal = data.waterTotal,
+                    isGasRecorded = data.isGas,
+                    gasTotal = data.gasTotal,
                     note = data.note
                 )
                 repository.insert(record)
@@ -166,8 +225,8 @@ class MainViewModel @Inject constructor(
     }
 
     fun updateRecord(original: MeterRecord, data: RecordData) {
-        if (!data.isElectric && !data.isWater) {
-            _uiState.value = UiState.Error("请至少输入电表或水表数据")
+        if (!data.isElectric && !data.isWater && !data.isGas) {
+            _uiState.value = UiState.Error("请至少输入电表、水表或燃气数据")
             return
         }
         if (data.isElectric && data.electricTotal == null) {
@@ -176,6 +235,10 @@ class MainViewModel @Inject constructor(
         }
         if (data.isWater && data.waterTotal == null) {
             _uiState.value = UiState.Error("请输入水表读数")
+            return
+        }
+        if (data.isGas && data.gasTotal == null) {
+            _uiState.value = UiState.Error("请输入燃气读数")
             return
         }
 
@@ -305,6 +368,8 @@ class MainViewModel @Inject constructor(
             electricValley = data.electricValley,
             isWaterRecorded = data.isWater,
             waterTotal = data.waterTotal,
+            isGasRecorded = data.isGas,
+            gasTotal = data.gasTotal,
             note = data.note
         )
         repository.update(updated)

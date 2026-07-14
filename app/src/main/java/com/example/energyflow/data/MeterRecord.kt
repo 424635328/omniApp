@@ -1,10 +1,16 @@
 package com.example.energyflow.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.time.LocalDateTime
 
-@Entity(tableName = "meter_records")
+@Entity(
+    tableName = "meter_records",
+    indices = [Index(value = ["timestamp"])]
+)
+@Immutable
 data class MeterRecord(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

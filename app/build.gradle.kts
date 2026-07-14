@@ -91,7 +91,13 @@ dependencies {
     // Baseline Profiles (ART optimization, ~30% cold-start speedup)
     implementation(libs.androidx.profileinstaller)
 
+    // SLF4J (silences third-party lib warnings)
+    implementation("org.slf4j:slf4j-simple:1.7.36")
+
     testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.ktor.client.mock)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

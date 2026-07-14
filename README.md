@@ -11,6 +11,7 @@
 
 - [项目简介](#项目简介)
 - [核心特性](#核心特性)
+- [交互体验](#交互体验)
 - [技术架构](#技术架构)
 - [项目结构](#项目结构)
 - [数据库设计](#数据库设计)
@@ -22,7 +23,6 @@
 - [事件归因分析](#事件归因分析)
 - [月度预测](#月度预测)
 - [导入时插值](#导入时插值)
-- [动画与 UX](#动画与-ux)
 - [构建与运行](#构建与运行)
 - [测试](#测试)
 - [性能优化](#性能优化)
@@ -33,7 +33,7 @@
 
 ## 项目简介
 
-**能耗手记 (Energy Flow)** 是为个人水电能耗记录而生的 Android App。
+**能耗手记 (Energy Flow)** 是为个人水电燃气能耗记录而生的 Android App。
 
 核心理念：**你的记录习惯不应该被表单束缚。** 粘贴什么，它就解析什么。
 
@@ -62,6 +62,15 @@
 | 峰谷配对 | `9310.75` / `7298.66` | 自动峰+谷+总和 |
 | 水表前缀 | `水0879` | 水表 879 |
 | 纯数值 | `16776` | 自适应分类 |
+
+### ⚡💧🔥 三表合一（电表 + 水表 + 燃气表）
+
+电表、水表、燃气表三条独立数据流，在表单中通过开关独立启停：
+
+- 每条记录可同时记录任意组合的电/水/燃气读数
+- 上次读数一键「沿用」+ 自动日期 +1 天
+- 时间线卡片清晰展示各表读数和间隔消耗量
+- **滤波筛选**：一键筛选只看电/水/燃气/含备注的记录
 
 ### 📊 自适应分类器
 
@@ -132,6 +141,10 @@
 差异: +3.3 度/天
 ```
 
+### 🤖 DeepSeek AI 全局分析
+
+配置 API Key 后，在分析页点击「AI 分析」按钮，获得基于完整数据集的多维度洞察（趋势、异常、天气关联、事件影响、费用预测）。
+
 ### ✨ 开屏动画 + 点击跳过
 
 - 多阶段动画：图标弹性入场 + 标题滑入 + 波纹扩散 + 旋转电弧 + 轨道粒子
@@ -148,6 +161,54 @@
 
 ---
 
+## 交互体验
+
+### 🧭 导航
+
+- 底部三标签（记录/分析/计费）**交叉淡入淡出**过渡，切换流畅自然
+- 选中图标 Spring 弹性缩放 1.18x
+- 各标签独立 ViewModel，切换后状态保留
+
+### 📋 时间线
+
+- 卡片 **左滑删除** → 弹出确认弹窗（最快 2 步完成删除）
+- 点击卡片 **展开行内操作**（编辑/删除按钮）
+- **长按**卡片直接调出删除确认
+- 所有删除操作附带 **触觉反馈（震动）**
+- 首页 **筛选栏**：按类型（全部/电/水/气/备注）过滤记录，直观显示各类型计数
+- 滚动超过 2 项后出现「回到顶部」按钮，弹簧缩放+阴影
+
+### 📄 底部表单
+
+- 添加/编辑/批量导入表单均使用 **ModalBottomSheet**，支持拖拽关闭
+- 半透明遮罩层（scrim）点击即关闭
+- 表单内：电表支持峰谷电量展开/收起、自动推导、合计校验
+
+### 📊 分析页
+
+- 所有面板垂直排列，**滚动超过 400px** 出现「回到顶部」按钮
+- 趋势图使用自定义 Canvas 绘制：面积填充 + 发光描边 + 交互 Tooltip
+- 天气温度曲线叠加显示，高温区橙色标注
+- 时段选择器（周/月/年/全部）带动画切换
+
+### 🎨 动画矩阵
+
+| 功能 | 实现 |
+|------|------|
+| 开屏动画 | 多阶段：图标弹性入场 + 标题滑入 + 波纹/电弧/粒子 Canvas 动效 |
+| 图表绘制 | Animatable 从左到右渐进绘制 (700ms) |
+| KPI 卡片 | animateFloatAsState 数字过渡 |
+| 进度条 | animateFloatAsState 平滑填充 (800ms) |
+| 卡片按压 | InteractionSource → 缩放 0.97x + 阴影变化 + 发光条 |
+| 底部导航 | 选中图标 Spring 弹性缩放 1.18x |
+| FAB 按压 | InteractionSource → 缩放 + 阴影变化 |
+| 空状态 | infiniteRepeatable 呼吸动画（缩放 + 透明度） |
+| 列表项 | animateItem 淡入/淡出/位移（弹簧物理） |
+| 导航过渡 | fadeIn 280ms / fadeOut 180ms 交叉淡入淡出 |
+| 回到顶部 | spring 弹性缩放入场/出场 |
+
+---
+
 ## 技术架构
 
 ```
@@ -157,6 +218,7 @@
 │  SplashScreen · AnomalyWarningDialog         │
 │  ConsumptionLineChart (Canvas)               │
 │  WeatherOverlay (Canvas)                     │
+│  ModalBottomSheet · SwipeToDismissBox       │
 └───────────────────┬──────────────────────────┘
                     │ hiltViewModel()
 ┌───────────────────▼──────────────────────────┐
@@ -198,7 +260,7 @@ com.example.energyflow/
 │   ├── DataStoreModule.kt                # Preferences DataStore
 │   └── NetworkModule.kt                  # Ktor HttpClient
 ├── data/
-│   ├── MeterRecord.kt                    # Room Entity
+│   ├── MeterRecord.kt                    # Room Entity（电/水/燃气三表）
 │   ├── MeterRecordDao.kt                 # Room DAO
 │   ├── AppDatabase.kt                    # Room Database
 │   ├── Converters.kt                     # 类型转换
@@ -217,11 +279,11 @@ com.example.energyflow/
 │   └── UserPreferences.kt              # DataStore (带版本迁移)
 ├── ui/
 │   ├── SplashScreen.kt                  # 开屏动画
-│   ├── MainScreen.kt                    # 时间轴主页
+│   ├── MainScreen.kt                    # 时间轴主页 + 筛选栏 + ModalBottomSheet
 │   ├── MainViewModel.kt                 # 主页 ViewModel
-│   ├── TimelineItem.kt                  # 时间轴卡片
+│   ├── TimelineItem.kt                  # 时间轴卡片（滑动删除）
 │   ├── chart/
-│   │   ├── ChartScreen.kt               # 分析页
+│   │   ├── ChartScreen.kt               # 分析页（回到顶部按钮）
 │   │   ├── ChartViewModel.kt            # 图表 ViewModel
 │   │   ├── ConsumptionLineChart.kt      # Canvas 折线图
 │   │   └── WeatherOverlay.kt            # 温度曲线叠加层
@@ -229,11 +291,11 @@ com.example.energyflow/
 │   │   ├── BillingSettingsScreen.kt     # 计费设置
 │   │   └── BillingSettingsViewModel.kt
 │   ├── components/
-│   │   ├── AddRecordSheet.kt            # 添加记录
+│   │   ├── AddRecordSheet.kt            # 添加记录（电/水/燃气全支持）
 │   │   ├── EditRecordSheet.kt           # 编辑记录
 │   │   └── BatchImportSheet.kt          # 批量导入
 │   ├── navigation/
-│   │   └── AppNavGraph.kt               # 三 Tab 导航
+│   │   └── AppNavGraph.kt               # 三 Tab 导航（过渡动画）
 │   ├── theme/
 │   │   ├── Color.kt                     # 霓虹色板
 │   │   ├── Theme.kt                     # 暗黑主题 + HSL 色相偏移
@@ -260,6 +322,8 @@ com.example.energyflow/
 | electricValley | Double? | 谷电量 |
 | isWaterRecorded | Boolean | 含水表读数 |
 | waterTotal | Double? | 水表读数 (m³) |
+| isGasRecorded | Boolean | 含燃气表读数 |
+| gasTotal | Double? | 燃气读数 (m³) |
 | note | String? | 备注/事件标签 |
 
 ---
@@ -365,24 +429,6 @@ f = (7.12 - 7.10) / (7.14 - 7.10) = 0.5
 
 ---
 
-## 动画与 UX
-
-| 功能 | 实现 |
-|------|------|
-| 开屏动画 | 5 阶段：图标弹性入场 + 标题滑入 + 波纹/电弧/粒子 Canvas 动效 |
-| 跳过开屏 | 任意位置点击 → 150ms 淡出 |
-| 图表绘制 | Animatable 从左到右渐进绘制 (700ms) |
-| KPI 卡片 | animateFloatAsState 数字过渡 |
-| 进度条 | animateFloatAsState 平滑填充 |
-| 卡片按压 | InteractionSource → 缩放 0.97x + 阴影变化 + 发光条 |
-| 底部导航 | 选中图标 Spring 弹性缩放 1.18x |
-| FAB 按压 | InteractionSource → 缩放 + 阴影 |
-| 空状态 | infiniteRepeatable 呼吸动画 |
-| 行内操作 | 点击展开编辑/删除，AnimatedVisibility |
-| 返回键 | BackHandler 优先关闭底部表单 |
-
----
-
 ## 构建与运行
 
 ### 环境
@@ -411,6 +457,10 @@ f = (7.12 - 7.10) / (7.14 - 7.10) = 0.5
 ### 天气 API
 
 使用 **Open-Meteo** 免费 API，无需注册 Key，开箱即用。
+
+### DeepSeek AI
+
+在设置页填入 DeepSeek API Key 后（[platform.deepseek.com](https://platform.deepseek.com)），分析页点击「AI 分析」按钮获取全局能耗洞察。
 
 ---
 
@@ -464,7 +514,7 @@ gradle.properties:
 | 类别 | 依赖 | 用途 |
 |------|------|------|
 | UI | Compose BOM + Material 3 + Icons | 全 Compose UI |
-| 导航 | Navigation Compose | 三 Tab 导航 |
+| 导航 | Navigation Compose | 三 Tab 导航（过渡动画） |
 | 数据 | Room + KSP | 本地 SQLite |
 | 偏好 | DataStore Preferences | 计费规则/主题/阈值 |
 | DI | Hilt + KSP | 依赖注入 |

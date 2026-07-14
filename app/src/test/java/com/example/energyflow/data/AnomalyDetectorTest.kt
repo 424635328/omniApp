@@ -68,6 +68,12 @@ private class FakeDao(
     override fun getRecordsWithNotes(): Flow<List<MeterRecord>> = flowOf(emptyList())
     override fun getRecordCount(): Flow<Int> = flowOf(electric.size + water.size)
     override suspend fun deleteAll() = Unit
+    override fun getRecordsLimited(limit: Int): Flow<List<MeterRecord>> = flowOf((electric + water).take(limit))
+    override suspend fun loadMoreRecords(limit: Int, offset: Int): List<MeterRecord> = (electric + water).drop(offset).take(limit)
+    override fun getElectricCount(): Flow<Int> = flowOf(electric.size)
+    override fun getWaterCount(): Flow<Int> = flowOf(water.size)
+    override fun getGasCount(): Flow<Int> = flowOf(0)
+    override fun getNoteCount(): Flow<Int> = flowOf((electric + water).count { !it.note.isNullOrBlank() })
     override suspend fun getLatestElectricRecord(): MeterRecord? = electric.maxByOrNull { it.timestamp }
     override suspend fun getLatestWaterRecord(): MeterRecord? = water.maxByOrNull { it.timestamp }
 }

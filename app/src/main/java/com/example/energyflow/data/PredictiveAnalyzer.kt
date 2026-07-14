@@ -15,7 +15,10 @@ import javax.inject.Singleton
 @Singleton
 class PredictiveAnalyzer @Inject constructor() {
 
-    fun predictMonth(records: List<MeterRecord>): MonthPrediction? {
+    fun predictMonth(
+        records: List<MeterRecord>,
+        now: LocalDateTime = LocalDateTime.now()
+    ): MonthPrediction? {
         val electricRecords = records
             .filter { it.isElectricRecorded && it.electricTotal != null }
             .sortedBy { it.timestamp }
@@ -35,7 +38,7 @@ class PredictiveAnalyzer @Inject constructor() {
         }
         if (cleanRecords.size < 2) return null
 
-        val now = LocalDateTime.now()
+        val now = now
         val monthStart = YearMonth.from(now).atDay(1).atStartOfDay()
         val monthEnd = YearMonth.from(now).atEndOfMonth().atTime(23, 59)
         val daysElapsed = now.dayOfMonth.coerceAtLeast(1)

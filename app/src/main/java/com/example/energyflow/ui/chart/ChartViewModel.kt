@@ -1,5 +1,6 @@
 package com.example.energyflow.ui.chart
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.energyflow.data.CostEngine
@@ -419,13 +420,13 @@ class ChartViewModel @Inject constructor(
         if (weather.isNotEmpty()) {
             val weatherByDate = weather.associateBy { it.date }
             val hotDays = dailies.filter { d ->
-                val w = weatherByDate[d.date.toLocalDate().toString()]
+                val w = weatherByDate[d.date.toLocalDate()]
                 w != null && w.tempMax > 32
             }
             if (hotDays.isNotEmpty()) {
                 val hotAvg = hotDays.sumOf { it.dailyConsumption } / hotDays.size
                 val coolDays = dailies.filter { d ->
-                    val w = weatherByDate[d.date.toLocalDate().toString()]
+                    val w = weatherByDate[d.date.toLocalDate()]
                     w != null && w.tempMax <= 32
                 }
                 val coolAvg = if (coolDays.isNotEmpty()) coolDays.sumOf { it.dailyConsumption } / coolDays.size else 0.0
@@ -553,7 +554,9 @@ class ChartViewModel @Inject constructor(
     ): List<MeterRecord> {
         if (inWindow.isEmpty()) return inWindow
         val firstInWindow = inWindow.first()
-        if (!firstInWindow.timestamp.toLocalDate().isAfter(windowStart)) return inWindow
+        // 仅当首条记录日期严格在窗口之前才跳过补基线（防御性，正常不会发生）
+        // 首条记录日期 == 窗口起点时也需要补基线，否则插值首点会偏移 +1 天
+        if (firstInWindow.timestamp.toLocalDate().isBefore(windowStart)) return inWindow
         val baseline = allRecords
             .filter { it.timestamp.toLocalDate().isBefore(windowStart) && it.isElectricRecorded }
             .maxByOrNull { it.timestamp }
@@ -590,13 +593,26 @@ class ChartViewModel @Inject constructor(
                 prev.timestamp.toLocalDate().atStartOfDay(),
                 current.timestamp.toLocalDate().atStartOfDay()
             )
-            // 以日历日为基准，避免时分秒导致的 off-by-one
-            val days = rawDays.coerceAtLeast(1)
+            val baseDate = prev.timestamp.toLocalDate()
 
+            // 同一天内的多条记录：消耗发生在当天，数据点也放在当天
+            if (rawDays == 0L) {
+                result.add(
+                    DailyConsumption(
+                        date = baseDate.atTime(12, 0),
+                        consumption = totalConsumption,
+                        dailyConsumption = totalConsumption,
+                        daysBetween = 1,
+                        estimatedCost = totalConsumption * estimatedCostPerKwh
+                    )
+                )
+                continue
+            }
+
+            val days = rawDays
             val dailyAvg = totalConsumption / days
 
             // 为缺口中的每一天生成数据点
-            val baseDate = prev.timestamp.toLocalDate()
             for (d in 1..days) {
                 val pointDate = baseDate.plusDays(d).atTime(12, 0)
                 val isLast = d == days
@@ -623,6 +639,7 @@ class ChartViewModel @Inject constructor(
 
 // ── Data 📊 ───────────────────────────────────────────────
 
+@Immutable
 data class ChartData(
     val records: List<MeterRecord>,
     val dailyConsumptions: List<DailyConsumption>,
@@ -634,6 +651,7 @@ data class ChartData(
     }
 }
 
+@Immutable
 data class DailyConsumption(
     val date: LocalDateTime,
     val consumption: Double,
@@ -644,6 +662,7 @@ data class DailyConsumption(
 
 enum class TimeRange { WEEK, MONTH, YEAR, ALL }
 
+@Immutable
 data class BillData(
     val totalKwh: Double,
     val peakKwh: Double,
@@ -658,12 +677,14 @@ data class BillData(
     val waterPrice: Double
 )
 
+@Immutable
 data class PredictedBill(
     val totalKwh: Double,
     val predictedCost: Double
 )
 
 /** 预测跟踪——对比已保存的预测 vs 实际进度。 */
+@Immutable
 data class PredictionTracking(
     val yearMonth: String,
     val savedDay: Int,

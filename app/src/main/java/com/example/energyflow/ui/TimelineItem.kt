@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,10 +35,14 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,9 +52,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,8 +68,10 @@ import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
+import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
+import com.example.energyflow.ui.theme.GasColor
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.TextPrimary
@@ -68,15 +80,19 @@ import com.example.energyflow.ui.theme.WaterColor
 import com.example.energyflow.ui.utils.Formatters
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineItem(
     record: MeterRecord,
+    electricDelta: Double? = null,
+    waterDelta: Double? = null,
+    gasDelta: Double? = null,
     onDelete: ((MeterRecord) -> Unit)? = null,
     onEdit: ((MeterRecord) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val haptic = LocalHapticFeedback.current
     val isPressed by interactionSource.collectIsPressedAsState()
     var showActions by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -99,8 +115,25 @@ fun TimelineItem(
 
     val borderAlpha by animateFloatAsState(
         targetValue = if (isPressed || showActions) 0.3f else 0.05f,
-        animationSpec = tween(200),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
         label = "borderAlpha"
+    )
+
+    // ── 左滑删除状态 ──
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.EndToStart -> {
+                    showDeleteDialog = true
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    false // 弹回，不实际消除
+                }
+                else -> false
+            }
+        }
     )
 
     // 删除确认弹窗
@@ -141,7 +174,7 @@ fun TimelineItem(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "此操作无法撤销",
-                        color = Color(0xFFFF6B6B),
+                        color = ErrorNeon,
                         fontFamily = MonoFontFamily,
                         fontSize = 12.sp
                     )
@@ -151,10 +184,11 @@ fun TimelineItem(
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onDelete?.invoke(record)
                     }
                 ) {
-                    Text("删除", color = Color(0xFFFF6B6B), fontFamily = MonoFontFamily)
+                    Text("删除", color = ErrorNeon, fontFamily = MonoFontFamily)
                 }
             },
             dismissButton = {
@@ -168,216 +202,311 @@ fun TimelineItem(
         )
     }
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .scale(pressScale)
-            .shadow(
-                elevation = pressElevation.dp,
-                shape = RoundedCornerShape(16.dp),
-                ambientColor = ElectricColor.copy(alpha = if (isPressed || showActions) 0.15f else 0.05f),
-                spotColor = ElectricColor.copy(alpha = if (isPressed || showActions) 0.15f else 0.05f)
-            ),
-        colors = CardDefaults.cardColors(containerColor = DarkCard),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = null, // 用自定义效果替代默认 ripple
-                    onClick = { showActions = !showActions },
-                    onLongClick = { showDeleteDialog = true }
-                )
-                .padding(16.dp)
-        ) {
-            // ── 按压时的发光边框叠加层 ──
+    // ── 左滑背景（红色删除区域） ──
+    SwipeToDismissBox(
+        state = dismissState,
+        modifier = modifier.fillMaxWidth(),
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = onDelete != null,
+        backgroundContent = {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .padding(horizontal = 32.dp)
-                    .clip(RoundedCornerShape(1.dp))
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
                     .background(
-                        if (isPressed || showActions)
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    ElectricColor.copy(alpha = borderAlpha),
-                                    Color.Transparent
-                                )
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                ErrorNeon.copy(alpha = 0.2f)
                             )
-                        else Brush.horizontalGradient(
-                            listOf(Color.Transparent, Color.Transparent, Color.Transparent)
                         )
                     )
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
+                    .padding(end = 24.dp),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                // ── 时间线指示器 ──
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.width(52.dp)
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "滑动删除",
+                        tint = ErrorNeon,
+                        modifier = Modifier.size(28.dp)
+                    )
                     Text(
-                        text = record.timestamp.format(DateTimeFormatter.ofPattern("MM.dd")),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = MonoFontFamily
+                        "删除",
+                        color = ErrorNeon,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
                     )
-
-                    // 时间点 — 按压时发光增强
-                    val dotGlow = if (isPressed) 0.6f else 0.3f
-                    Box(
-                        modifier = Modifier
-                            .padding(vertical = 6.dp)
-                            .size(10.dp)
-                            .shadow(
-                                elevation = if (isPressed) 8.dp else 4.dp,
-                                shape = CircleShape,
-                                ambientColor = (if (record.isElectricRecorded) ElectricColor else WaterColor)
-                                    .copy(alpha = dotGlow),
-                                spotColor = (if (record.isElectricRecorded) ElectricColor else WaterColor)
-                                    .copy(alpha = dotGlow)
-                            )
-                            .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    colors = listOf(
-                                        if (record.isElectricRecorded) ElectricColor else WaterColor,
-                                        (if (record.isElectricRecorded) ElectricColor else WaterColor)
-                                            .copy(alpha = 0.6f)
-                                    )
-                                )
-                            )
-                    )
-
-                    Text(
-                        text = record.timestamp.format(DateTimeFormatter.ofPattern("HH:mm")),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary,
-                        fontFamily = MonoFontFamily
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // ── 内容区域 ──
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (record.isElectricRecorded && record.electricTotal != null) {
-                            MeterValueCard(
-                                icon = Icons.Default.Bolt,
-                                iconColor = ElectricColor,
-                                label = "电量",
-                                value = Formatters.formatElectric(record.electricTotal),
-                                unit = "度",
-                                peak = record.electricPeak,
-                                valley = record.electricValley,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (record.isWaterRecorded && record.waterTotal != null) {
-                            MeterValueCard(
-                                icon = Icons.Default.WaterDrop,
-                                iconColor = WaterColor,
-                                label = "水表",
-                                value = Formatters.formatWater(record.waterTotal),
-                                unit = "吨",
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    // 备注
-                    if (!record.note.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colors = listOf(
-                                            NeonBlue.copy(alpha = 0.1f),
-                                            DarkSurface
-                                        )
-                                    )
-                                )
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = record.note,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = NeonBlue,
-                                fontFamily = MonoFontFamily
-                            )
-                        }
-                    }
                 }
             }
+        }
+    ) {
+        val cardGlowColor = if (record.isElectricRecorded) ElectricColor
+            else if (record.isWaterRecorded) WaterColor
+            else GasColor
 
-            // ── 行内操作按钮（点击展开/收起） ──
-            AnimatedVisibility(
-                visible = showActions,
-                enter = expandVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .scale(pressScale)
+                .shadow(
+                    elevation = pressElevation.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = ElectricColor.copy(alpha = if (isPressed || showActions) 0.15f else 0.05f),
+                    spotColor = ElectricColor.copy(alpha = if (isPressed || showActions) 0.15f else 0.05f)
+                )
+                .drawBehind {
+                    drawRoundRect(
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                cardGlowColor.copy(alpha = if (isPressed) 0.30f else 0.12f),
+                                cardGlowColor.copy(alpha = 0.03f)
+                            )
+                        ),
+                        style = Stroke(width = 1.5f),
+                        cornerRadius = CornerRadius(16.dp.toPx())
                     )
-                ) + fadeIn(tween(200)),
-                exit = shrinkVertically(tween(200)) + fadeOut(tween(150))
+                },
+            colors = CardDefaults.cardColors(containerColor = DarkCard),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = { showActions = !showActions },
+                        onLongClick = { showDeleteDialog = true }
+                    )
+                    .padding(16.dp)
             ) {
-                Column {
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    // 发光分割线
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(
+                // ── 按压时的发光边框叠加层 ──
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .padding(horizontal = 32.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(
+                            if (isPressed || showActions)
                                 Brush.horizontalGradient(
                                     listOf(
                                         Color.Transparent,
-                                        ElectricColor.copy(alpha = 0.15f),
+                                        ElectricColor.copy(alpha = borderAlpha),
                                         Color.Transparent
                                     )
                                 )
+                            else Brush.horizontalGradient(
+                                listOf(Color.Transparent, Color.Transparent, Color.Transparent)
                             )
-                    )
+                        )
+                )
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    // ── 时间线指示器 ──
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(52.dp)
                     ) {
-                        // 编辑按钮
-                        ActionChip(
-                            icon = Icons.Default.Edit,
-                            label = "编辑",
-                            color = ElectricColor,
-                            onClick = {
-                                showActions = false
-                                onEdit?.invoke(record)
+                        Text(
+                            text = record.timestamp.format(DateTimeFormatter.ofPattern("MM.dd")),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = MonoFontFamily
+                        )
+
+                        val dotGlow = if (isPressed) 0.6f else 0.3f
+                        Box(
+                            modifier = Modifier
+                                .padding(vertical = 6.dp)
+                                .size(10.dp)
+                                .shadow(
+                                    elevation = if (isPressed) 8.dp else 4.dp,
+                                    shape = CircleShape,
+                                    ambientColor = (if (record.isElectricRecorded) ElectricColor else WaterColor)
+                                        .copy(alpha = dotGlow),
+                                    spotColor = (if (record.isElectricRecorded) ElectricColor else WaterColor)
+                                        .copy(alpha = dotGlow)
+                                )
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            if (record.isElectricRecorded) ElectricColor else WaterColor,
+                                            (if (record.isElectricRecorded) ElectricColor else WaterColor)
+                                                .copy(alpha = 0.6f)
+                                        )
+                                    )
+                                )
+                        )
+
+                        Text(
+                            text = record.timestamp.format(DateTimeFormatter.ofPattern("HH:mm")),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            fontFamily = MonoFontFamily
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    // ── 内容区域 ──
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (record.isElectricRecorded && record.electricTotal != null) {
+                                MeterValueCard(
+                                    icon = Icons.Default.Bolt,
+                                    iconColor = ElectricColor,
+                                    label = "电量",
+                                    value = Formatters.formatElectric(record.electricTotal),
+                                    unit = "度",
+                                    peak = record.electricPeak,
+                                    valley = record.electricValley,
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
+                            if (record.isWaterRecorded && record.waterTotal != null) {
+                                MeterValueCard(
+                                    icon = Icons.Default.WaterDrop,
+                                    iconColor = WaterColor,
+                                    label = "水表",
+                                    value = Formatters.formatWater(record.waterTotal),
+                                    unit = "吨",
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (record.isGasRecorded && record.gasTotal != null) {
+                                MeterValueCard(
+                                    icon = Icons.Default.Bolt,
+                                    iconColor = GasColor,
+                                    label = "燃气",
+                                    value = Formatters.formatGas(record.gasTotal),
+                                    unit = "m³",
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        val elecStr = electricDelta?.let { "${if (it >= 0) "+" else ""}${Formatters.formatDecimal2(it)} 度" }
+                        val waterStr = waterDelta?.let { "${if (it >= 0) "+" else ""}${Formatters.formatDecimal2(it)} 吨" }
+                        val gasStr = gasDelta?.let { "${if (it >= 0) "+" else ""}${Formatters.formatDecimal2(it)} m³" }
+                        if (elecStr != null || waterStr != null || gasStr != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                elecStr?.let {
+                                    Text(
+                                        text = "⚡ $it",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ElectricColor.copy(alpha = 0.7f),
+                                        fontFamily = MonoFontFamily
+                                    )
+                                }
+                                waterStr?.let {
+                                    Text(
+                                        text = "💧 $it",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = WaterColor.copy(alpha = 0.7f),
+                                        fontFamily = MonoFontFamily
+                                    )
+                                }
+                                gasStr?.let {
+                                    Text(
+                                        text = "🔥 $it",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = GasColor.copy(alpha = 0.7f),
+                                        fontFamily = MonoFontFamily
+                                    )
+                                }
+                            }
+                        }
+
+                        if (!record.note.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            colors = listOf(
+                                                NeonBlue.copy(alpha = 0.1f),
+                                                DarkSurface
+                                            )
+                                        )
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = record.note,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NeonBlue,
+                                    fontFamily = MonoFontFamily
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ── 行内操作按钮（点击展开/收起） ──
+                AnimatedVisibility(
+                    visible = showActions,
+                    enter = expandVertically(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
                         )
-                        // 删除按钮
-                        ActionChip(
-                            icon = Icons.Default.Delete,
-                            label = "删除",
-                            color = Color(0xFFFF6B6B),
-                            onClick = { showDeleteDialog = true }
+                    ) + fadeIn(tween(200)),
+                    exit = shrinkVertically(tween(200)) + fadeOut(tween(150))
+                ) {
+                    Column {
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            ElectricColor.copy(alpha = 0.15f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                )
                         )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            ActionChip(
+                                icon = Icons.Default.Edit,
+                                label = "编辑",
+                                color = ElectricColor,
+                                onClick = {
+                                    showActions = false
+                                    onEdit?.invoke(record)
+                                }
+                            )
+                            ActionChip(
+                                icon = Icons.Default.Delete,
+                                label = "删除",
+                                color = ErrorNeon,
+                                onClick = { showDeleteDialog = true }
+                            )
+                        }
                     }
                 }
             }
@@ -473,9 +602,9 @@ private fun MeterValueCard(
         if (peak != null && valley != null) {
             ValueRow("总", value, ElectricColor, unit)
             Spacer(modifier = Modifier.height(4.dp))
-            ValueRow("峰", Formatters.formatInt(peak), ElectricPeakColor, unit)
+            ValueRow("峰", Formatters.formatDecimal2(peak), ElectricPeakColor, unit)
             Spacer(modifier = Modifier.height(4.dp))
-            ValueRow("谷", Formatters.formatInt(valley), ElectricValleyColor, unit)
+            ValueRow("谷", Formatters.formatDecimal2(valley), ElectricValleyColor, unit)
         } else {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(

@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.sp
 import com.example.energyflow.data.DailyWeather
+import com.example.energyflow.ui.theme.GasStart
+import com.example.energyflow.ui.theme.WarningNeon
 import java.time.LocalDate
 
 /**
@@ -41,8 +43,8 @@ fun WeatherOverlay(
     val tempRange = tempMax - tempMin
     val hotThreshold = 32.0
 
-    val hotBgColor = Color(0xFFFF6600).copy(alpha = 0.06f)
-    val hotLineColor = Color(0xFFFF6600).copy(alpha = 0.5f)
+    val hotBgColor = WarningNeon.copy(alpha = 0.06f)
+    val hotLineColor = WarningNeon.copy(alpha = 0.5f)
     val coldLineColor = Color(0xFF4FC3F7).copy(alpha = 0.45f)
 
     Canvas(modifier = modifier) {
@@ -62,14 +64,14 @@ fun WeatherOverlay(
                 size = Size(drawWidth, (paddingTop + effH - hotY).coerceAtLeast(0f))
             )
             drawLine(
-                Color(0xFFFF6600).copy(alpha = 0.25f),
+                WarningNeon.copy(alpha = 0.25f),
                 Offset(paddingLeft, hotY),
                 Offset(paddingLeft + drawWidth, hotY),
                 1f,
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 5f), 0f)
             )
             val lbl = android.graphics.Paint().apply {
-                color = Color(0xFFFF6600).copy(alpha = 0.5f).toArgb()
+                color = WarningNeon.copy(alpha = 0.5f).toArgb()
                 textSize = 9.sp.toPx(); isAntiAlias = true
                 textAlign = android.graphics.Paint.Align.LEFT
             }
@@ -84,7 +86,7 @@ fun WeatherOverlay(
 
         // 先收集所有有效点
         val points = consumptionDates.mapIndexedNotNull { index, date ->
-            val w = weatherByDate[date.toString()] ?: return@mapIndexedNotNull null
+            val w = weatherByDate[date] ?: return@mapIndexedNotNull null
             val x = paddingLeft + index * xStep
             val my = paddingTop + effH -
                 ((w.tempMax.coerceIn(tempMin, tempMax) - tempMin) / tempRange * effH).toFloat()
@@ -134,8 +136,8 @@ fun WeatherOverlay(
             style = Stroke(2f, cap = StrokeCap.Round, join = StrokeJoin.Round))
 
         // ── 温度标注（仅两端） ──
-        val firstW = weatherByDate[consumptionDates.first().toString()]
-        val lastW = weatherByDate[consumptionDates.last().toString()]
+        val firstW = weatherByDate[consumptionDates.first()]
+        val lastW = weatherByDate[consumptionDates.last()]
         val labelPaint = android.graphics.Paint().apply {
             color = hotLineColor.toArgb(); textSize = 9.sp.toPx()
             isAntiAlias = true; textAlign = android.graphics.Paint.Align.LEFT

@@ -1,6 +1,8 @@
 package com.example.energyflow
 
 import android.os.Bundle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -53,12 +55,14 @@ class MainActivity : ComponentActivity() {
                     themeColors = null
                     return@LaunchedEffect
                 }
-                themeDistRepository.loadCachedResponse()?.let { cached ->
-                    themeColors = themeDistRepository.parseColors(cached)
+                val cached = withContext(Dispatchers.IO) {
+                    themeDistRepository.loadCachedResponse()
                 }
-                themeDistRepository.fetchToday()?.let { fresh ->
-                    themeColors = themeDistRepository.parseColors(fresh)
+                cached?.let { themeColors = themeDistRepository.parseColors(it) }
+                val fresh = withContext(Dispatchers.IO) {
+                    themeDistRepository.fetchToday()
                 }
+                fresh?.let { themeColors = themeDistRepository.parseColors(it) }
             }
 
             var showSplash by remember { mutableStateOf(true) }

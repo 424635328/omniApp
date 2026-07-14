@@ -4,36 +4,59 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 // ════════════════════════════════════════════
-// 霓虹品牌色 — 暗/亮主题通用
+// Midnight Slate — 暗黑石板 + 渐变霓虹
 // ════════════════════════════════════════════
-val NeonYellow = Color(0xFFFFFF00)
-val NeonOrange = Color(0xFFFF6600)
-val NeonBlue = Color(0xFF00BFFF)
-val NeonCyan = Color(0xFF00FFFF)
-val NeonRed = Color(0xFFFF0066)
-val NeonPurple = Color(0xFF9900FF)
+
+// 基础暗黑石板
+val BackgroundDark = Color(0xFF0D0F12)     // 最底层背景
+val SurfaceDark = Color(0xFF161A22)        // 卡片层
+val SurfaceVariant = Color(0xFF1F242F)     // 悬浮层/BottomSheet
+val OutlineDark = Color(0xFF333B4D)        // 边框/分割线
+
+// 霓虹渐变基础色
+val ElectricStart = Color(0xFF00FFC4)      // 荧光青绿
+val ElectricEnd = Color(0xFF00B3FF)        // 电光蓝
+val WaterStart = Color(0xFF00E5FF)         // 科技纯蓝
+val WaterEnd = Color(0xFF0088FF)           // 深海蓝
+val GasStart = Color(0xFFFF9100)           // 温暖橙
+val GasEnd = Color(0xFFFF3D00)             // 赤焰红
+
+// 特殊状态色
+val ErrorNeon = Color(0xFFFF3366)          // 赛博红 — 删除/错误
+val WarningNeon = Color(0xFFFFB020)        // 警示黄 — 警告
+
+// 成功绿（保留，与霓虹体系独立）
+val SuccessGreen = Color(0xFF00E676)
+
+// ════════════════════════════════════════════
+// 渐变 Brush — 用于装饰性元素
+// ════════════════════════════════════════════
+val ElectricGradient: Brush get() = Brush.linearGradient(listOf(ElectricStart, ElectricEnd))
+val WaterGradient: Brush get() = Brush.linearGradient(listOf(WaterStart, WaterEnd))
+val GasGradient: Brush get() = Brush.linearGradient(listOf(GasStart, GasEnd))
 
 // ════════════════════════════════════════════
 // 全局可变主题状态
 // ════════════════════════════════════════════
 object ThemeState {
     // 品牌色
-    var electricColor by mutableStateOf(NeonYellow)
-    var electricPeakColor by mutableStateOf(NeonOrange)
-    var electricValleyColor by mutableStateOf(NeonCyan)
-    var waterColor by mutableStateOf(NeonBlue)
-    var gasColor by mutableStateOf(NeonRed)
+    var electricColor by mutableStateOf(ElectricStart)
+    var electricPeakColor by mutableStateOf(Color(0xFFFF8800))
+    var electricValleyColor by mutableStateOf(Color(0xFF4488FF))
+    var waterColor by mutableStateOf(WaterStart)
+    var gasColor by mutableStateOf(GasStart)
 
     // 是否为深色模式
     var isDark by mutableStateOf(true)
 
-    // 深色
-    var darkBackground by mutableStateOf(Color(0xFF0A0A0A))
-    var darkSurface by mutableStateOf(Color(0xFF1A1A1A))
-    var darkCard by mutableStateOf(Color(0xFF2A2A2A))
+    // 深色（Midnight Slate）
+    var darkBackground by mutableStateOf(BackgroundDark)
+    var darkSurface by mutableStateOf(SurfaceDark)
+    var darkCard by mutableStateOf(SurfaceVariant)
 
     // 浅色
     var lightBackground by mutableStateOf(Color(0xFFF5F5F5))
@@ -41,20 +64,26 @@ object ThemeState {
     var lightCard by mutableStateOf(Color(0xFFFFFFFF))
 
     // 文字
-    var textPrimary by mutableStateOf(Color.White)
-    var textSecondary by mutableStateOf(Color(0xFFB0B0B0))
-    var textTertiary by mutableStateOf(Color(0xFF808080))
+    var textPrimary by mutableStateOf(Color(0xFFE2E8F0))
+    var textSecondary by mutableStateOf(Color(0xFF94A3B8))
+    var textTertiary by mutableStateOf(Color(0xFF64748B))
 
-    /** 根据当前模式返回对应的背景/表面/卡片/文字色。Theme.kt 切换 isDark 后调用。 */
+    /** 根据当前模式切换文字色。 */
     fun applyMode() {
-        textPrimary = if (isDark) Color.White else Color(0xFF1A1A1A)
-        textSecondary = if (isDark) Color(0xFFB0B0B0) else Color(0xFF666666)
-        textTertiary = if (isDark) Color(0xFF808080) else Color(0xFF999999)
+        if (isDark) {
+            textPrimary = Color(0xFFE2E8F0)
+            textSecondary = Color(0xFF94A3B8)
+            textTertiary = Color(0xFF64748B)
+        } else {
+            textPrimary = Color(0xFF0F172A)
+            textSecondary = Color(0xFF475569)
+            textTertiary = Color(0xFF94A3B8)
+        }
     }
 }
 
 // ════════════════════════════════════════════
-// 语义化顶层 val — 自动跟随 isDark
+// 语义化顶层 val — 自动跟随 isDark & ThemeState
 // ════════════════════════════════════════════
 val ElectricColor: Color get() = ThemeState.electricColor
 val ElectricPeakColor: Color get() = ThemeState.electricPeakColor
@@ -71,7 +100,7 @@ val AppTextSecondary: Color get() = ThemeState.textSecondary
 val AppTextTertiary: Color get() = ThemeState.textTertiary
 
 // ════════════════════════════════════════════
-// 向后兼容别名（旧代码无需修改）
+// 向后兼容别名 — 旧代码无需修改
 // ════════════════════════════════════════════
 val DarkBackground: Color get() = AppBackground
 val DarkSurface: Color get() = AppSurface
@@ -79,6 +108,14 @@ val DarkCard: Color get() = AppCard
 val TextPrimary: Color get() = AppTextPrimary
 val TextSecondary: Color get() = AppTextSecondary
 val TextTertiary: Color get() = AppTextTertiary
+
+// 遗留霓虹名称 — 值已更新为新色板
+val NeonYellow: Color get() = ElectricStart
+val NeonOrange: Color get() = Color(0xFFFF8800)
+val NeonBlue: Color get() = WaterStart
+val NeonCyan: Color get() = Color(0xFF4488FF)
+val NeonRed: Color get() = GasStart
+val NeonPurple: Color get() = Color(0xFF9900FF)
 
 // ════════════════════════════════════════════
 // CompositionLocal

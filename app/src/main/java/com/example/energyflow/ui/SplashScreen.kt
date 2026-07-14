@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import com.example.energyflow.R
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.ElectricColor
+import com.example.energyflow.ui.theme.ElectricGradient
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.NeonYellow
@@ -103,14 +104,6 @@ fun SplashScreen(onFinished: () -> Unit) {
         targetValue = 360f,
         animationSpec = infiniteRepeatable(tween(3000), RepeatMode.Restart),
         label = "rotation"
-    )
-
-    // 粒子轨道角度
-    val orbitAngle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(4000), RepeatMode.Restart),
-        label = "orbit"
     )
 
     // ═══ 跳过标志 ═══
@@ -170,7 +163,7 @@ fun SplashScreen(onFinished: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         // ═══════════════════════════════════════════
-        // Canvas 层 — 波纹 + 旋转环 + 粒子
+        // Canvas 层 — 精简：2层波纹 + 1条电弧
         // ═══════════════════════════════════════════
         Canvas(
             modifier = Modifier
@@ -179,15 +172,14 @@ fun SplashScreen(onFinished: () -> Unit) {
         ) {
             val cx = size.width / 2f
             val cy = size.height / 2f
-            val iconRadius = 40.dp.toPx()  // 图标半径
+            val iconRadius = 40.dp.toPx()
 
-            // ── 扩散波纹（3层交错） ──
-            for (layer in 0..2) {
-                val offset = layer * 0.33f
+            // ── 扩散波纹（2层交错，减轻绘制负担） ──
+            for (layer in 0..1) {
+                val offset = layer * 0.5f
                 val p = ((ripplePhase + offset) % 1f)
-                val ringRadius = iconRadius + p * (iconRadius * 3.5f)
-                val ringAlpha = (1f - p) * 0.25f
-
+                val ringRadius = iconRadius + p * (iconRadius * 3f)
+                val ringAlpha = (1f - p) * 0.20f
                 drawCircle(
                     color = ElectricColor.copy(alpha = ringAlpha),
                     radius = ringRadius,
@@ -196,52 +188,19 @@ fun SplashScreen(onFinished: () -> Unit) {
                 )
             }
 
-            // ── 旋转电弧环 ──
-            val arcRadius = iconRadius * 1.6f
-            val arcSweep = 90f
-            val arcStart = rotation
+            // ── 单条旋转电弧 ──
+            val arcR = iconRadius * 1.6f
             val arcOval = androidx.compose.ui.geometry.Rect(
-                cx - arcRadius, cy - arcRadius,
-                cx + arcRadius, cy + arcRadius
+                cx - arcR, cy - arcR, cx + arcR, cy + arcR
             )
             val arcPath = Path().apply {
-                addArc(arcOval, arcStart, arcSweep)
+                addArc(arcOval, rotation, 90f)
             }
             drawPath(
                 arcPath,
-                color = ElectricColor.copy(alpha = 0.35f),
+                brush = ElectricGradient,
                 style = Stroke(width = 2f, cap = StrokeCap.Round)
             )
-            // 反方向第二段弧线
-            val arcPath2 = Path().apply {
-                addArc(arcOval, arcStart + 180f, arcSweep * 0.6f)
-            }
-            drawPath(
-                arcPath2,
-                color = NeonYellow.copy(alpha = 0.25f),
-                style = Stroke(width = 1.5f, cap = StrokeCap.Round)
-            )
-
-            // ── 轨道粒子（6颗） ──
-            for (i in 0..5) {
-                val angleDeg = orbitAngle + i * 60f
-                val angleRad = Math.toRadians(angleDeg.toDouble())
-                val orbitR = iconRadius * (2.0f + (i % 2) * 0.4f)
-                val px = cx + orbitR * cos(angleRad).toFloat()
-                val py = cy + orbitR * sin(angleRad).toFloat()
-                val dotAlpha = if (i % 2 == 0) 0.5f else 0.3f
-
-                // 光点外圈
-                drawCircle(Color.Transparent, 4f, Offset(px, py))
-                drawCircle(
-                    ElectricColor.copy(alpha = dotAlpha * 0.3f),
-                    5f, Offset(px, py)
-                )
-                drawCircle(
-                    ElectricColor.copy(alpha = dotAlpha),
-                    2.5f, Offset(px, py)
-                )
-            }
         }
 
         // ═══════════════════════════════════════════

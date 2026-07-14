@@ -39,6 +39,27 @@ interface MeterRecordDao {
     suspend fun getPreviousRecord(currentTime: LocalDateTime): MeterRecord?
 
     // 按类型查询记录
+    // 分页加载（首屏只取最近200条）
+    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC LIMIT :limit")
+    fun getRecordsLimited(limit: Int = 200): Flow<List<MeterRecord>>
+
+    // 加载更多（滚动底部时调用）
+    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC LIMIT :limit OFFSET :offset")
+    suspend fun loadMoreRecords(limit: Int = 50, offset: Int): List<MeterRecord>
+
+    // 按类型计数
+    @Query("SELECT COUNT(*) FROM meter_records WHERE isElectricRecorded = 1")
+    fun getElectricCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM meter_records WHERE isWaterRecorded = 1")
+    fun getWaterCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM meter_records WHERE isGasRecorded = 1")
+    fun getGasCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM meter_records WHERE note IS NOT NULL AND note != ''")
+    fun getNoteCount(): Flow<Int>
+
     @Query("SELECT * FROM meter_records WHERE isElectricRecorded = 1 ORDER BY timestamp DESC")
     fun getElectricRecords(): Flow<List<MeterRecord>>
 

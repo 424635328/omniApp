@@ -1,10 +1,12 @@
 package com.example.energyflow.ui.navigation
 
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -121,7 +123,19 @@ fun AppNavGraph() {
         NavHost(
             navController = navController,
             startDestination = Screen.Home.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = {
+                fadeIn(tween(280, easing = FastOutSlowInEasing))
+            },
+            exitTransition = {
+                fadeOut(tween(180))
+            },
+            popEnterTransition = {
+                fadeIn(tween(280, easing = FastOutSlowInEasing))
+            },
+            popExitTransition = {
+                fadeOut(tween(180))
+            }
         ) {
             composable(Screen.Home.route) {
                 val mainVM: MainViewModel = hiltViewModel()

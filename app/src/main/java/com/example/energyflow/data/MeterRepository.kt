@@ -17,6 +17,20 @@ class MeterRepository @Inject constructor(
 
     fun getAllRecords(): Flow<List<MeterRecord>> = meterRecordDao.getAllRecords()
 
+    fun getRecordsLimited(limit: Int = 200): Flow<List<MeterRecord>> =
+        meterRecordDao.getRecordsLimited(limit)
+
+    suspend fun loadMoreRecords(limit: Int = 50, offset: Int): List<MeterRecord> =
+        meterRecordDao.loadMoreRecords(limit, offset)
+
+    fun getElectricCount(): Flow<Int> = meterRecordDao.getElectricCount()
+
+    fun getWaterCount(): Flow<Int> = meterRecordDao.getWaterCount()
+
+    fun getGasCount(): Flow<Int> = meterRecordDao.getGasCount()
+
+    fun getNoteCount(): Flow<Int> = meterRecordDao.getNoteCount()
+
     fun getRecordsByTimeRange(startTime: LocalDateTime, endTime: LocalDateTime): Flow<List<MeterRecord>> =
         meterRecordDao.getRecordsByTimeRange(startTime, endTime)
 

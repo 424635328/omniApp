@@ -2,9 +2,14 @@ package com.example.energyflow.ui.chart
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Icon
@@ -36,14 +42,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -57,8 +69,14 @@ import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
+import com.example.energyflow.ui.theme.ElectricEnd
 import com.example.energyflow.ui.theme.ElectricPeakColor
+import com.example.energyflow.ui.theme.ElectricStart
 import com.example.energyflow.ui.theme.ElectricValleyColor
+import com.example.energyflow.ui.theme.ErrorNeon
+import com.example.energyflow.ui.theme.GasColor
+import com.example.energyflow.ui.theme.OutlineDark
+import com.example.energyflow.ui.theme.SuccessGreen
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.NeonYellow
@@ -68,8 +86,12 @@ import com.example.energyflow.ui.theme.TextTertiary
 import com.example.energyflow.ui.theme.WaterColor
 import com.example.energyflow.ui.utils.Formatters
 import java.time.LocalDate
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.launch
 
 // ═══════════════════════════════════════════════════════════════
 // 主屏幕
@@ -96,121 +118,164 @@ fun ChartScreen(
     var selectedChartIndex by remember { mutableIntStateOf(-1) }
 
     val isEmpty = chartData == ChartData.Empty
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .verticalScroll(rememberScrollState())
-    ) {
-        ChartTopBar(chartData, isEmpty, timeRange)
+    // 滚动超过 ~400px 时显示回到顶部按钮
+    val isScrolledPastTop by remember {
+        derivedStateOf { scrollState.value > 400 }
+    }
 
-        TimeRangeSelector(timeRange) { viewModel.setTimeRange(it) }
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(DarkBackground)
+                .verticalScroll(scrollState)
+        ) {
+            ChartTopBar(chartData, isEmpty, timeRange)
 
-        Spacer(modifier = Modifier.height(16.dp))
+            TimeRangeSelector(timeRange) { viewModel.setTimeRange(it) }
 
-        // ── kWh / ¥ 切换 ──
-        ToggleCostButton(showCost = showCost, onToggle = { viewModel.toggleShowCost() })
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
+            // ── kWh / ¥ 切换 ──
+            ToggleCostButton(showCost = showCost, onToggle = { viewModel.toggleShowCost() })
 
-        if (isEmpty) {
-            EmptyChartPlaceholder()
-        } else {
-            // ═══ Hero KPIs ═══
-            AnimatedVisibility(
-                visible = true,
-                enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 4 }
-            ) {
-                Column {
-                    HeroKpiRow(chartData, billResult, showCost)
-                    Spacer(modifier = Modifier.height(20.dp))
-                }
-            }
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // ═══ 折线图 ═══
-            if (chartData.dailyConsumptions.isNotEmpty()) {
-                // 插值天气数据以覆盖所有消费日期
-                val consumptionDates = remember(chartData, weatherData) {
-                    chartData.dailyConsumptions.map { it.date.toLocalDate() }
-                }
-                val interpolatedWeather = remember(chartData, weatherData) {
-                    WeatherInterpolator.interpolate(weatherData, consumptionDates)
+            if (isEmpty) {
+                EmptyChartPlaceholder()
+            } else {
+                // ═══ Hero KPIs ═══
+                AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 4 }
+                ) {
+                    Column {
+                        HeroKpiRow(chartData, billResult, showCost)
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
                 }
 
-                ChartSection(
-                    showCost = showCost,
-                    showWeather = showWeather && weatherData.isNotEmpty(),
-                    weatherLoading = weatherLoading,
-                    weatherError = weatherError,
-                    onToggleWeather = {
-                        showWeather = !showWeather
-                        if (weatherData.isEmpty() || weatherError != null) {
-                            viewModel.refreshWeather()
-                        }
-                    },
-                    chartContent = {
-                        Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
-                            ConsumptionLineChart(
-                                consumptions = chartData.dailyConsumptions,
-                                showCost = showCost,
-                                selectedIndex = selectedChartIndex,
-                                onSelectedIndexChange = { selectedChartIndex = it },
-                                weatherByDate = interpolatedWeather
-                            )
-                            if (showWeather && weatherData.isNotEmpty()) {
-                                // 使用插值后的天气数据，使温度曲线平滑覆盖每一天
-                                val fullWeather = consumptionDates.mapNotNull { d ->
-                                    interpolatedWeather[d]?.let {
-                                        com.example.energyflow.data.DailyWeather(
-                                            date = d.toString(),
-                                            tempMax = it.tempMax,
-                                            tempMin = it.tempMin
-                                        )
-                                    }
-                                }
-                                WeatherOverlay(
-                                    weatherData = fullWeather,
-                                    consumptionDates = consumptionDates,
-                                    modifier = Modifier.matchParentSize()
+                // ═══ 折线图 ═══
+                if (chartData.dailyConsumptions.isNotEmpty()) {
+                    val consumptionDates = remember(chartData, weatherData) {
+                        chartData.dailyConsumptions.map { it.date.toLocalDate() }
+                    }
+                    val interpolatedWeather = remember(chartData, weatherData) {
+                        WeatherInterpolator.interpolate(weatherData, consumptionDates)
+                    }
+
+                    ChartSection(
+                        showCost = showCost,
+                        showWeather = showWeather && weatherData.isNotEmpty(),
+                        weatherLoading = weatherLoading,
+                        weatherError = weatherError,
+                        onToggleWeather = {
+                            showWeather = !showWeather
+                            if (weatherData.isEmpty() || weatherError != null) {
+                                viewModel.refreshWeather()
+                            }
+                        },
+                        chartContent = {
+                            Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
+                                ConsumptionLineChart(
+                                    consumptions = chartData.dailyConsumptions,
+                                    showCost = showCost,
+                                    selectedIndex = selectedChartIndex,
+                                    onSelectedIndexChange = { selectedChartIndex = it },
+                                    weatherByDate = interpolatedWeather
                                 )
+                                if (showWeather && weatherData.isNotEmpty()) {
+                                    val fullWeather = consumptionDates.mapNotNull { d ->
+                                        interpolatedWeather[d]?.let {
+                                            com.example.energyflow.data.DailyWeather(
+                                                date = d,
+                                                tempMax = it.tempMax,
+                                                tempMin = it.tempMin
+                                            )
+                                        }
+                                    }
+                                    WeatherOverlay(
+                                        weatherData = fullWeather,
+                                        consumptionDates = consumptionDates,
+                                        modifier = Modifier.matchParentSize()
+                                    )
+                                }
                             }
                         }
-                    }
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+
+                // ═══ 账单明细 ═══
+                if (billResult != null) {
+                    BillBreakdownPanel(billResult!!)
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+
+                // ═══ 月度预测 ═══
+                if (prediction != null) {
+                    PredictionPanel(prediction!!, predictedBill, predictionTracking, showCost, billResult)
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+
+                // ═══ 事件耗能分析 + AI ═══
+                if (eventImpacts.isNotEmpty()) {
+                    EventImpactPanel(
+                        impacts = eventImpacts,
+                        aiAnalysis = aiAnalysis,
+                        aiLoading = aiLoading,
+                        onTriggerAi = { viewModel.triggerAiAnalysis() },
+                        showCost = showCost,
+                        billResult = billResult
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+
+                // ═══ 事件标注 ═══
+                if (chartData.annotations.isNotEmpty()) {
+                    AnnotationsList(chartData.annotations)
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
+        }
+
+        // ── 回到顶部按钮 ──
+        AnimatedVisibility(
+            visible = isScrolledPastTop && !isEmpty,
+            enter = scaleIn(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
                 )
-
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            // ═══ 账单明细 ═══
-            if (billResult != null) {
-                BillBreakdownPanel(billResult!!)
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            // ═══ 月度预测 ═══
-            if (prediction != null) {
-                PredictionPanel(prediction!!, predictedBill, predictionTracking, showCost, billResult)
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            // ═══ 事件耗能分析 + AI ═══
-            if (eventImpacts.isNotEmpty()) {
-                EventImpactPanel(
-                    impacts = eventImpacts,
-                    aiAnalysis = aiAnalysis,
-                    aiLoading = aiLoading,
-                    onTriggerAi = { viewModel.triggerAiAnalysis() },
-                    showCost = showCost,
-                    billResult = billResult
+            ) + fadeIn(tween(200)),
+            exit = scaleOut(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
                 )
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            // ═══ 事件标注 ═══
-            if (chartData.annotations.isNotEmpty()) {
-                AnnotationsList(chartData.annotations)
-                Spacer(modifier = Modifier.height(24.dp))
+            ) + fadeOut(tween(150))
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 20.dp)
+                    .size(40.dp)
+                    .shadow(6.dp, CircleShape, ambientColor = ElectricColor.copy(0.3f))
+                    .clip(CircleShape)
+                    .background(DarkCard)
+                    .clickable { coroutineScope.launch { scrollState.animateScrollTo(0) } },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.KeyboardArrowUp,
+                    contentDescription = "回到顶部",
+                    tint = ElectricColor,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }
@@ -401,7 +466,7 @@ private fun ToggleCostButton(showCost: Boolean, onToggle: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (showCost) Color(0xFF00FF88).copy(alpha = 0.18f) else Color.Transparent)
+                        .background(if (showCost) SuccessGreen.copy(alpha = 0.18f) else Color.Transparent)
                         .padding(horizontal = 16.dp, vertical = 7.dp)
                 ) {
                     Text(
@@ -409,7 +474,7 @@ private fun ToggleCostButton(showCost: Boolean, onToggle: () -> Unit) {
                         fontFamily = MonoFontFamily,
                         fontSize = 12.sp,
                         fontWeight = if (showCost) FontWeight.Bold else FontWeight.Medium,
-                        color = if (showCost) Color(0xFF00FF88) else TextTertiary
+                        color = if (showCost) SuccessGreen else TextTertiary
                     )
                 }
             }
@@ -437,6 +502,15 @@ private fun ChartSection(
             .clip(RoundedCornerShape(16.dp))
             .background(DarkCard)
             .border(1.dp, ElectricColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
+            .drawBehind {
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(
+                        listOf(ElectricColor.copy(alpha = 0.10f), ElectricColor.copy(alpha = 0.02f))
+                    ),
+                    style = Stroke(width = 1.5f),
+                    cornerRadius = CornerRadius(16.dp.toPx())
+                )
+            }
             .padding(16.dp)
     ) {
         // ── 标题行 ──
@@ -450,7 +524,9 @@ private fun ChartSection(
                     modifier = Modifier
                         .size(4.dp, 16.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(ElectricColor)
+                        .background(
+                            Brush.verticalGradient(listOf(ElectricStart, ElectricEnd))
+                        )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
@@ -499,7 +575,7 @@ private fun ChartSection(
         if (weatherError != null) {
             Text(
                 text = weatherError,
-                color = Color(0xFFFF6B6B),
+                color = ErrorNeon,
                 fontFamily = MonoFontFamily,
                 fontSize = 10.sp,
                 modifier = Modifier.padding(start = 4.dp, top = 6.dp)
@@ -545,7 +621,7 @@ private fun HeroKpiRow(chartData: ChartData, billResult: BillData?, showCost: Bo
                 label = "总费用",
                 value = Formatters.formatDecimal2(totalCost),
                 unit = "¥",
-                accentColor = Color(0xFF00FF88),
+                accentColor = SuccessGreen,
                 modifier = Modifier.weight(1f)
             )
             KpiCard(
@@ -559,7 +635,7 @@ private fun HeroKpiRow(chartData: ChartData, billResult: BillData?, showCost: Bo
             KpiCard(
                 icon = Icons.Default.Bolt,
                 label = "总用电",
-                value = Formatters.formatDecimal1(totalCons),
+                value = Formatters.formatDecimal2(totalCons),
                 unit = "度",
                 accentColor = ElectricColor,
                 modifier = Modifier.weight(1f)
@@ -568,7 +644,7 @@ private fun HeroKpiRow(chartData: ChartData, billResult: BillData?, showCost: Bo
             KpiCard(
                 icon = Icons.Default.Bolt,
                 label = "总用电",
-                value = Formatters.formatDecimal1(totalCons),
+                value = Formatters.formatDecimal2(totalCons),
                 unit = "度",
                 accentColor = ElectricColor,
                 modifier = Modifier.weight(1f)
@@ -576,7 +652,7 @@ private fun HeroKpiRow(chartData: ChartData, billResult: BillData?, showCost: Bo
             KpiCard(
                 icon = Icons.AutoMirrored.Filled.TrendingUp,
                 label = "日均用电",
-                value = Formatters.formatDecimal1(avgDaily),
+                value = Formatters.formatDecimal2(avgDaily),
                 unit = "度/天",
                 accentColor = NeonYellow,
                 modifier = Modifier.weight(1f)
@@ -587,7 +663,7 @@ private fun HeroKpiRow(chartData: ChartData, billResult: BillData?, showCost: Bo
                     label = "总费用",
                     value = Formatters.formatDecimal2(billResult.totalCost),
                     unit = "¥",
-                    accentColor = Color(0xFF00FF88),
+                    accentColor = SuccessGreen,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -617,9 +693,18 @@ private fun KpiCard(
             )
             .border(
                 1.dp,
-                accentColor.copy(alpha = 0.1f),
+                accentColor.copy(alpha = 0.08f),
                 RoundedCornerShape(14.dp)
             )
+            .drawBehind {
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(
+                        listOf(accentColor.copy(alpha = 0.12f), accentColor.copy(alpha = 0.03f))
+                    ),
+                    style = Stroke(width = 1.5f),
+                    cornerRadius = CornerRadius(14.dp.toPx())
+                )
+            }
             .padding(14.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -761,7 +846,7 @@ private fun BillBreakdownPanel(bill: BillData) {
                             modifier = Modifier
                                 .weight(flatRatio.toFloat())
                                 .fillMaxHeight()
-                                .background(Color(0xFF4A4A4A)),
+                                .background(OutlineDark),
                             contentAlignment = Alignment.Center
                         ) {
                             if (flatRatio > 0.12f) {
@@ -808,7 +893,7 @@ private fun BillBreakdownPanel(bill: BillData) {
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     LegendItem(ElectricPeakColor, "峰", "${Formatters.formatDecimal1(peak)}度")
-                    LegendItem(Color(0xFF4A4A4A), "平", "${Formatters.formatDecimal1(flat)}度")
+                    LegendItem(OutlineDark, "平", "${Formatters.formatDecimal1(flat)}度")
                     LegendItem(ElectricValleyColor, "谷", "${Formatters.formatDecimal1(valley)}度")
                 }
 
@@ -1124,7 +1209,7 @@ private fun PredictionPanel(
         )
 
         val isOverBudget = consumeRatio > 0.85f
-        val consumeColor = if (isOverBudget) Color(0xFFFF6B6B) else ElectricColor
+        val consumeColor = if (isOverBudget) ErrorNeon else ElectricColor
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1159,7 +1244,7 @@ private fun PredictionPanel(
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 "${(consumeRatio * 100).toInt()}%",
-                color = if (isOverBudget) Color(0xFFFF6B6B) else TextSecondary,
+                color = if (isOverBudget) ErrorNeon else TextSecondary,
                 fontFamily = MonoFontFamily,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
@@ -1173,21 +1258,21 @@ private fun PredictionPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF00FF88).copy(alpha = 0.06f))
-                    .border(1.dp, Color(0xFF00FF88).copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                    .background(SuccessGreen.copy(alpha = 0.06f))
+                    .border(1.dp, SuccessGreen.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                     .padding(14.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         "预计账单  ",
-                        color = Color(0xFF00FF88).copy(alpha = 0.7f),
+                        color = SuccessGreen.copy(alpha = 0.7f),
                         fontFamily = MonoFontFamily,
                         fontSize = 13.sp
                     )
                     Text(
                         "¥${Formatters.formatDecimal2(predictedBill.predictedCost)}",
-                        color = Color(0xFF00FF88),
+                        color = SuccessGreen,
                         fontFamily = MonoFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 20.sp
@@ -1224,7 +1309,7 @@ private fun PredictionPanel(
                     Spacer(modifier = Modifier.height(8.dp))
                     TrackingRow("预期", "${Formatters.formatDecimal1(tracking.predictedTodayKwh)} 度", TextSecondary)
                     TrackingRow("实际", "${Formatters.formatDecimal1(tracking.actualTodayKwh)} 度", ElectricColor)
-                    val varianceColor = if (tracking.varianceKwh > 0) Color(0xFFFF6B6B) else Color(0xFF00FF88)
+                    val varianceColor = if (tracking.varianceKwh > 0) ErrorNeon else SuccessGreen
                     TrackingRow(
                         "偏差",
                         "${if (tracking.varianceKwh > 0) "+" else ""}${Formatters.formatDecimal1(tracking.varianceKwh)} 度 (${Formatters.formatDecimal1(tracking.variancePercent)}%)",
@@ -1357,7 +1442,7 @@ private fun EventImpactPanel(
         impacts.forEachIndexed { index, impact ->
             val deltaKwh = impact.deltaKwh
             val deltaSign = if (deltaKwh > 0) "+" else ""
-            val deltaColor = if (deltaKwh > 0) Color(0xFFFF6B6B) else Color(0xFF00FF88)
+            val deltaColor = if (deltaKwh > 0) ErrorNeon else SuccessGreen
             // 按费用显示时，使用费用值而非 kWh
             val eventVal = if (showCost) impact.eventDailyKwh * rate else impact.eventDailyKwh
             val nonEventVal = if (showCost) impact.nonEventDailyKwh * rate else impact.nonEventDailyKwh
@@ -1411,7 +1496,7 @@ private fun EventImpactPanel(
                                 .width(80.dp)
                                 .height(28.dp)
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFFFF6B6B).copy(alpha = 0.12f)),
+                                .background(ErrorNeon.copy(alpha = 0.12f)),
                             contentAlignment = Alignment.CenterStart
                         ) {
                             Box(
@@ -1421,7 +1506,7 @@ private fun EventImpactPanel(
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(
                                         Brush.horizontalGradient(
-                                            listOf(Color(0xFFFF6B6B), Color(0xFFFF6B6B).copy(alpha = 0.7f))
+                                            listOf(ErrorNeon, ErrorNeon.copy(alpha = 0.7f))
                                         )
                                     ),
                                 contentAlignment = Alignment.CenterEnd
@@ -1717,11 +1802,12 @@ private fun EmptyChartPlaceholder() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "添加电表读数后，分析图表将在此展示",
+                "在「记录」页面添加电表读数后，\n分析图表将在此展示",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextTertiary,
                 fontFamily = MonoFontFamily,
-                fontSize = 13.sp
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -1731,6 +1817,9 @@ private fun EmptyChartPlaceholder() {
 // 简易 Markdown 渲染
 // ═══════════════════════════════════════════════════════════════
 
+/** 匹配行内 **加粗** 语法 */
+private val BoldRegex = Regex("""\*\*(.+?)\*\*""")
+
 @Composable
 private fun MarkdownText(text: String, modifier: Modifier = Modifier) {
     val lines = text.split("\n")
@@ -1738,36 +1827,106 @@ private fun MarkdownText(text: String, modifier: Modifier = Modifier) {
         lines.forEach { line ->
             val trimmed = line.trim()
             when {
+                // 空行 → 间距
                 trimmed.isEmpty() -> Spacer(modifier = Modifier.height(4.dp))
+
+                // ## / ### 标题
+                trimmed.startsWith("### ") -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BoldAwareLine(
+                        text = trimmed.removePrefix("### "),
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                }
+                trimmed.startsWith("## ") -> {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    BoldAwareLine(
+                        text = trimmed.removePrefix("## "),
+                        color = NeonBlue,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // 无序列表 - / ·
                 trimmed.startsWith("- ") || trimmed.startsWith("· ") -> {
+                    val body = trimmed.removePrefix("- ").removePrefix("· ")
                     Row(modifier = Modifier.padding(start = 4.dp)) {
-                        Text("•", color = NeonBlue.copy(alpha = 0.7f), fontFamily = MonoFontFamily, fontSize = 12.sp)
+                        Text("•", color = NeonBlue.copy(alpha = 0.7f),
+                            fontFamily = MonoFontFamily, fontSize = 12.sp)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            trimmed.removePrefix("- ").removePrefix("· ").replace("**", ""),
-                            color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 12.sp, lineHeight = 18.sp,
-                            modifier = Modifier.weight(1f)
-                        )
+                        BoldAwareLine(text = body, color = TextSecondary,
+                            fontSize = 12.sp, modifier = Modifier.weight(1f))
                     }
                 }
+
+                // 有序列表 1. / 2. / ...
+                trimmed.matches(Regex("""^\d+\.\s.*""")) -> {
+                    val num = trimmed.substringBefore(".")
+                    val body = trimmed.substringAfter(". ").ifEmpty { trimmed.substringAfter(".") }
+                    Row(modifier = Modifier.padding(start = 4.dp)) {
+                        Text("$num.", color = NeonBlue.copy(alpha = 0.7f),
+                            fontFamily = MonoFontFamily, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        BoldAwareLine(text = body, color = TextSecondary,
+                            fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    }
+                }
+
+                // 圈号编号 ① ② ③ ④ ⑤
                 trimmed.startsWith("①") || trimmed.startsWith("②") || trimmed.startsWith("③") ||
                 trimmed.startsWith("④") || trimmed.startsWith("⑤") -> {
-                    Text(trimmed, color = TextPrimary, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp, lineHeight = 18.sp)
+                    BoldAwareLine(text = trimmed, color = TextPrimary,
+                        fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
+
+                // 普通文本（可能含行内 **加粗**）
                 else -> {
-                    val display = trimmed.replace("**", "")
-                    val isBold = trimmed.startsWith("**") || line.contains("**")
-                    Text(
-                        display,
-                        color = if (isBold) TextPrimary else TextSecondary,
-                        fontFamily = MonoFontFamily,
-                        fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
+                    BoldAwareLine(text = trimmed, color = TextSecondary, fontSize = 12.sp)
                 }
             }
         }
     }
 }
+
+/** 渲染一行文本，将 **加粗** 部分用 Bold AnnotatedString 展示。 */
+@Composable
+private fun BoldAwareLine(
+    text: String,
+    color: Color = TextSecondary,
+    fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    fontWeight: FontWeight = FontWeight.Normal,
+    modifier: Modifier = Modifier
+) {
+    if (!text.contains("**")) {
+        Text(text, color = color, fontFamily = MonoFontFamily,
+            fontWeight = fontWeight, fontSize = fontSize, lineHeight = 18.sp,
+            modifier = modifier)
+        return
+    }
+    val annotated = buildAnnotatedString {
+        var last = 0
+        BoldRegex.findAll(text).forEach { m ->
+            if (m.range.first > last) {
+                withStyle(SpanStyle(color = color, fontWeight = fontWeight,
+                    fontFamily = MonoFontFamily, fontSize = fontSize)) {
+                    append(text.substring(last, m.range.first))
+                }
+            }
+            withStyle(SpanStyle(color = TextPrimary, fontWeight = FontWeight.Bold,
+                fontFamily = MonoFontFamily, fontSize = fontSize)) {
+                append(m.groupValues[1])
+            }
+            last = m.range.last + 1
+        }
+        if (last < text.length) {
+            withStyle(SpanStyle(color = color, fontWeight = fontWeight,
+                fontFamily = MonoFontFamily, fontSize = fontSize)) {
+                append(text.substring(last))
+            }
+        }
+    }
+    Text(annotated, lineHeight = 18.sp, modifier = modifier)
+}
+

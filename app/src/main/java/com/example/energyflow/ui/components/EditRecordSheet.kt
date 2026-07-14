@@ -57,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -72,7 +73,9 @@ import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
+import com.example.energyflow.ui.theme.GasColor
 import com.example.energyflow.ui.theme.MonoFontFamily
+import com.example.energyflow.ui.theme.SuccessGreen
 import com.example.energyflow.ui.theme.NeonYellow
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
@@ -84,6 +87,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,14 +108,50 @@ fun EditRecordSheet(
     var isWaterEnabled by remember { mutableStateOf(record.isWaterRecorded) }
     var waterTotal by remember { mutableStateOf(record.waterTotal?.let { Formatters.formatWater(it) } ?: "") }
 
+    var isGasEnabled by remember { mutableStateOf(record.isGasRecorded) }
+    var gasTotal by remember { mutableStateOf(record.gasTotal?.let { Formatters.formatGas(it) } ?: "") }
+
     var note by remember { mutableStateOf(record.note ?: "") }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
+    // ── 焦点离开时推导 ──
+    fun deriveElectric(changed: String? = null) {
+        val p = electricPeak.toDoubleOrNull()
+        val v = electricValley.toDoubleOrNull()
+        val t = electricTotal.toDoubleOrNull()
+        val fmt = { d: Double -> String.format(Locale.US, "%.2f", d) }
+        when {
+            p != null && v != null && t == null -> electricTotal = fmt(p + v)
+            p != null && t != null && v == null -> electricValley = fmt(t - p)
+            v != null && t != null && p == null -> electricPeak = fmt(t - v)
+            p != null && v != null && t != null -> {
+                when (changed) {
+                    "peak" -> electricValley = fmt(t - p)
+                    "valley" -> electricPeak = fmt(t - v)
+                }
+            }
+        }
+    }
+
+    // ── 保存时安全推导（兜底） ──
+    fun deriveSaveValues(): Triple<Double?, Double?, Double?> {
+        val p = electricPeak.toDoubleOrNull()
+        val v = electricValley.toDoubleOrNull()
+        val t = electricTotal.toDoubleOrNull()
+        return when {
+            p != null && v != null -> Triple(p, v, t ?: (p + v))
+            p != null && t != null -> Triple(p, (t - p).coerceAtLeast(0.0), t)
+            v != null && t != null -> Triple((t - v).coerceAtLeast(0.0), v, t)
+            else -> Triple(p, v, t)
+        }
+    }
+
     val isElectricValid = !isElectricEnabled || electricTotal.toDoubleOrNull() != null
     val isWaterValid = !isWaterEnabled || waterTotal.toDoubleOrNull() != null
-    val canSave = (isElectricEnabled || isWaterEnabled) && isElectricValid && isWaterValid
+    val isGasValid = !isGasEnabled || gasTotal.toDoubleOrNull() != null
+    val canSave = (isElectricEnabled || isWaterEnabled || isGasEnabled) && isElectricValid && isWaterValid && isGasValid
 
     val saveButtonScale by animateFloatAsState(
         targetValue = if (canSave) 1f else 0.95f,
@@ -145,14 +185,17 @@ fun EditRecordSheet(
             IconButton(
                 onClick = {
                     if (canSave) {
-                        onSave(RecordData(
+                        val (peak, valley, total) = deriveSaveValues()
+                    onSave(RecordData(
                             timestamp = LocalDateTime.of(selectedDate, selectedTime),
                             isElectric = isElectricEnabled,
-                            electricTotal = electricTotal.toDoubleOrNull(),
-                            electricPeak = electricPeak.toDoubleOrNull(),
-                            electricValley = electricValley.toDoubleOrNull(),
+                            electricTotal = total,
+                            electricPeak = peak,
+                            electricValley = valley,
                             isWater = isWaterEnabled,
                             waterTotal = waterTotal.toDoubleOrNull(),
+                            isGas = isGasEnabled,
+                            gasTotal = gasTotal.toDoubleOrNull(),
                             note = note.ifBlank { null }
                         ))
                     }
@@ -175,7 +218,7 @@ fun EditRecordSheet(
 
         // 电表
         SectionCard("电表", Icons.Default.Bolt, ElectricColor, isElectricEnabled, { isElectricEnabled = it }) {
-            InputField("总电量", electricTotal, { electricTotal = it }, "度", ElectricColor)
+            InputField("总电量", electricTotal, { electricTotal = it }, "度", ElectricColor, onDoneEditing = { deriveElectric("total") })
             Row(modifier = Modifier.fillMaxWidth().clickable { showPeakValley = !showPeakValley }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (showPeakValley) ElectricColor else TextSecondary))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -183,9 +226,9 @@ fun EditRecordSheet(
             }
             AnimatedVisibility(visible = showPeakValley, enter = expandVertically(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow)), exit = shrinkVertically(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow))) {
                 Column {
-                    InputField("峰电量", electricPeak, { electricPeak = it }, "度", ElectricPeakColor)
+                    InputField("峰电量", electricPeak, { electricPeak = it }, "度", ElectricPeakColor, onDoneEditing = { deriveElectric("peak") })
                     Spacer(modifier = Modifier.height(8.dp))
-                    InputField("谷电量", electricValley, { electricValley = it }, "度", ElectricValleyColor)
+                    InputField("谷电量", electricValley, { electricValley = it }, "度", ElectricValleyColor, onDoneEditing = { deriveElectric("valley") })
                     val peak = electricPeak.toDoubleOrNull()
                     val valley = electricValley.toDoubleOrNull()
                     val total = electricTotal.toDoubleOrNull()
@@ -193,9 +236,9 @@ fun EditRecordSheet(
                         val diff = kotlin.math.abs(peak + valley - total)
                         if (diff < 0.1) {
                             Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Check, null, tint = Color(0xFF00FF88), modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Check, null, tint = SuccessGreen, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("峰谷合计吻合 (误差 ${Formatters.formatError(diff)})", style = MaterialTheme.typography.labelSmall, color = Color(0xFF00FF88), fontFamily = MonoFontFamily)
+                                Text("峰谷合计吻合 (误差 ${Formatters.formatError(diff)})", style = MaterialTheme.typography.labelSmall, color = SuccessGreen, fontFamily = MonoFontFamily)
                             }
                         }
                     }
@@ -212,6 +255,13 @@ fun EditRecordSheet(
 
         Spacer(modifier = Modifier.height(20.dp))
 
+        // 燃气
+        SectionCard("燃气", Icons.Default.Bolt, GasColor, isGasEnabled, { isGasEnabled = it }) {
+            InputField("燃气读数", gasTotal, { gasTotal = it }, "m³", GasColor)
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
         // 备注
         NoteSection(note, { note = it })
 
@@ -221,14 +271,17 @@ fun EditRecordSheet(
         Button(
             onClick = {
                 if (canSave) {
+                    val (peak, valley, total) = deriveSaveValues()
                     onSave(RecordData(
                         timestamp = LocalDateTime.of(selectedDate, selectedTime),
                         isElectric = isElectricEnabled,
-                        electricTotal = electricTotal.toDoubleOrNull(),
-                        electricPeak = electricPeak.toDoubleOrNull(),
-                        electricValley = electricValley.toDoubleOrNull(),
+                        electricTotal = total,
+                        electricPeak = peak,
+                        electricValley = valley,
                         isWater = isWaterEnabled,
                         waterTotal = waterTotal.toDoubleOrNull(),
+                        isGas = isGasEnabled,
+                        gasTotal = gasTotal.toDoubleOrNull(),
                         note = note.ifBlank { null }
                     ))
                 }
@@ -299,13 +352,13 @@ private fun SectionCard(title: String, icon: androidx.compose.ui.graphics.vector
 }
 
 @Composable
-private fun InputField(label: String, value: String, onValueChange: (String) -> Unit, unit: String, color: Color) {
+private fun InputField(label: String, value: String, onValueChange: (String) -> Unit, unit: String, color: Color, onDoneEditing: () -> Unit = {}) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, fontFamily = MonoFontFamily, modifier = Modifier.width(64.dp))
         OutlinedTextField(
             value = value,
             onValueChange = { if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) onValueChange(it) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).onFocusChanged { if (!it.isFocused) onDoneEditing() },
             placeholder = { Text("0.00", color = TextSecondary.copy(0.5f), fontFamily = MonoFontFamily) },
             suffix = { Text(unit, color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 12.sp) },
             colors = OutlinedTextFieldDefaults.colors(

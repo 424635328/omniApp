@@ -30,17 +30,24 @@ object Formatters {
     }
 
     /**
-     * 格式化电量（整数）
+     * 格式化电量（保留两位小数，补0）
      */
     fun formatElectric(value: Double?): String {
-        return if (value != null) formatInt(value) else "0"
+        return if (value != null) formatDecimal2(value) else "0.00"
     }
 
     /**
-     * 格式化水量（整数）
+     * 格式化水量（保留两位小数，补0）
      */
     fun formatWater(value: Double?): String {
-        return if (value != null) formatInt(value) else "0"
+        return if (value != null) formatDecimal2(value) else "0.00"
+    }
+
+    /**
+     * 格式燃气（保留两位小数，补0）
+     */
+    fun formatGas(value: Double?): String {
+        return if (value != null) formatDecimal2(value) else "0.00"
     }
 
     /**

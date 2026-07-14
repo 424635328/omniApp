@@ -63,9 +63,11 @@ import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
+import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.NeonYellow
+import com.example.energyflow.ui.theme.WarningNeon
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.theme.TextTertiary
@@ -140,7 +142,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
             titleContentColor = TextPrimary,
             textContentColor = TextSecondary,
             title = {
-                Text("⚠️ 清除所有数据", color = Color(0xFFFF6B6B), fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
+                Text("⚠️ 清除所有数据", color = ErrorNeon, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
             },
             text = {
                 Text("此操作将删除所有能耗记录，且不可撤销。确定要清除吗？", fontFamily = MonoFontFamily)
@@ -151,7 +153,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                     viewModel.deleteAllRecords()
                     toast(context, "已清除所有数据")
                 }) {
-                    Text("确认清除", color = Color(0xFFFF6B6B), fontFamily = MonoFontFamily)
+                    Text("确认清除", color = ErrorNeon, fontFamily = MonoFontFamily)
                 }
             },
             dismissButton = {
@@ -209,9 +211,9 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         Spacer(Modifier.height(8.dp))
         PriceInputRow("二档上限", rules.electricTier2Limit, viewModel::updateElecTier2Limit, ElectricColor, "月均 度", "度/月")
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("二档加价", rules.electricTier2Surcharge, viewModel::updateElecTier2Surcharge, Color(0xFFFFA500), "基础价+此值", "元/度")
+        PriceInputRow("二档加价", rules.electricTier2Surcharge, viewModel::updateElecTier2Surcharge, WarningNeon, "基础价+此值", "元/度")
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("三档加价", rules.electricTier3Surcharge, viewModel::updateElecTier3Surcharge, Color(0xFFFF6B6B), "基础价+此值", "元/度")
+        PriceInputRow("三档加价", rules.electricTier3Surcharge, viewModel::updateElecTier3Surcharge, ErrorNeon, "基础价+此值", "元/度")
 
         // ═══════════════════════════════════════════════
         // 阶梯水价
@@ -297,11 +299,11 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                 ) {
                     Icon(
                         Icons.Default.Delete, null,
-                        tint = Color(0xFFFF6B6B).copy(alpha = 0.6f),
+                        tint = ErrorNeon.copy(alpha = 0.6f),
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("清除 Key", color = Color(0xFFFF6B6B).copy(alpha = 0.6f), fontFamily = MonoFontFamily, fontSize = 11.sp)
+                    Text("清除 Key", color = ErrorNeon.copy(alpha = 0.6f), fontFamily = MonoFontFamily, fontSize = 11.sp)
                 }
             }
         }
@@ -343,7 +345,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
             icon = Icons.Default.Delete,
             label = "清除所有数据",
             desc = "删除全部记录，此操作不可撤销",
-            color = Color(0xFFFF6B6B),
+            color = ErrorNeon,
             onClick = { showClearDialog = true }
         )
 

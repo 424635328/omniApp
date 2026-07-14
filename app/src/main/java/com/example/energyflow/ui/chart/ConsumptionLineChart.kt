@@ -30,6 +30,9 @@ import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.data.DailyWeather
 import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
+import com.example.energyflow.ui.theme.ElectricEnd
+import com.example.energyflow.ui.theme.ElectricGradient
+import com.example.energyflow.ui.theme.ElectricStart
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.utils.Formatters.formatDecimal1
@@ -146,43 +149,57 @@ fun ConsumptionLineChart(
             return@Canvas
         }
 
-        // ── 构建可见路径 ──
+        // ── 构建平滑贝塞尔路径 ──
         val linePath = Path()
         val fillPath = Path()
 
-        points.take(visibleCount).forEachIndexed { index, pt ->
-            if (index == 0) {
-                linePath.moveTo(pt.x, pt.y)
-                fillPath.moveTo(pt.x, paddingTop + chartHeight)
-                fillPath.lineTo(pt.x, pt.y)
-            } else {
-                linePath.lineTo(pt.x, pt.y)
-                fillPath.lineTo(pt.x, pt.y)
-            }
+        val visiblePoints = points.take(visibleCount)
+
+        // 三次贝塞尔曲线辅助函数
+        fun Path.cubicSmoothTo(from: Offset, to: Offset) {
+            val controlX1 = from.x + (to.x - from.x) / 2f
+            val controlY1 = from.y
+            val controlX2 = from.x + (to.x - from.x) / 2f
+            val controlY2 = to.y
+            cubicTo(controlX1, controlY1, controlX2, controlY2, to.x, to.y)
         }
 
-        // 补间最后一段（平滑过渡）
-        if (visibleCount < pointCount) {
-            val last = points[visibleCount - 1]
-            val next = points[visibleCount]
-            val fraction = (pointCount * progress) - visibleCount + 1
-            val interpX = last.x + (next.x - last.x) * fraction
-            val interpY = last.y + (next.y - last.y) * fraction
-            linePath.lineTo(interpX, interpY)
-            fillPath.lineTo(interpX, interpY)
-            fillPath.lineTo(interpX, paddingTop + chartHeight)
-        } else {
-            fillPath.lineTo(points.last().x, paddingTop + chartHeight)
+        if (visiblePoints.isNotEmpty()) {
+            linePath.moveTo(visiblePoints[0].x, visiblePoints[0].y)
+            fillPath.moveTo(visiblePoints[0].x, paddingTop + chartHeight)
+            fillPath.lineTo(visiblePoints[0].x, visiblePoints[0].y)
+
+            for (i in 1 until visiblePoints.size) {
+                val prev = visiblePoints[i - 1]
+                val curr = visiblePoints[i]
+                linePath.cubicSmoothTo(prev, curr)
+                fillPath.cubicSmoothTo(prev, curr)
+            }
+
+            // 补间最后一段（动画过渡）
+            if (visibleCount < pointCount) {
+                val last = points[visibleCount - 1]
+                val next = points[visibleCount]
+                val fraction = (pointCount * progress) - visibleCount + 1
+                val interpX = last.x + (next.x - last.x) * fraction
+                val interpY = last.y + (next.y - last.y) * fraction
+                val interp = Offset(interpX, interpY)
+                linePath.cubicSmoothTo(last, interp)
+                fillPath.cubicSmoothTo(last, interp)
+                fillPath.lineTo(interpX, paddingTop + chartHeight)
+            } else {
+                fillPath.lineTo(visiblePoints.last().x, paddingTop + chartHeight)
+            }
         }
         fillPath.close()
 
-        // ── 面积填充（渐隐到透明） ──
+        // ── 面积填充（渐隐到透明）使用霓虹渐变 ──
         drawPath(
             fillPath,
             brush = Brush.verticalGradient(
                 listOf(
-                    chartColor.copy(alpha = 0.12f),
-                    chartColor.copy(alpha = 0.02f),
+                    ElectricStart.copy(alpha = 0.12f),
+                    ElectricEnd.copy(alpha = 0.04f),
                     Color.Transparent
                 ),
                 startY = paddingTop,
@@ -190,19 +207,27 @@ fun ConsumptionLineChart(
             )
         )
 
-        // ── 发光底层 ──
+        // ── 发光底层（渐变轨迹） ──
+        val glowGradient = Brush.linearGradient(
+            listOf(ElectricStart.copy(alpha = 0.25f), ElectricEnd.copy(alpha = 0.15f))
+        )
         drawPath(
-            linePath, chartColor.copy(alpha = 0.2f),
+            linePath,
+            brush = glowGradient,
             style = Stroke(7f, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
-        // ── 主线 ──
+        // ── 主线（霓虹渐变） ──
         drawPath(
-            linePath, chartColor.copy(alpha = 0.5f),
+            linePath,
+            brush = Brush.linearGradient(
+                listOf(ElectricStart.copy(alpha = 0.6f), ElectricEnd.copy(alpha = 0.6f))
+            ),
             style = Stroke(3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
         drawPath(
-            linePath, chartColor,
+            linePath,
+            brush = ElectricGradient,
             style = Stroke(2f, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
