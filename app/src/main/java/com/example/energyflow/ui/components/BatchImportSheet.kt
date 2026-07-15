@@ -1,15 +1,21 @@
 package com.example.energyflow.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,15 +42,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.energyflow.data.ParseResult
+import com.example.energyflow.data.SmartInputParser
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
+import com.example.energyflow.ui.theme.ErrorNeon
+import com.example.energyflow.ui.theme.GasColor
 import com.example.energyflow.ui.theme.MonoFontFamily
+import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.NeonYellow
+import com.example.energyflow.ui.theme.SuccessGreen
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
+import com.example.energyflow.ui.theme.WaterColor
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BatchImportSheet(
     onImport: (String) -> Unit,
@@ -51,6 +66,14 @@ fun BatchImportSheet(
     importing: Boolean = false
 ) {
     var text by remember { mutableStateOf("") }
+    val parser = remember { SmartInputParser() }
+
+    val parseResults by remember(text) {
+        derivedStateOf {
+            if (text.isBlank()) emptyList()
+            else parser.parseWithContext(text).filterIsInstance<ParseResult.Success>()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -138,6 +161,45 @@ fun BatchImportSheet(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // ── 实时解析预览 ──
+        AnimatedVisibility(
+            visible = parseResults.isNotEmpty(),
+            enter = expandVertically(),
+            exit = shrinkVertically()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SuccessGreen.copy(alpha = 0.06f))
+                    .padding(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "✅ 可识别 ",
+                        color = SuccessGreen,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "${parseResults.size} 条记录",
+                        color = TextSecondary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 12.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    parseResults.forEach { result ->
+                        ParseResultChip(result)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
         // 输入框
         OutlinedTextField(
             value = text,
@@ -210,5 +272,55 @@ fun BatchImportSheet(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun ParseResultChip(result: ParseResult.Success) {
+    val (icon, label, color) = when {
+        result.isElectric && result.isWater -> Triple("⚡💧", "电+水", ElectricColor)
+        result.isElectric -> {
+            if (result.electricPeak != null && result.electricValley != null)
+                Triple("⚡", "峰谷", NeonBlue)
+            else
+                Triple("⚡", "电表", ElectricColor)
+        }
+        result.isWater -> Triple("💧", "水表", WaterColor)
+        result.note != null -> Triple("📝", result.note.take(6), NeonBlue)
+        else -> Triple("📋", "记录", TextSecondary)
+    }
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(color.copy(alpha = 0.1f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(icon, fontSize = 10.sp)
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            label,
+            color = color,
+            fontFamily = MonoFontFamily,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium
+        )
+        if (result.isElectric && result.electricTotal != null) {
+            Text(
+                " ${String.format("%.0f", result.electricTotal)}",
+                color = color.copy(alpha = 0.7f),
+                fontFamily = MonoFontFamily,
+                fontSize = 9.sp
+            )
+        }
+        if (result.isWater && result.waterTotal != null) {
+            Text(
+                " ${String.format("%.0f", result.waterTotal)}",
+                color = color.copy(alpha = 0.7f),
+                fontFamily = MonoFontFamily,
+                fontSize = 9.sp
+            )
+        }
     }
 }

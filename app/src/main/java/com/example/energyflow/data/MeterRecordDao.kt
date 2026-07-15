@@ -66,6 +66,9 @@ interface MeterRecordDao {
     @Query("SELECT * FROM meter_records WHERE isWaterRecorded = 1 ORDER BY timestamp DESC")
     fun getWaterRecords(): Flow<List<MeterRecord>>
 
+    @Query("SELECT * FROM meter_records WHERE isGasRecorded = 1 ORDER BY timestamp DESC")
+    fun getGasRecords(): Flow<List<MeterRecord>>
+
     // 查询有备注的记录（用于事件标注）
     @Query("SELECT * FROM meter_records WHERE note IS NOT NULL AND note != '' ORDER BY timestamp DESC")
     fun getRecordsWithNotes(): Flow<List<MeterRecord>>

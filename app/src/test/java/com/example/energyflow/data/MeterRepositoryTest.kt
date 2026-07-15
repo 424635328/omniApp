@@ -38,6 +38,7 @@ class MeterRepositoryTest {
         // DAO 流 → 空
         coEvery { dao.getElectricRecords() } returns flowOf(emptyList())
         coEvery { dao.getWaterRecords() } returns flowOf(emptyList())
+        every { dao.getAllRecords() } returns flowOf(emptyList())   // 无已有记录
         // classifier.reLearn
         coEvery { classifier.reLearn() } returns Unit
         coEvery { classifier.getThresholds() } returns ClassificationThresholds.DEFAULTS
@@ -89,6 +90,47 @@ class MeterRepositoryTest {
 
         val result = repository.smartInsert("7.14 12.00 20000", force = true)
         assertTrue(result is InsertResult.Success)
+    }
+
+    // ── batchInsert ──
+
+    @Test
+    fun `batchInsert consecutive duplicate values are preserved correctly`() = runTest {
+        val input = """
+6.23
+水879
+12.00 16602.55
+12.00 16602.55
+6.24
+水879
+12.00 16604.84
+6.25
+水879
+12.00 16607.13
+        """.trimIndent()
+        val result = repository.batchInsert(input)
+        assertTrue(result is BatchInsertResult.Success)
+        val success = result as BatchInsertResult.Success
+        // 7 条成功解析（含1条去重）= 6 条实际插入
+        // 批内去重后：6条（电16602.55连续两条→保留第一）
+        assertEquals("批内去重后应为6", 6, success.count)
+    }
+
+    @Test
+    fun `batchInsert same file twice produces zero new records`() = runTest {
+        val input = "7.14 12.00 20000"
+        val r1 = repository.batchInsert(input)
+        assertTrue("第一次导入失败", r1 is BatchInsertResult.Success)
+        val before = (r1 as BatchInsertResult.Success).count
+        assertTrue("第一次应有记录", before >= 1)
+        // 第二次导入应去重
+        every { dao.getAllRecords() } returns flowOf(listOf(
+            MeterRecord(timestamp = java.time.LocalDateTime.of(2026, 7, 14, 12, 0),
+                isElectricRecorded = true, electricTotal = 20000.0)
+        ))
+        val r2 = repository.batchInsert(input)
+        assertTrue("第二次应为 Success", r2 is BatchInsertResult.Success)
+        assertEquals("第二次应为 0", 0, (r2 as BatchInsertResult.Success).count)
     }
 
     // ── batchInsert ──

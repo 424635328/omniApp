@@ -58,6 +58,19 @@ class UserPreferences @Inject constructor(
         private val PREDICTION_SNAPSHOT = stringPreferencesKey("prediction_snapshot_json")
         private val WEATHER_FORECAST_CACHE = stringPreferencesKey("weather_forecast_cache")
         private val WEATHER_FORECAST_DATE = stringPreferencesKey("weather_forecast_date")
+        private val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
+        private val FILTER_DUPLICATES = booleanPreferencesKey("filter_duplicates")
+    }
+
+    val isOnboardingComplete: Flow<Boolean> = dataStore.data.map { it[ONBOARDING_COMPLETE] ?: false }
+    val isFilterDuplicates: Flow<Boolean> = dataStore.data.map { it[FILTER_DUPLICATES] ?: false }
+
+    suspend fun setFilterDuplicates(enabled: Boolean) {
+        dataStore.edit { it[FILTER_DUPLICATES] = enabled }
+    }
+
+    suspend fun completeOnboarding() {
+        dataStore.edit { it[ONBOARDING_COMPLETE] = true }
     }
 
     val isDarkTheme: Flow<Boolean> = dataStore.data.map { it[THEME_DARK] ?: true }

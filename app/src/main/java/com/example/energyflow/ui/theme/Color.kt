@@ -40,64 +40,70 @@ val WaterGradient: Brush get() = Brush.linearGradient(listOf(WaterStart, WaterEn
 val GasGradient: Brush get() = Brush.linearGradient(listOf(GasStart, GasEnd))
 
 // ════════════════════════════════════════════
-// 全局可变主题状态
+// 全局可变主题状态 — 单一 data class，一次重组
 // ════════════════════════════════════════════
+data class AppColors(
+    val electricColor: Color = ElectricStart,
+    val electricPeakColor: Color = Color(0xFFFF8800),
+    val electricValleyColor: Color = Color(0xFF4488FF),
+    val waterColor: Color = WaterStart,
+    val gasColor: Color = GasStart,
+    val isDark: Boolean = true,
+    val darkBackground: Color = BackgroundDark,
+    val darkSurface: Color = SurfaceDark,
+    val darkCard: Color = SurfaceVariant,
+    val lightBackground: Color = Color(0xFFF5F5F5),
+    val lightSurface: Color = Color(0xFFEEEEEE),
+    val lightCard: Color = Color(0xFFFFFFFF),
+    val textPrimary: Color = Color(0xFFE2E8F0),
+    val textSecondary: Color = Color(0xFF94A3B8),
+    val textTertiary: Color = Color(0xFF64748B),
+)
+
 object ThemeState {
-    // 品牌色
-    var electricColor by mutableStateOf(ElectricStart)
-    var electricPeakColor by mutableStateOf(Color(0xFFFF8800))
-    var electricValleyColor by mutableStateOf(Color(0xFF4488FF))
-    var waterColor by mutableStateOf(WaterStart)
-    var gasColor by mutableStateOf(GasStart)
-
-    // 是否为深色模式
-    var isDark by mutableStateOf(true)
-
-    // 深色（Midnight Slate）
-    var darkBackground by mutableStateOf(BackgroundDark)
-    var darkSurface by mutableStateOf(SurfaceDark)
-    var darkCard by mutableStateOf(SurfaceVariant)
-
-    // 浅色
-    var lightBackground by mutableStateOf(Color(0xFFF5F5F5))
-    var lightSurface by mutableStateOf(Color(0xFFEEEEEE))
-    var lightCard by mutableStateOf(Color(0xFFFFFFFF))
-
-    // 文字
-    var textPrimary by mutableStateOf(Color(0xFFE2E8F0))
-    var textSecondary by mutableStateOf(Color(0xFF94A3B8))
-    var textTertiary by mutableStateOf(Color(0xFF64748B))
+    var colors by mutableStateOf(AppColors())
 
     /** 根据当前模式切换文字色。 */
     fun applyMode() {
-        if (isDark) {
-            textPrimary = Color(0xFFE2E8F0)
-            textSecondary = Color(0xFF94A3B8)
+        colors = if (colors.isDark) colors.copy(
+            textPrimary = Color(0xFFE2E8F0),
+            textSecondary = Color(0xFF94A3B8),
             textTertiary = Color(0xFF64748B)
-        } else {
-            textPrimary = Color(0xFF0F172A)
-            textSecondary = Color(0xFF475569)
+        ) else colors.copy(
+            textPrimary = Color(0xFF0F172A),
+            textSecondary = Color(0xFF475569),
             textTertiary = Color(0xFF94A3B8)
-        }
+        )
+    }
+
+    /** 根据当日最高温调整 UI 强调色，让 App 有"温度感"。 */
+    fun applyWeatherTheme(tempMax: Double) {
+        colors = colors.copy(electricColor = when {
+            tempMax > 38 -> Color(0xFFFF4500)
+            tempMax > 32 -> Color(0xFFFF8800)
+            tempMax > 20 -> ElectricStart
+            tempMax > 10 -> Color(0xFF00B3FF)
+            else -> Color(0xFF4488FF)
+        })
     }
 }
 
 // ════════════════════════════════════════════
-// 语义化顶层 val — 自动跟随 isDark & ThemeState
+// 语义化顶层 val — 自动跟随 ThemeState.colors
 // ════════════════════════════════════════════
-val ElectricColor: Color get() = ThemeState.electricColor
-val ElectricPeakColor: Color get() = ThemeState.electricPeakColor
-val ElectricValleyColor: Color get() = ThemeState.electricValleyColor
-val WaterColor: Color get() = ThemeState.waterColor
-val GasColor: Color get() = ThemeState.gasColor
+val ElectricColor: Color get() = ThemeState.colors.electricColor
+val ElectricPeakColor: Color get() = ThemeState.colors.electricPeakColor
+val ElectricValleyColor: Color get() = ThemeState.colors.electricValleyColor
+val WaterColor: Color get() = ThemeState.colors.waterColor
+val GasColor: Color get() = ThemeState.colors.gasColor
 
 /** 自动跟随暗/亮模式 */
-val AppBackground: Color get() = if (ThemeState.isDark) ThemeState.darkBackground else ThemeState.lightBackground
-val AppSurface: Color get() = if (ThemeState.isDark) ThemeState.darkSurface else ThemeState.lightSurface
-val AppCard: Color get() = if (ThemeState.isDark) ThemeState.darkCard else ThemeState.lightCard
-val AppTextPrimary: Color get() = ThemeState.textPrimary
-val AppTextSecondary: Color get() = ThemeState.textSecondary
-val AppTextTertiary: Color get() = ThemeState.textTertiary
+val AppBackground: Color get() = if (ThemeState.colors.isDark) ThemeState.colors.darkBackground else ThemeState.colors.lightBackground
+val AppSurface: Color get() = if (ThemeState.colors.isDark) ThemeState.colors.darkSurface else ThemeState.colors.lightSurface
+val AppCard: Color get() = if (ThemeState.colors.isDark) ThemeState.colors.darkCard else ThemeState.colors.lightCard
+val AppTextPrimary: Color get() = ThemeState.colors.textPrimary
+val AppTextSecondary: Color get() = ThemeState.colors.textSecondary
+val AppTextTertiary: Color get() = ThemeState.colors.textTertiary
 
 // ════════════════════════════════════════════
 // 向后兼容别名 — 旧代码无需修改

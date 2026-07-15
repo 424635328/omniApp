@@ -3,7 +3,12 @@ package com.example.energyflow.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
@@ -16,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +58,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,11 +66,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -98,6 +109,8 @@ fun AddRecordSheet(
     initiallyShowPeakValley: Boolean = false,
     onPeakValleyExpandedChange: (Boolean) -> Unit = {},
     latestRecord: MeterRecord? = null,
+    prefillRecord: RecordData? = null,
+    quickTags: List<String> = listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机"),
     onSave: (RecordData) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -120,6 +133,26 @@ fun AddRecordSheet(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+
+    // ── OCR 预填：有 prefillRecord 时自动填入 ──
+    LaunchedEffect(prefillRecord) {
+        prefillRecord?.let { r ->
+            selectedDate = r.timestamp.toLocalDate()
+            selectedTime = r.timestamp.toLocalTime().withSecond(0).withNano(0)
+            val f = { d: Double -> String.format(Locale.US, "%.2f", d) }
+            if (r.isElectric && r.electricTotal != null) {
+                isElectricEnabled = true
+                electricTotal = f(r.electricTotal)
+                r.electricPeak?.let { electricPeak = f(it); showPeakValley = true }
+                r.electricValley?.let { electricValley = f(it); showPeakValley = true }
+            }
+            if (r.isWater && r.waterTotal != null) {
+                isWaterEnabled = true
+                waterTotal = f(r.waterTotal)
+            }
+            r.note?.let { note = it }
+        }
+    }
 
     // ── 焦点离开时推导 ──
     // changed 标记刚编辑的字段，当三值齐全时重新计算对侧字段
@@ -157,7 +190,9 @@ fun AddRecordSheet(
     }
 
     // 验证
-    val isElectricValid = !isElectricEnabled || electricTotal.toDoubleOrNull() != null
+    val isElectricValid = !isElectricEnabled ||
+        electricTotal.toDoubleOrNull() != null ||
+        (electricPeak.toDoubleOrNull() != null && electricValley.toDoubleOrNull() != null)
     val isWaterValid = !isWaterEnabled || waterTotal.toDoubleOrNull() != null
     val isGasValid = !isGasEnabled || gasTotal.toDoubleOrNull() != null
     val canSave = (isElectricEnabled || isWaterEnabled || isGasEnabled) && isElectricValid && isWaterValid && isGasValid
@@ -181,37 +216,50 @@ fun AddRecordSheet(
         else -> null
     }
 
-    // 保存按钮动画
-    val saveButtonScale by animateFloatAsState(
-        targetValue = if (canSave) 1f else 0.95f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
+    // ── 自动聚焦电表输入框 ──
+    val electricFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { electricFocus.requestFocus() }
+
+    // ── 键盘相关 ──
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    // ── 保存按钮呼吸微动效（表单有效时） ──
+    val infiniteTransition = rememberInfiniteTransition(label = "saveBreathe")
+    val breatheScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.03f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "save_button_scale"
+        label = "breathe"
     )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(DarkBackground)
-            .padding(horizontal = 20.dp, vertical = 16.dp)
-            .verticalScroll(rememberScrollState())
+            .imePadding()
+            .clickable(
+                indication = null,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            ) {
+                keyboardController?.hide()
+                focusManager.clearFocus()
+            }
     ) {
-        // 顶部标题栏
+        // ── 固定顶栏 ──
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onDismiss) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "取消",
-                    tint = TextSecondary
-                )
+                Icon(Icons.Default.Close, contentDescription = "取消", tint = TextSecondary)
             }
-
             Text(
                 text = "添加记录",
                 style = MaterialTheme.typography.titleLarge,
@@ -219,40 +267,19 @@ fun AddRecordSheet(
                 fontFamily = MonoFontFamily,
                 fontWeight = FontWeight.Bold
             )
-
-            IconButton(
-                onClick = {
-                    if (canSave) {
-                        val (peak, valley, total) = deriveSaveValues()
-                        val timestamp = LocalDateTime.of(selectedDate, selectedTime)
-                        onSave(
-                            RecordData(
-                                timestamp = timestamp,
-                                isElectric = isElectricEnabled,
-                                electricTotal = total,
-                                electricPeak = peak,
-                                electricValley = valley,
-                                isWater = isWaterEnabled,
-                                waterTotal = waterTotal.toDoubleOrNull(),
-                                isGas = isGasEnabled,
-                                gasTotal = gasTotal.toDoubleOrNull(),
-                                note = note.ifBlank { null }
-                            )
-                        )
-                    }
-                },
-                enabled = canSave
-            ) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = "保存",
-                    tint = if (canSave) ElectricColor else TextSecondary
-                )
-            }
+            // 占位保持标题居中
+            Spacer(modifier = Modifier.size(48.dp))
         }
 
-        // ── 上次读数 ──
-        latestRecord?.let { last ->
+        // ── 滚动内容 ──
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+        ) {
+            // ── 上次读数 ──
+            latestRecord?.let { last ->
             val lastElectric = last.electricTotal?.let { Formatters.formatDecimal2(it) }
             val lastWater = last.waterTotal?.let { Formatters.formatWater(it) }
             val lastGas = last.gasTotal?.let { Formatters.formatGas(it) }
@@ -359,7 +386,8 @@ fun AddRecordSheet(
                 onDoneEditing = { deriveElectric("total") },
                 unit = "度",
                 color = ElectricColor,
-                error = electricError
+                error = electricError,
+                modifier = Modifier.focusRequester(electricFocus)
             )
 
             // 峰谷展开
@@ -502,62 +530,65 @@ fun AddRecordSheet(
         NoteSection(
             note = note,
             onNoteChange = { note = it },
-            quickTags = listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机")
+            quickTags = quickTags
         )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 保存按钮
-        Button(
-            onClick = {
-                if (canSave) {
-                        val (peak, valley, total) = deriveSaveValues()
-                        val timestamp = LocalDateTime.of(selectedDate, selectedTime)
-                        onSave(
-                            RecordData(
-                                timestamp = timestamp,
-                                isElectric = isElectricEnabled,
-                                electricTotal = total,
-                                electricPeak = peak,
-                                electricValley = valley,
-                                isWater = isWaterEnabled,
-                                waterTotal = waterTotal.toDoubleOrNull(),
-                                isGas = isGasEnabled,
-                                gasTotal = gasTotal.toDoubleOrNull(),
-                                note = note.ifBlank { null }
-                            )
-                        )
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .scale(saveButtonScale)
-                .shadow(
-                    elevation = if (canSave) 4.dp else 0.dp,
-                    shape = RoundedCornerShape(12.dp),
-                    ambientColor = ElectricColor.copy(alpha = 0.3f),
-                    spotColor = ElectricColor.copy(alpha = 0.3f)
-                ),
-            enabled = canSave,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = ElectricColor,
-                contentColor = DarkBackground,
-                disabledContainerColor = DarkCard,
-                disabledContentColor = TextSecondary
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text(
-                text = "保存记录",
-                fontFamily = MonoFontFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
     }
+
+    // ── 固定底部保存按钮（始终可见，呼吸微动效） ──
+    Button(
+        onClick = {
+            if (canSave) {
+                keyboardController?.hide()
+                val (peak, valley, total) = deriveSaveValues()
+                val timestamp = LocalDateTime.of(selectedDate, selectedTime)
+                onSave(
+                    RecordData(
+                        timestamp = timestamp,
+                        isElectric = isElectricEnabled,
+                        electricTotal = total,
+                        electricPeak = peak,
+                        electricValley = valley,
+                        isWater = isWaterEnabled,
+                        waterTotal = waterTotal.toDoubleOrNull(),
+                        isGas = isGasEnabled,
+                        gasTotal = gasTotal.toDoubleOrNull(),
+                        note = note.ifBlank { null }
+                    )
+                )
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .height(52.dp)
+            .scale(if (canSave) breatheScale else 0.97f)
+            .shadow(
+                elevation = if (canSave) 4.dp else 0.dp,
+                shape = RoundedCornerShape(12.dp),
+                ambientColor = ElectricColor.copy(alpha = 0.3f),
+                spotColor = ElectricColor.copy(alpha = 0.3f)
+            ),
+        enabled = canSave,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = ElectricColor,
+            contentColor = DarkBackground,
+            disabledContainerColor = DarkCard,
+            disabledContentColor = TextSecondary
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Text(
+            text = "保存记录",
+            fontFamily = MonoFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp
+        )
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+}
 
     // 日期选择弹窗
     if (showDatePicker) {
@@ -828,6 +859,7 @@ private fun MeterInputField(
     onValueChange: (String) -> Unit,
     unit: String,
     color: Color,
+    modifier: Modifier = Modifier,
     error: String? = null,
     onDoneEditing: () -> Unit = {}
 ) {
@@ -852,7 +884,7 @@ private fun MeterInputField(
                         onValueChange(newValue)
                     }
                 },
-                modifier = Modifier.weight(1f).onFocusChanged { if (!it.isFocused) onDoneEditing() },
+                modifier = Modifier.weight(1f).then(modifier).onFocusChanged { if (!it.isFocused) onDoneEditing() },
                 placeholder = {
                     Text(
                         text = "0.00",

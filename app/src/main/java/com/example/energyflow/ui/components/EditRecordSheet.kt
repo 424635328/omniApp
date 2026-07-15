@@ -2,12 +2,18 @@ package com.example.energyflow.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -62,6 +69,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -93,6 +102,7 @@ import java.util.Locale
 @Composable
 fun EditRecordSheet(
     record: MeterRecord,
+    quickTags: List<String> = listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机"),
     onSave: (RecordData) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -148,65 +158,55 @@ fun EditRecordSheet(
         }
     }
 
-    val isElectricValid = !isElectricEnabled || electricTotal.toDoubleOrNull() != null
+    val isElectricValid = !isElectricEnabled ||
+        electricTotal.toDoubleOrNull() != null ||
+        (electricPeak.toDoubleOrNull() != null && electricValley.toDoubleOrNull() != null)
     val isWaterValid = !isWaterEnabled || waterTotal.toDoubleOrNull() != null
     val isGasValid = !isGasEnabled || gasTotal.toDoubleOrNull() != null
     val canSave = (isElectricEnabled || isWaterEnabled || isGasEnabled) && isElectricValid && isWaterValid && isGasValid
 
-    val saveButtonScale by animateFloatAsState(
-        targetValue = if (canSave) 1f else 0.95f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "save_scale"
+    // ── 保存按钮呼吸微动效 ──
+    val infiniteTransition = rememberInfiniteTransition(label = "saveBreathe")
+    val breatheScale by infiniteTransition.animateFloat(
+        initialValue = 1f, targetValue = 1.03f,
+        animationSpec = infiniteRepeatable(animation = tween(1200), repeatMode = RepeatMode.Reverse),
+        label = "breathe"
     )
+
+    // ── 键盘 ──
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(DarkBackground)
-            .padding(horizontal = 20.dp, vertical = 16.dp)
-            .verticalScroll(rememberScrollState())
+            .imePadding()
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) {
+                keyboardController?.hide()
+                focusManager.clearFocus()
+            }
     ) {
-        // 标题栏
+        // ── 固定顶栏 ──
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.Close, contentDescription = "取消", tint = TextSecondary)
+                Icon(Icons.Default.Close, "取消", tint = TextSecondary)
             }
-            Text(
-                text = "编辑记录",
-                style = MaterialTheme.typography.titleLarge,
-                color = NeonYellow,
-                fontFamily = MonoFontFamily,
-                fontWeight = FontWeight.Bold
-            )
-            IconButton(
-                onClick = {
-                    if (canSave) {
-                        val (peak, valley, total) = deriveSaveValues()
-                    onSave(RecordData(
-                            timestamp = LocalDateTime.of(selectedDate, selectedTime),
-                            isElectric = isElectricEnabled,
-                            electricTotal = total,
-                            electricPeak = peak,
-                            electricValley = valley,
-                            isWater = isWaterEnabled,
-                            waterTotal = waterTotal.toDoubleOrNull(),
-                            isGas = isGasEnabled,
-                            gasTotal = gasTotal.toDoubleOrNull(),
-                            note = note.ifBlank { null }
-                        ))
-                    }
-                },
-                enabled = canSave
-            ) {
-                Icon(Icons.Default.Check, contentDescription = "保存", tint = if (canSave) ElectricColor else TextSecondary)
-            }
+            Text("编辑记录", style = MaterialTheme.typography.titleLarge, color = NeonYellow, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.size(48.dp))
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        // ── 滚动内容 ──
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
+        ) {
 
         // 日期时间
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -263,39 +263,38 @@ fun EditRecordSheet(
         Spacer(modifier = Modifier.height(20.dp))
 
         // 备注
-        NoteSection(note, { note = it })
+        NoteSection(note, { note = it }, quickTags)
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 保存按钮
-        Button(
-            onClick = {
-                if (canSave) {
-                    val (peak, valley, total) = deriveSaveValues()
-                    onSave(RecordData(
-                        timestamp = LocalDateTime.of(selectedDate, selectedTime),
-                        isElectric = isElectricEnabled,
-                        electricTotal = total,
-                        electricPeak = peak,
-                        electricValley = valley,
-                        isWater = isWaterEnabled,
-                        waterTotal = waterTotal.toDoubleOrNull(),
-                        isGas = isGasEnabled,
-                        gasTotal = gasTotal.toDoubleOrNull(),
-                        note = note.ifBlank { null }
-                    ))
-                }
-            },
-            modifier = Modifier.fillMaxWidth().height(52.dp).scale(saveButtonScale)
-                .shadow(if (canSave) 4.dp else 0.dp, RoundedCornerShape(12.dp), ambientColor = ElectricColor.copy(0.3f), spotColor = ElectricColor.copy(0.3f)),
-            enabled = canSave,
-            colors = ButtonDefaults.buttonColors(ElectricColor, DarkBackground, DarkCard, TextSecondary),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text("保存修改", fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        }
         Spacer(modifier = Modifier.height(16.dp))
     }
+
+    // ── 固定底部保存按钮 ──
+    Button(
+        onClick = {
+            if (canSave) {
+                keyboardController?.hide()
+                val (peak, valley, total) = deriveSaveValues()
+                onSave(RecordData(
+                    timestamp = LocalDateTime.of(selectedDate, selectedTime),
+                    isElectric = isElectricEnabled, electricTotal = total,
+                    electricPeak = peak, electricValley = valley,
+                    isWater = isWaterEnabled, waterTotal = waterTotal.toDoubleOrNull(),
+                    isGas = isGasEnabled, gasTotal = gasTotal.toDoubleOrNull(),
+                    note = note.ifBlank { null }
+                ))
+            }
+        },
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(52.dp)
+            .scale(if (canSave) breatheScale else 0.97f)
+            .shadow(if (canSave) 4.dp else 0.dp, RoundedCornerShape(12.dp), ambientColor = ElectricColor.copy(0.3f), spotColor = ElectricColor.copy(0.3f)),
+        enabled = canSave,
+        colors = ButtonDefaults.buttonColors(ElectricColor, DarkBackground, DarkCard, TextSecondary),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Text("保存修改", fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    }
+    Spacer(modifier = Modifier.height(16.dp))
+}
 
     if (showDatePicker) {
         val state = rememberDatePickerState(selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
@@ -380,8 +379,8 @@ private fun InputField(label: String, value: String, onValueChange: (String) -> 
 }
 
 @Composable
-private fun NoteSection(note: String, onNoteChange: (String) -> Unit) {
-    val tags = listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机")
+private fun NoteSection(note: String, onNoteChange: (String) -> Unit, quickTags: List<String> = listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机")) {
+    val tags = quickTags
     Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DarkCard).padding(16.dp)) {
         Text("备注", style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(10.dp))

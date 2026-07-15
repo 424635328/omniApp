@@ -108,8 +108,13 @@ fun SplashScreen(onFinished: () -> Unit) {
 
     // ═══ 跳过标志 ═══
     var skipped by remember { mutableStateOf(false) }
+    var animationDone by remember { mutableStateOf(false) }
 
-    // 点击跳过 → 快速淡出并结束
+    // 点击跳过 / 点击进入
+    fun handleTap() {
+        skipped = true
+    }
+
     LaunchedEffect(skipped) {
         if (skipped) {
             exitAlpha.animateTo(0f, tween(150))
@@ -121,32 +126,18 @@ fun SplashScreen(onFinished: () -> Unit) {
     LaunchedEffect(Unit) {
         if (skipped) return@LaunchedEffect
 
-        // Phase 1: 图标入场 (0→600ms)
+        // Phase 1-4: 动画（保留原有逻辑）
         iconAlpha.animateTo(1f, tween(200))
-        iconScale.animateTo(
-            1.02f,
-            spring(dampingRatio = 0.55f, stiffness = 300f)
-        )
+        iconScale.animateTo(1.02f, spring(dampingRatio = 0.55f, stiffness = 300f))
         iconScale.animateTo(1f, tween(150))
-
-        // Phase 2: 标题 (600→1200ms)
         delay(200)
         titleAlpha.animateTo(1f, tween(500, easing = FastOutSlowInEasing))
         titleOffsetY.animateTo(0f, tween(500, easing = FastOutSlowInEasing))
-
-        // Phase 3: 副标题 (900→1500ms)
         delay(300)
         subtitleAlpha.animateTo(1f, tween(400))
 
-        // Phase 4: 持续展示 (1500→2500ms) — 分小段检查跳过
-        repeat(10) { if (!skipped) delay(100) }
-
-        // Phase 5: 退出 (2500→2800ms)
-        if (!skipped) {
-            exitAlpha.animateTo(0f, tween(300, easing = FastOutSlowInEasing))
-            delay(100)
-        }
-        if (!skipped) onFinished()
+        // Phase 5: 标记动画完成，等待用户点击
+        animationDone = true
     }
 
     val currentAlpha = exitAlpha.value
@@ -155,10 +146,7 @@ fun SplashScreen(onFinished: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) { skipped = true }
+            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { handleTap() }
             .graphicsLayer { alpha = currentAlpha },
         contentAlignment = Alignment.Center
     ) {
@@ -307,6 +295,26 @@ fun SplashScreen(onFinished: () -> Unit) {
                     fontWeight = FontWeight.Medium,
                     fontSize = 14.sp,
                     letterSpacing = 6.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // ── 点击进入提示（动画完成后脉冲显示） ──
+            if (animationDone) {
+                val promptAlpha by infiniteTransition.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
+                    label = "prompt"
+                )
+                androidx.compose.material3.Text(
+                    "点击屏幕进入 →",
+                    color = ElectricColor.copy(alpha = promptAlpha),
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    letterSpacing = 2.sp
                 )
             }
         }

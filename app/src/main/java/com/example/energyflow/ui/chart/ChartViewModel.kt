@@ -3,6 +3,7 @@ package com.example.energyflow.ui.chart
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.energyflow.data.BillingRules
 import com.example.energyflow.data.CostEngine
 import com.example.energyflow.data.DailyWeather
 import com.example.energyflow.data.EventImpact
@@ -16,7 +17,9 @@ import com.example.energyflow.data.UserPreferences
 import com.example.energyflow.data.WeatherRepository
 import com.example.energyflow.data.WeatherResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,10 +44,24 @@ class ChartViewModel @Inject constructor(
     private val deepSeekRepository: com.example.energyflow.data.DeepSeekRepository
 ) : ViewModel() {
 
+    // ── 电/水/气 表类型切换 ──
+    enum class MeterType { ELECTRIC, WATER, GAS }
+
+    private val _selectedMeterType = MutableStateFlow(MeterType.ELECTRIC)
+    val selectedMeterType: StateFlow<MeterType> = _selectedMeterType.asStateFlow()
+
+    fun setMeterType(type: MeterType) {
+        _selectedMeterType.value = type
+        recalculateForCurrentType()
+    }
+
     val electricRecords: StateFlow<List<MeterRecord>> = repository.getElectricRecords()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val waterRecords: StateFlow<List<MeterRecord>> = repository.getWaterRecords()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val gasRecords: StateFlow<List<MeterRecord>> = repository.getGasRecords()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val notesRecords: StateFlow<List<MeterRecord>> = repository.getRecordsWithNotes()
@@ -97,33 +114,75 @@ class ChartViewModel @Inject constructor(
     private val _weatherError = MutableStateFlow<String?>(null)
     val weatherError: StateFlow<String?> = _weatherError.asStateFlow()
 
+    // ── 水表专用状态 ──
+    private val _waterChartData = MutableStateFlow<ChartData>(ChartData.Empty)
+    val waterChartData: StateFlow<ChartData> = _waterChartData.asStateFlow()
+
+    private val _waterBillResult = MutableStateFlow<WaterBillData?>(null)
+    val waterBillResult: StateFlow<WaterBillData?> = _waterBillResult.asStateFlow()
+
+    private val _waterPrediction = MutableStateFlow<MonthPrediction?>(null)
+    val waterPrediction: StateFlow<MonthPrediction?> = _waterPrediction.asStateFlow()
+
+    // ── 气表专用状态 ──
+    private val _gasChartData = MutableStateFlow<ChartData>(ChartData.Empty)
+    val gasChartData: StateFlow<ChartData> = _gasChartData.asStateFlow()
+
+    // ── 缓存 billingRules ──
+    private val billingRules: StateFlow<BillingRules> = userPreferences.billingRules
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BillingRules())
+
     init {
+        // 电表分析
         viewModelScope.launch {
             electricRecords.collect { records ->
-                recalculateAnalytics(records)
+                if (_selectedMeterType.value == MeterType.ELECTRIC) {
+                    withContext(Dispatchers.IO) { recalculateAnalytics(records) }
+                }
+            }
+        }
+        // 水表分析
+        viewModelScope.launch {
+            waterRecords.collect { records ->
+                if (_selectedMeterType.value == MeterType.WATER) {
+                    withContext(Dispatchers.IO) { recalculateWaterAnalytics(records) }
+                }
+            }
+        }
+        // 气表分析
+        viewModelScope.launch {
+            gasRecords.collect { records ->
+                if (_selectedMeterType.value == MeterType.GAS) {
+                    withContext(Dispatchers.IO) { recalculateGasAnalytics(records) }
+                }
             }
         }
         viewModelScope.launch {
-            userPreferences.chartShowCost.collect { show ->
-                _showCost.value = show
-            }
+            userPreferences.chartShowCost.collect { show -> _showCost.value = show }
         }
         viewModelScope.launch {
             userPreferences.billingRules.collect {
-                recalculateAnalytics(electricRecords.value)
+                withContext(Dispatchers.IO) { recalculateForCurrentType() }
             }
         }
         viewModelScope.launch {
-            notesRecords.collect {
-                recalculateAnalytics(electricRecords.value)
-            }
+            notesRecords.collect { recalculateForCurrentType() }
         }
-        // 启动时自动获取一次 7 天预报（每日仅一次，Open-Meteo 免费）
         viewModelScope.launch {
             val today = java.time.LocalDate.now().toString()
             val cachedDate = userPreferences.weatherForecastDate.first()
             if (cachedDate != today) {
-                autoFetchForecast()
+                withContext(Dispatchers.IO) { autoFetchForecast() }
+            }
+        }
+    }
+
+    private fun recalculateForCurrentType() {
+        viewModelScope.launch {
+            when (_selectedMeterType.value) {
+                MeterType.ELECTRIC -> recalculateAnalytics(electricRecords.value)
+                MeterType.WATER -> recalculateWaterAnalytics(waterRecords.value)
+                MeterType.GAS -> recalculateGasAnalytics(gasRecords.value)
             }
         }
     }
@@ -147,9 +206,7 @@ class ChartViewModel @Inject constructor(
 
     fun setTimeRange(range: TimeRange) {
         _timeRange.value = range
-        viewModelScope.launch {
-            recalculateAnalytics(electricRecords.value)
-        }
+        recalculateForCurrentType()
     }
 
     private fun updateChartData(records: List<MeterRecord>, estimatedCostPerKwh: Double = 0.0) {
@@ -339,6 +396,214 @@ class ChartViewModel @Inject constructor(
         }
     }
 
+    // ══════════════════════════════════════════════════════════
+    // 水表分析
+    // ══════════════════════════════════════════════════════════
+
+    private suspend fun recalculateWaterAnalytics(records: List<MeterRecord>) {
+        if (records.isEmpty()) {
+            _waterChartData.value = ChartData.Empty
+            _waterBillResult.value = null
+            _waterPrediction.value = null
+            return
+        }
+        val today = LocalDate.now()
+        val windowStart = when (_timeRange.value) {
+            TimeRange.WEEK  -> today.minusDays(6)
+            TimeRange.MONTH -> today.minusDays(29)
+            TimeRange.YEAR  -> today.minusDays(364)
+            TimeRange.ALL   -> null
+        }
+
+        val inWindowRecords = if (windowStart != null) {
+            records.filter { !it.timestamp.toLocalDate().isBefore(windowStart) }
+                .sortedBy { it.timestamp }
+        } else {
+            records.sortedBy { it.timestamp }
+        }
+
+        if (inWindowRecords.isEmpty()) {
+            _waterChartData.value = ChartData.Empty
+            _waterBillResult.value = null
+            return
+        }
+
+        val forInterpolation = if (windowStart != null) {
+            prependWaterBaseline(records, inWindowRecords, windowStart)
+        } else {
+            inWindowRecords
+        }
+
+        val dailies = calculateWaterDailyConsumptions(forInterpolation)
+        _waterChartData.value = ChartData(
+            records = inWindowRecords,
+            dailyConsumptions = dailies,
+            annotations = notesRecords.value.filter { nr -> inWindowRecords.any { it.id == nr.id } },
+            timeRange = _timeRange.value
+        )
+
+        // 水费计算
+        if (inWindowRecords.size >= 2) {
+            val first = inWindowRecords.first()
+            val last = inWindowRecords.last()
+            val totalTons = (last.waterTotal ?: 0.0) - (first.waterTotal ?: 0.0)
+            if (totalTons > 0) {
+                val rules = billingRules.value
+                val bill = CostEngine.calculate(rules, 0.0, waterTons = totalTons)
+                _waterBillResult.value = WaterBillData(
+                    totalTons = totalTons,
+                    waterCost = bill.waterTotalCost,
+                    waterPrice = bill.waterPrice,
+                    tier1Limit = rules.waterTier1Limit,
+                    tier2Limit = rules.waterTier2Limit
+                )
+            } else {
+                _waterBillResult.value = null
+            }
+        } else {
+            _waterBillResult.value = null
+        }
+
+        // 水表月度预测
+        _waterPrediction.value = predictWaterMonth(records)
+    }
+
+    private fun predictWaterMonth(records: List<MeterRecord>): MonthPrediction? {
+        val today = LocalDate.now()
+        val now = YearMonth.now()
+        val thisMonth = records.filter {
+            it.isWaterRecorded && it.waterTotal != null &&
+            YearMonth.from(it.timestamp) == now
+        }.sortedBy { it.timestamp }
+
+        if (thisMonth.size < 2) return null
+
+        val first = thisMonth.first()
+        val last = thisMonth.last()
+        val consumed = (last.waterTotal ?: 0.0) - (first.waterTotal ?: 0.0)
+        if (consumed <= 0) return null
+
+        val daysElapsed = ChronoUnit.DAYS.between(
+            first.timestamp.toLocalDate(), last.timestamp.toLocalDate()
+        ).coerceAtLeast(1)
+        val dailyRate = consumed / daysElapsed
+        val totalMonthDays = now.lengthOfMonth().toLong()
+        val daysRemaining = totalMonthDays - today.dayOfMonth
+        val predictedRemaining = dailyRate * daysRemaining
+        val predicted = consumed + predictedRemaining
+
+        return MonthPrediction(
+            consumedSoFarKwh = consumed,
+            dailyRateKwh = dailyRate,
+            predictedTotalKwh = predicted,
+            daysElapsed = today.dayOfMonth,
+            daysRemaining = daysRemaining,
+            predictedRemainingKwh = predictedRemaining
+        )
+    }
+
+    private fun prependWaterBaseline(
+        allRecords: List<MeterRecord>,
+        inWindow: List<MeterRecord>,
+        windowStart: LocalDate
+    ): List<MeterRecord> {
+        if (inWindow.isEmpty()) return inWindow
+        val firstInWindow = inWindow.first()
+        if (firstInWindow.timestamp.toLocalDate().isBefore(windowStart)) return inWindow
+        val baseline = allRecords
+            .filter { it.timestamp.toLocalDate().isBefore(windowStart) && it.isWaterRecorded && it.waterTotal != null }
+            .maxByOrNull { it.timestamp }
+        return if (baseline != null) listOf(baseline) + inWindow else inWindow
+    }
+
+    private fun calculateWaterDailyConsumptions(records: List<MeterRecord>): List<DailyConsumption> {
+        if (records.size < 2) return emptyList()
+        val sorted = records.sortedBy { it.timestamp }
+        val result = mutableListOf<DailyConsumption>()
+        for (i in 0 until sorted.size - 1) {
+            val prev = sorted[i]
+            val current = sorted[i + 1]
+            val totalConsumption = (current.waterTotal ?: 0.0) - (prev.waterTotal ?: 0.0)
+            if (totalConsumption < 0.0) continue
+            val rawDays = ChronoUnit.DAYS.between(
+                prev.timestamp.toLocalDate().atStartOfDay(),
+                current.timestamp.toLocalDate().atStartOfDay()
+            )
+            val baseDate = prev.timestamp.toLocalDate()
+            if (rawDays == 0L) {
+                result.add(DailyConsumption(baseDate.atTime(12, 0), totalConsumption, totalConsumption, 1))
+                continue
+            }
+            val dailyAvg = totalConsumption / rawDays
+            for (d in 1..rawDays) {
+                val pointDate = baseDate.plusDays(d).atTime(12, 0)
+                result.add(DailyConsumption(pointDate, if (d == rawDays) totalConsumption else dailyAvg, dailyAvg, if (d == rawDays) rawDays else 1))
+            }
+        }
+        return result.groupBy { it.date.toLocalDate() }.map { (_, list) -> list.last() }.sortedBy { it.date }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // 气表分析
+    // ══════════════════════════════════════════════════════════
+
+    private fun recalculateGasAnalytics(records: List<MeterRecord>) {
+        val gasOnly = records.filter { it.isGasRecorded && it.gasTotal != null }
+        if (gasOnly.isEmpty()) {
+            _gasChartData.value = ChartData.Empty
+            return
+        }
+        val today = LocalDate.now()
+        val windowStart = when (_timeRange.value) {
+            TimeRange.WEEK  -> today.minusDays(6)
+            TimeRange.MONTH -> today.minusDays(29)
+            TimeRange.YEAR  -> today.minusDays(364)
+            TimeRange.ALL   -> null
+        }
+        val inWindowRecords = if (windowStart != null) {
+            gasOnly.filter { !it.timestamp.toLocalDate().isBefore(windowStart) }.sortedBy { it.timestamp }
+        } else {
+            gasOnly.sortedBy { it.timestamp }
+        }
+        if (inWindowRecords.isEmpty()) {
+            _gasChartData.value = ChartData.Empty
+            return
+        }
+        val dailies = calculateGasDailyConsumptions(inWindowRecords)
+        _gasChartData.value = ChartData(
+            records = inWindowRecords,
+            dailyConsumptions = dailies,
+            annotations = emptyList(),
+            timeRange = _timeRange.value
+        )
+    }
+
+    private fun calculateGasDailyConsumptions(records: List<MeterRecord>): List<DailyConsumption> {
+        if (records.size < 2) return emptyList()
+        val sorted = records.sortedBy { it.timestamp }
+        val result = mutableListOf<DailyConsumption>()
+        for (i in 0 until sorted.size - 1) {
+            val prev = sorted[i]
+            val current = sorted[i + 1]
+            val totalConsumption = (current.gasTotal ?: 0.0) - (prev.gasTotal ?: 0.0)
+            if (totalConsumption < 0.0) continue
+            val rawDays = ChronoUnit.DAYS.between(
+                prev.timestamp.toLocalDate().atStartOfDay(),
+                current.timestamp.toLocalDate().atStartOfDay()
+            )
+            val baseDate = prev.timestamp.toLocalDate()
+            if (rawDays == 0L) {
+                result.add(DailyConsumption(baseDate.atTime(12, 0), totalConsumption, totalConsumption, 1))
+                continue
+            }
+            val dailyAvg = totalConsumption / rawDays
+            for (d in 1..rawDays) {
+                val pointDate = baseDate.plusDays(d).atTime(12, 0)
+                result.add(DailyConsumption(pointDate, if (d == rawDays) totalConsumption else dailyAvg, dailyAvg, if (d == rawDays) rawDays else 1))
+            }
+        }
+        return result.groupBy { it.date.toLocalDate() }.map { (_, list) -> list.last() }.sortedBy { it.date }
+    }
 
     /** 用户手动触发 AI 全局能耗分析。 */
     fun triggerAiAnalysis() {
@@ -692,4 +957,14 @@ data class PredictionTracking(
     val actualTodayKwh: Double,
     val varianceKwh: Double,
     val variancePercent: Double
+)
+
+/** 水费账单数据 */
+@Immutable
+data class WaterBillData(
+    val totalTons: Double,
+    val waterCost: Double,
+    val waterPrice: Double,
+    val tier1Limit: Double,
+    val tier2Limit: Double
 )

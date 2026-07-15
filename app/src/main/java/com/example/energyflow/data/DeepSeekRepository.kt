@@ -33,6 +33,17 @@ class DeepSeekRepository @Inject constructor(
             "你是专业家庭能耗分析师。根据提供的完整数据给出简洁洞察。" +
             "用中文，聚焦：①整体趋势（升高/降低/稳定）②异常日期及可能原因 ③最大/最小消耗日 ④事件标签影响排序 ⑤具体节能建议。" +
             "限制 150 字以内，用条目式回答。"
+
+        private const val PARSE_SYSTEM_PROMPT =
+            "你是一个能耗数据解析器。分析用户输入，提取结构化信息。\n" +
+            "请严格按照以下格式回复（每行一个字段，用冒号分隔，无法识别的字段不输出）：\n" +
+            "日期: 月.日格式，如7.15\n" +
+            "时间: 时.分格式，如17.17\n" +
+            "电表读数: 纯数字，如16776\n" +
+            "水表读数: 纯数字，如880\n" +
+            "备注: 如打开冰箱\n" +
+            "示例输入: \"上周五看了电表16780\"\n" +
+            "示例输出: 电表读数: 16780"
     }
 
     /**
@@ -62,6 +73,35 @@ class DeepSeekRepository @Inject constructor(
                 setBody(json.encodeToString(ChatRequest.serializer(), request))
             }.body()
 
+            response.choices.firstOrNull()?.message?.content?.trim()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * DeepSeek 降级自然语言解析 — 当 SmartInputParser 正则匹配失败时调用。
+     * 返回解析后的文本行（可直接传给 parseWithContext），方便二次解析。
+     */
+    suspend fun parseNaturalInput(input: String): String? {
+        val apiKey = userPreferences.deepSeekApiKey.first()
+        if (apiKey.isBlank()) return null
+
+        return try {
+            val request = ChatRequest(
+                model = MODEL,
+                messages = listOf(
+                    ChatMessage(role = "system", content = PARSE_SYSTEM_PROMPT),
+                    ChatMessage(role = "user", content = input)
+                ),
+                max_tokens = 100,
+                temperature = 0.1
+            )
+            val response: ChatResponse = httpClient.post(API_URL) {
+                contentType(ContentType.Application.Json)
+                header("Authorization", "Bearer $apiKey")
+                setBody(json.encodeToString(ChatRequest.serializer(), request))
+            }.body()
             response.choices.firstOrNull()?.message?.content?.trim()
         } catch (e: Exception) {
             null

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 应用名称 -->
-    <string name="app_name">能耗手记</string>
+    <string name="app_name">Energy Flow</string>
 
     <!-- 相机界面 -->
     <string name="grant_permission">授予权限</string>
@@ -101,4 +101,10 @@
 
     <!-- 照片命名前缀 -->
     <string name="photo_prefix">IMG_</string>
+
+    <!-- 桌面小组件 -->
+    <string name="widget_description">显示当月累计电费和用电量</string>
+
+    <!-- Quick Settings Tile -->
+    <string name="tile_label">Energy Flow</string>
 </resources>

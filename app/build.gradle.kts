@@ -91,6 +91,20 @@ dependencies {
     // Baseline Profiles (ART optimization, ~30% cold-start speedup)
     implementation(libs.androidx.profileinstaller)
 
+    // Glance (Compose-based Widget)
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
+
+    // CameraX
+    implementation(libs.camerax.core)
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.view)
+    implementation(libs.camerax.extensions)
+
+    // ML Kit (OCR text recognition)
+    implementation(libs.mlkit.text.recognition.chinese)
+
     // SLF4J (silences third-party lib warnings)
     implementation("org.slf4j:slf4j-simple:1.7.36")
 

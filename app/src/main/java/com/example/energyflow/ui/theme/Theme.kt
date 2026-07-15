@@ -31,31 +31,27 @@ fun EnergyFlowTheme(
     val valleyColor = if (dc != null) shiftHue(dc.primary, 40f) else NeonCyan
     val waterColor = if (dc != null) shiftHue(dc.primary, 80f) else NeonBlue
 
-    // ── 写入全局 ThemeState ──
-    ThemeState.isDark = darkTheme
-    ThemeState.applyMode()
-    ThemeState.electricColor = primary
-    ThemeState.electricPeakColor = peakColor
-    ThemeState.electricValleyColor = valleyColor
-    ThemeState.waterColor = waterColor
-    ThemeState.gasColor = NeonRed
+    // ── 写入全局 ThemeState（单次 copy，一次重组） ──
+    val baseCard = if (dc != null) Color(
+        (dc.surface.red + 0.12f).coerceAtMost(1f),
+        (dc.surface.green + 0.12f).coerceAtMost(1f),
+        (dc.surface.blue + 0.12f).coerceAtMost(1f)
+    ) else Color(0xFF2A2A2A)
 
-    // 背景色（API 提供的沿用，否则用默认）
-    if (dc != null) {
-        ThemeState.darkBackground = dc.background
-        ThemeState.darkSurface = dc.surface
-        ThemeState.darkCard = Color(
-            (dc.surface.red + 0.12f).coerceAtMost(1f),
-            (dc.surface.green + 0.12f).coerceAtMost(1f),
-            (dc.surface.blue + 0.12f).coerceAtMost(1f)
-        )
-        ThemeState.textPrimary = dc.text
-        ThemeState.textSecondary = dc.textMuted
-    } else {
-        ThemeState.darkBackground = Color(0xFF0A0A0A)
-        ThemeState.darkSurface = Color(0xFF1A1A1A)
-        ThemeState.darkCard = Color(0xFF2A2A2A)
-    }
+    ThemeState.colors = ThemeState.colors.copy(
+        isDark = darkTheme,
+        electricColor = primary,
+        electricPeakColor = peakColor,
+        electricValleyColor = valleyColor,
+        waterColor = waterColor,
+        gasColor = NeonRed,
+        darkBackground = dc?.background ?: Color(0xFF0A0A0A),
+        darkSurface = dc?.surface ?: Color(0xFF1A1A1A),
+        darkCard = baseCard,
+        textPrimary = dc?.text ?: if (darkTheme) Color(0xFFE2E8F0) else Color(0xFF0F172A),
+        textSecondary = dc?.textMuted ?: if (darkTheme) Color(0xFF94A3B8) else Color(0xFF475569),
+        textTertiary = if (darkTheme) Color(0xFF64748B) else Color(0xFF94A3B8)
+    )
 
     // ── MaterialTheme colorScheme ──
     val bg = AppBackground
@@ -94,7 +90,7 @@ fun EnergyFlowTheme(
         LocalElectricPeakColor provides peakColor,
         LocalElectricValleyColor provides valleyColor,
         LocalWaterColor provides waterColor,
-        LocalGasColor provides ThemeState.gasColor,
+        LocalGasColor provides ThemeState.colors.gasColor,
         LocalAppBackground provides bg,
         LocalAppSurface provides surface,
         LocalAppCard provides AppCard,

@@ -3,6 +3,8 @@ package com.example.energyflow.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
@@ -11,9 +13,12 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +56,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -70,6 +76,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -82,11 +89,13 @@ import com.example.energyflow.data.AnomalyWarning
 import com.example.energyflow.ui.components.AddRecordSheet
 import com.example.energyflow.ui.components.BatchImportSheet
 import com.example.energyflow.ui.components.EditRecordSheet
+import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ErrorNeon
+import com.example.energyflow.ui.theme.SuccessGreen
 import com.example.energyflow.ui.theme.WarningNeon
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.TextPrimary
@@ -98,6 +107,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -105,22 +115,36 @@ import java.time.ZoneId
 
 private enum class RecordFilter { ALL, ELECTRIC, WATER, GAS, WITH_NOTES }
 
+// ── 缓存 DateTimeFormatter ──
+private val DateDotFmt = java.time.format.DateTimeFormatter.ofPattern("MM.dd")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    viewModel: MainViewModel = hiltViewModel()
+    viewModel: MainViewModel = hiltViewModel(),
+    onScan: (() -> Unit)? = null
 ) {
     val records by viewModel.allRecords.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val anomalyWarnings by viewModel.anomalyWarnings.collectAsState()
     val showAnomalyDialog by viewModel.showAnomalyDialog.collectAsState()
     val peakValleyExpanded by viewModel.peakValleyExpanded.collectAsState()
+    val tierProgress by viewModel.tierProgress.collectAsState()
+    val commonTags by viewModel.commonTags.collectAsState()
+    val insight by viewModel.insight.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
     val isPastFirstPage by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 2 }
+    }
+
+    // ── 顶栏折叠状态：滚过 80dp 后压缩顶栏 ──
+    val isCollapsed by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 80
+        }
     }
 
     var currentFilter by remember { mutableStateOf(RecordFilter.ALL) }
@@ -137,13 +161,35 @@ fun MainScreen(
             RecordFilter.GAS -> records.filter { it.isGasRecorded }
             RecordFilter.WITH_NOTES -> records.filter { !it.note.isNullOrBlank() }
         }
-        if (filterStartDate != null || filterEndDate != null) {
+        var result = if (filterStartDate != null || filterEndDate != null) {
             typeFiltered.filter { record ->
                 val date = record.timestamp.toLocalDate()
                 (filterStartDate == null || !date.isBefore(filterStartDate)) &&
                 (filterEndDate == null || !date.isAfter(filterEndDate))
             }
         } else typeFiltered
+        // ── 智能去重：隐藏连续重复读数的记录（始终开启） ──
+        // 稳定排序确保同时间戳的重复记录相邻（最新在前）
+        val stableSorted = result.sortedWith(
+            compareByDescending<MeterRecord> { it.timestamp }.thenByDescending { it.id })
+        result = stableSorted.filterIndexed { index, record ->
+            val prev = stableSorted.getOrNull(index - 1) ?: return@filterIndexed true
+            if (record.timestamp != prev.timestamp) return@filterIndexed true  // 不同时间不比较
+            val hasAnyReading = record.isElectricRecorded || record.isWaterRecorded || record.isGasRecorded
+            if (!hasAnyReading) return@filterIndexed true
+            val eps = 0.1
+            // 双方都null=相同，单方null=不同，都有值=容差比较
+            fun same(d1: Double?, d2: Double?): Boolean = when {
+                d1 == null && d2 == null -> true
+                d1 == null || d2 == null -> false
+                else -> kotlin.math.abs(d1 - d2) < eps
+            }
+            val elecSame = same(record.electricTotal, prev.electricTotal)
+            val waterSame = same(record.waterTotal, prev.waterTotal)
+            val gasSame = same(record.gasTotal, prev.gasTotal)
+            !(elecSame && waterSame && gasSame)
+        }
+        result
     }
 
     // 滚动到底部附近时加载更多
@@ -159,6 +205,8 @@ fun MainScreen(
     }
 
     var showAddSheet by remember { mutableStateOf(false) }
+    val pendingOcrData by viewModel.pendingOcrData.collectAsState()
+    LaunchedEffect(pendingOcrData) { if (pendingOcrData != null) showAddSheet = true }
     var showBatchImport by remember { mutableStateOf(false) }
     var pendingBatchImport by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<com.example.energyflow.data.MeterRecord?>(null) }
@@ -224,6 +272,7 @@ fun MainScreen(
         AnomalyWarningDialog(
             warnings = anomalyWarnings,
             onConfirm = { viewModel.confirmSaveWithAnomaly() },
+            onMeterReplacement = { viewModel.forceSaveAsMeterReplacement() },
             onDismiss = { viewModel.cancelSaveWithAnomaly() }
         )
     }
@@ -270,7 +319,8 @@ fun MainScreen(
                     FABColumn(
                         scale = fabScale,
                         onBatchImport = { showBatchImport = true },
-                        onAddRecord = { showAddSheet = true }
+                        onAddRecord = { showAddSheet = true },
+                        onScan = onScan
                     )
                 }
             }
@@ -283,7 +333,23 @@ fun MainScreen(
                 .padding(paddingValues)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                HomeTopBar(recordCount = records.size)
+                HomeTopBar(recordCount = records.size, collapsed = isCollapsed)
+
+                AnimatedVisibility(
+                    visible = insight != null && !isCollapsed,
+                    enter = expandVertically(tween(250)) + fadeIn(tween(250)),
+                    exit = shrinkVertically(tween(250)) + fadeOut(tween(250))
+                ) {
+                    insight?.let { InsightPill(insight = it) }
+                }
+
+                AnimatedVisibility(
+                    visible = records.isNotEmpty() && tierProgress.currentMonthKwh > 0 && !isCollapsed,
+                    enter = expandVertically(tween(250)) + fadeIn(tween(250)),
+                    exit = shrinkVertically(tween(250)) + fadeOut(tween(250))
+                ) {
+                    TierProgressBar(tierProgress = tierProgress)
+                }
 
                 if (records.isNotEmpty()) {
                     val counts = remember(records, filterCounts) {
@@ -312,8 +378,26 @@ fun MainScreen(
                 }
 
                 if (records.isEmpty() && !showAddSheet && !showBatchImport) {
-                    HomeEmptyState(onAddClick = { showAddSheet = true })
+                    HomeEmptyState(
+                        onAddClick = { showAddSheet = true },
+                        onBatchImport = { showBatchImport = true }
+                    )
                 } else {
+                    // ── 预计算 delta，避免 itemsIndexed 内每帧重算 ──
+                    val recordDeltas = remember(filteredRecords) {
+                        filteredRecords.mapIndexed { index, record ->
+                            val prev = filteredRecords.getOrNull(index + 1)
+                            Triple(
+                                if (prev != null && record.electricTotal != null && prev.electricTotal != null)
+                                    record.electricTotal!! - prev.electricTotal!! else null,
+                                if (prev != null && record.waterTotal != null && prev.waterTotal != null)
+                                    record.waterTotal!! - prev.waterTotal!! else null,
+                                if (prev != null && record.gasTotal != null && prev.gasTotal != null)
+                                    record.gasTotal!! - prev.gasTotal!! else null
+                            )
+                        }
+                    }
+
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
@@ -325,27 +409,41 @@ fun MainScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         itemsIndexed(items = filteredRecords, key = { _, r -> r.id }) { index, record ->
-                            // 较前一次记录的消耗量（records 按时间倒序，前一次在后）
-                            val prevRecord = filteredRecords.getOrNull(index + 1)
-                            val elecDelta = if (prevRecord != null && record.electricTotal != null && prevRecord.electricTotal != null)
-                                record.electricTotal!! - prevRecord.electricTotal!! else null
-                            val waterDelta = if (prevRecord != null && record.waterTotal != null && prevRecord.waterTotal != null)
-                                record.waterTotal!! - prevRecord.waterTotal!! else null
-                            val gasDelta = if (prevRecord != null && record.gasTotal != null && prevRecord.gasTotal != null)
-                                record.gasTotal!! - prevRecord.gasTotal!! else null
+                            val (elecDelta, waterDelta, gasDelta) = recordDeltas[index]
+
+                            // 记住 lambda，避免每帧创建新实例阻碍跳过重组
+                            val onDeleteRecord = remember(record.id) {
+                                { deleted: MeterRecord ->
+                                    viewModel.softDelete(deleted)
+                                    coroutineScope.launch {
+                                        val result = snackbarHostState.showSnackbar(
+                                            message = "已删除 · 点击撤销",
+                                            actionLabel = "撤销",
+                                            withDismissAction = true
+                                        )
+                                        if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
+                                        else viewModel.finalizeDelete()
+                                    }
+                                    Unit
+                                }
+                            }
+                            val onEditRecord = remember(record.id) {
+                                { r: MeterRecord -> editingRecord = r }
+                            }
+
                             TimelineItem(
                                 record = record,
                                 electricDelta = elecDelta,
                                 waterDelta = waterDelta,
                                 gasDelta = gasDelta,
-                                onDelete = { viewModel.deleteRecord(it) },
-                                onEdit = { editingRecord = it },
+                                onDelete = onDeleteRecord,
+                                onEdit = onEditRecord,
                                 modifier = Modifier.animateItem(
-                                    fadeInSpec = tween(300),
-                                    fadeOutSpec = tween(300),
+                                    fadeInSpec = tween(200),
+                                    fadeOutSpec = tween(150),
                                     placementSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessLow
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
                                     )
                                 )
                             )
@@ -358,7 +456,10 @@ fun MainScreen(
             if (showAddSheet) {
                 val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
                 ModalBottomSheet(
-                    onDismissRequest = { showAddSheet = false },
+                    onDismissRequest = {
+                        showAddSheet = false
+                        viewModel.clearPendingOcr()
+                    },
                     sheetState = sheetState,
                     containerColor = DarkBackground,
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -368,12 +469,22 @@ fun MainScreen(
                         initiallyShowPeakValley = peakValleyExpanded,
                         onPeakValleyExpandedChange = viewModel::setPeakValleyExpanded,
                         latestRecord = records.firstOrNull(),
+                        prefillRecord = pendingOcrData,
+                        quickTags = commonTags.ifEmpty { listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机") },
                         onSave = { recordData ->
                             viewModel.validateAndSave(recordData)
-                            showAddSheet = false
-                            coroutineScope.launch { listState.animateScrollToItem(0) }
+                            viewModel.clearPendingOcr()
+                            // 延迟关闭，让 Room 刷盘 + Compose 重组先完成，避免关闭动画卡顿
+                            coroutineScope.launch {
+                                delay(180)
+                                showAddSheet = false
+                                listState.animateScrollToItem(0)
+                            }
                         },
-                        onDismiss = { showAddSheet = false }
+                        onDismiss = {
+                            showAddSheet = false
+                            viewModel.clearPendingOcr()
+                        }
                     )
                 }
             }
@@ -412,6 +523,7 @@ fun MainScreen(
                 ) {
                     EditRecordSheet(
                         record = record,
+                        quickTags = commonTags.ifEmpty { listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机") },
                         onSave = { recordData ->
                             viewModel.updateRecord(record, recordData)
                             editingRecord = null
@@ -485,6 +597,7 @@ fun MainScreen(
 private fun AnomalyWarningDialog(
     warnings: List<AnomalyWarning>,
     onConfirm: () -> Unit,
+    onMeterReplacement: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -533,8 +646,13 @@ private fun AnomalyWarningDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("确认保存", color = ElectricColor, fontFamily = MonoFontFamily)
+            Column {
+                TextButton(onClick = onConfirm) {
+                    Text("确认保存", color = ElectricColor, fontFamily = MonoFontFamily)
+                }
+                TextButton(onClick = onMeterReplacement) {
+                    Text("标记为换表", color = WarningNeon, fontFamily = MonoFontFamily, fontSize = 13.sp)
+                }
             }
         },
         dismissButton = {
@@ -553,7 +671,8 @@ private fun AnomalyWarningDialog(
 private fun FABColumn(
     scale: Float,
     onBatchImport: () -> Unit,
-    onAddRecord: () -> Unit
+    onAddRecord: () -> Unit,
+    onScan: (() -> Unit)? = null
 ) {
     Column(
         horizontalAlignment = Alignment.End,
@@ -569,19 +688,20 @@ private fun FABColumn(
             )
         }
 
-        // 主 FAB — 添加记录
-        MainFAB(onClick = onAddRecord) {
+        // 主 FAB — 添加记录（长按扫表）
+        MainFAB(onClick = onAddRecord, onLongClick = onScan) {
             Icon(
                 Icons.Default.Add,
                 contentDescription = "添加记录",
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(32.dp)
             )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MainFAB(onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun MainFAB(onClick: () -> Unit, onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val btnScale by animateFloatAsState(
@@ -593,17 +713,25 @@ private fun MainFAB(onClick: () -> Unit, content: @Composable () -> Unit) {
         label = "mainFabScale"
     )
 
-    FloatingActionButton(
-        onClick = onClick,
-        modifier = Modifier.scale(btnScale),
-        containerColor = ElectricColor,
-        contentColor = DarkBackground,
-        shape = CircleShape,
-        interactionSource = interactionSource,
-        elevation = FloatingActionButtonDefaults.elevation(
-            defaultElevation = if (isPressed) 2.dp else 6.dp,
-            pressedElevation = 2.dp
-        )
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .scale(btnScale)
+            .shadow(
+                elevation = if (isPressed) 2.dp else 6.dp,
+                shape = CircleShape,
+                ambientColor = ElectricColor.copy(alpha = 0.3f),
+                spotColor = ElectricColor.copy(alpha = 0.3f)
+            )
+            .clip(CircleShape)
+            .background(ElectricColor)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
         content()
     }
@@ -727,7 +855,6 @@ private fun DateFilterBar(
     onClear: () -> Unit
 ) {
     val hasFilter = startDate != null || endDate != null
-    val fmt = java.time.format.DateTimeFormatter.ofPattern("MM.dd")
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -745,7 +872,7 @@ private fun DateFilterBar(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("📅", fontSize = 11.sp)
                 Text(
-                    if (startDate != null) "从 ${startDate!!.format(fmt)}" else "开始日期",
+                    if (startDate != null) "从 ${startDate!!.format(DateDotFmt)}" else "开始日期",
                     color = if (startDate != null) ElectricColor else TextSecondary,
                     fontFamily = MonoFontFamily,
                     fontSize = 11.sp,
@@ -764,7 +891,7 @@ private fun DateFilterBar(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("📅", fontSize = 11.sp)
                 Text(
-                    if (endDate != null) "到 ${endDate!!.format(fmt)}" else "结束日期",
+                    if (endDate != null) "到 ${endDate!!.format(DateDotFmt)}" else "结束日期",
                     color = if (endDate != null) ElectricColor else TextSecondary,
                     fontFamily = MonoFontFamily,
                     fontSize = 11.sp,
@@ -799,7 +926,24 @@ private fun DateFilterBar(
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-private fun HomeTopBar(recordCount: Int) {
+private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
+    val topPadding by animateDpAsState(
+        targetValue = if (collapsed) 8.dp else 18.dp,
+        animationSpec = tween(250), label = "topPad"
+    )
+    val bottomPadding by animateDpAsState(
+        targetValue = if (collapsed) 4.dp else 10.dp,
+        animationSpec = tween(250), label = "botPad"
+    )
+    val iconSize by animateDpAsState(
+        targetValue = if (collapsed) 24.dp else 32.dp,
+        animationSpec = tween(250), label = "iconSize"
+    )
+    val titleSize by animateFloatAsState(
+        targetValue = if (collapsed) 16f else 24f,
+        animationSpec = tween(250), label = "titleSize"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -813,75 +957,90 @@ private fun HomeTopBar(recordCount: Int) {
                     )
                 )
             )
-            .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 10.dp)
+            .padding(start = 20.dp, end = 20.dp, top = topPadding, bottom = bottomPadding)
     ) {
-        Column {
-            // 标题行
+        if (collapsed) {
+            // ── 折叠态：单行紧凑图标+标题 ──
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 图标徽标
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(iconSize)
+                        .clip(RoundedCornerShape(6.dp))
                         .background(ElectricColor.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.Bolt,
-                        contentDescription = null,
-                        tint = ElectricColor,
-                        modifier = Modifier.size(18.dp)
+                        Icons.Default.Bolt, contentDescription = null,
+                        tint = ElectricColor, modifier = Modifier.size(iconSize * 0.55f)
                     )
                 }
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "能耗手记",
-                    style = MaterialTheme.typography.headlineMedium,
+                    "Energy Flow",
                     color = TextPrimary,
                     fontFamily = MonoFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 24.sp
+                    fontSize = titleSize.sp
                 )
+                Spacer(modifier = Modifier.weight(1f))
+                Text("$recordCount", color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 11.sp)
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // 统计行
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // 记录计数 pill
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(ElectricColor.copy(alpha = 0.08f))
-                        .border(1.dp, ElectricColor.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "$recordCount",
-                            color = ElectricColor,
-                            fontFamily = MonoFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            "条记录",
-                            color = TextTertiary,
-                            fontFamily = MonoFontFamily,
-                            fontSize = 11.sp
+        } else {
+            // ── 展开态：图标+大标题+统计行 ──
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(iconSize)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ElectricColor.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Bolt, contentDescription = null,
+                            tint = ElectricColor, modifier = Modifier.size(iconSize * 0.55f)
                         )
                     }
-                }
-
-                if (recordCount == 0) {
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        "添加第一条能耗数据",
-                        color = TextTertiary,
+                        "Energy Flow",
+                        color = TextPrimary,
                         fontFamily = MonoFontFamily,
-                        fontSize = 12.sp
+                        fontWeight = FontWeight.Bold,
+                        fontSize = titleSize.sp
                     )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(ElectricColor.copy(alpha = 0.08f))
+                            .border(1.dp, ElectricColor.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "$recordCount",
+                                color = ElectricColor, fontFamily = MonoFontFamily,
+                                fontWeight = FontWeight.Bold, fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "条记录",
+                                color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 11.sp
+                            )
+                        }
+                    }
+                    if (recordCount == 0) {
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            "添加第一条能耗数据",
+                            color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 12.sp
+                        )
+                    }
                 }
             }
         }
@@ -893,7 +1052,7 @@ private fun HomeTopBar(recordCount: Int) {
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-private fun HomeEmptyState(onAddClick: () -> Unit) {
+private fun HomeEmptyState(onAddClick: () -> Unit, onBatchImport: () -> Unit = {}) {
     val infiniteTransition = rememberInfiniteTransition(label = "breathe")
     val breatheScale by infiniteTransition.animateFloat(
         initialValue = 0.95f,
@@ -970,6 +1129,294 @@ private fun HomeEmptyState(onAddClick: () -> Unit) {
                 fontFamily = MonoFontFamily,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 快捷操作 Chip
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickActionChip(
+                    icon = "⚡",
+                    label = "输入电表",
+                    onClick = onAddClick
+                )
+                QuickActionChip(
+                    icon = "📋",
+                    label = "批量导入",
+                    onClick = onBatchImport
+                )
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 阶梯电价水位线进度条 + 环比
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun TierProgressBar(tierProgress: MainViewModel.TierProgress) {
+    val barColor = when (tierProgress.tierColor) {
+        MainViewModel.TierLevel.Tier3 -> ErrorNeon
+        MainViewModel.TierLevel.Tier2 -> WarningNeon
+        MainViewModel.TierLevel.Tier1 -> ElectricColor
+    }
+    val tier1Ratio = (tierProgress.tier1Limit / tierProgress.tier2Limit).toFloat()
+    val animatedProgress by animateFloatAsState(
+        targetValue = tierProgress.progress.coerceAtMost(1f),
+        animationSpec = tween(800),
+        label = "tier_progress"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp)
+    ) {
+        // 标题行 + 环比
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "本月阶梯",
+                    color = TextTertiary,
+                    fontFamily = MonoFontFamily,
+                    fontSize = 11.sp
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    "${String.format("%.0f", tierProgress.currentMonthKwh)} 度",
+                    color = barColor,
+                    fontFamily = MonoFontFamily,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // 环比变化
+            tierProgress.momChange?.let { change ->
+                val isUp = change > 0
+                val arrow = if (isUp) "↑" else "↓"
+                val color = if (isUp) ErrorNeon else SuccessGreen
+                Text(
+                    "$arrow ${String.format("%.0f", kotlin.math.abs(change))}% 较上月",
+                    color = color,
+                    fontFamily = MonoFontFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // 进度条
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(DarkSurface)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(animatedProgress)
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            when (tierProgress.tierColor) {
+                                MainViewModel.TierLevel.Tier3 -> listOf(ErrorNeon, ErrorNeon.copy(alpha = 0.6f))
+                                MainViewModel.TierLevel.Tier2 -> listOf(WarningNeon, WarningNeon.copy(alpha = 0.6f))
+                                MainViewModel.TierLevel.Tier1 -> listOf(ElectricColor, ElectricColor.copy(alpha = 0.6f))
+                            }
+                        )
+                    )
+            )
+            // 一档水位线标记
+            if (tier1Ratio < 1f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(tier1Ratio)
+                        .height(6.dp)
+                        .drawBehind {
+                            drawLine(
+                                Color.White.copy(alpha = 0.3f),
+                                Offset(size.width - 1, 0f),
+                                Offset(size.width - 1, size.height),
+                                strokeWidth = 2f
+                            )
+                        }
+                )
+            }
+        }
+
+        // 档位标注
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "一档 ≤${tierProgress.tier1Limit.toInt()}",
+                color = TextTertiary,
+                fontFamily = MonoFontFamily,
+                fontSize = 9.sp
+            )
+            Text(
+                "二档 ${tierProgress.tier1Limit.toInt()}-${tierProgress.tier2Limit.toInt()}",
+                color = TextTertiary,
+                fontFamily = MonoFontFamily,
+                fontSize = 9.sp
+            )
+            Text(
+                "三档 >${tierProgress.tier2Limit.toInt()}",
+                color = TextTertiary,
+                fontFamily = MonoFontFamily,
+                fontSize = 9.sp
+            )
+        }
+
+        // 接近阈值提示
+        val remaining = tierProgress.tier2Limit - tierProgress.currentMonthKwh
+        if (remaining > 0 && remaining < 30) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                "⚠ 距二档电价仅剩 ${String.format("%.0f", remaining)} 度",
+                color = WarningNeon,
+                fontFamily = MonoFontFamily,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 空状态快捷操作 Chip
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun QuickActionChip(
+    icon: String,
+    label: String,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "quickChip"
+    )
+
+    Box(
+        modifier = Modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(20.dp))
+            .background(ElectricColor.copy(alpha = 0.08f))
+            .border(1.dp, ElectricColor.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(icon, fontSize = 14.sp)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                label,
+                color = ElectricColor,
+                fontFamily = MonoFontFamily,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 主动洞察胶囊 (AI Insight Pill)
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun InsightPill(insight: com.example.energyflow.data.InsightGenerator.Insight) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val bgColor = when (insight.level) {
+        com.example.energyflow.data.InsightGenerator.Insight.Level.CRITICAL -> ErrorNeon.copy(alpha = 0.08f)
+        com.example.energyflow.data.InsightGenerator.Insight.Level.WARNING -> WarningNeon.copy(alpha = 0.08f)
+        com.example.energyflow.data.InsightGenerator.Insight.Level.INFO -> ElectricColor.copy(alpha = 0.06f)
+    }
+    val borderColor = when (insight.level) {
+        com.example.energyflow.data.InsightGenerator.Insight.Level.CRITICAL -> ErrorNeon.copy(alpha = 0.2f)
+        com.example.energyflow.data.InsightGenerator.Insight.Level.WARNING -> WarningNeon.copy(alpha = 0.2f)
+        com.example.energyflow.data.InsightGenerator.Insight.Level.INFO -> ElectricColor.copy(alpha = 0.15f)
+    }
+    val textColor = when (insight.level) {
+        com.example.energyflow.data.InsightGenerator.Insight.Level.CRITICAL -> ErrorNeon
+        com.example.energyflow.data.InsightGenerator.Insight.Level.WARNING -> WarningNeon
+        com.example.energyflow.data.InsightGenerator.Insight.Level.INFO -> ElectricColor
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(bgColor)
+            .border(1.dp, borderColor, RoundedCornerShape(14.dp))
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(insight.emoji, fontSize = 14.sp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                insight.title,
+                color = textColor,
+                fontFamily = MonoFontFamily,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                if (expanded) "收起" else "详情",
+                color = TextTertiary,
+                fontFamily = MonoFontFamily,
+                fontSize = 10.sp
+            )
+        }
+
+        AnimatedVisibility(visible = expanded) {
+            Column(modifier = Modifier.padding(top = 6.dp)) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    insight.detail,
+                    color = TextSecondary,
+                    fontFamily = MonoFontFamily,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+
+        if (!expanded) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                insight.detail,
+                color = TextSecondary.copy(alpha = 0.6f),
+                fontFamily = MonoFontFamily,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }
     }

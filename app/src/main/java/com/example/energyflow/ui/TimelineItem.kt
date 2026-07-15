@@ -76,9 +76,14 @@ import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
+import com.example.energyflow.ui.theme.TextTertiary
 import com.example.energyflow.ui.theme.WaterColor
 import com.example.energyflow.ui.utils.Formatters
 import java.time.format.DateTimeFormatter
+
+// ── 缓存 DateTimeFormatter，避免每次组合重新编译正则 ──
+private val DateDotFmt = DateTimeFormatter.ofPattern("MM.dd")
+private val TimeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -129,76 +134,54 @@ fun TimelineItem(
                 SwipeToDismissBoxValue.EndToStart -> {
                     showDeleteDialog = true
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    false // 弹回，不实际消除
+                    false // 弹回，不消除
                 }
                 else -> false
             }
         }
     )
 
-    // 删除确认弹窗
+    // ── 删除确认弹窗 ──
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
+            containerColor = DarkCard,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
             title = {
-                Text(
-                    "确认删除",
-                    color = TextPrimary,
-                    fontFamily = MonoFontFamily,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("确认删除", color = TextPrimary, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column {
                     Text(
-                        record.timestamp.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm")),
-                        color = TextSecondary,
-                        fontFamily = MonoFontFamily,
+                        record.timestamp.format(DateDotFmt) + " " + record.timestamp.format(TimeFmt),
+                        color = TextSecondary, fontFamily = MonoFontFamily,
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     if (record.isElectricRecorded && record.electricTotal != null) {
-                        Text(
-                            "电量 ${Formatters.formatElectric(record.electricTotal)} 度",
-                            color = ElectricColor,
-                            fontFamily = MonoFontFamily
-                        )
+                        Text("电量 ${Formatters.formatElectric(record.electricTotal)} 度", color = ElectricColor, fontFamily = MonoFontFamily)
                     }
                     if (record.isWaterRecorded && record.waterTotal != null) {
-                        Text(
-                            "水表 ${Formatters.formatWater(record.waterTotal)} 吨",
-                            color = WaterColor,
-                            fontFamily = MonoFontFamily
-                        )
+                        Text("水表 ${Formatters.formatWater(record.waterTotal)} 吨", color = WaterColor, fontFamily = MonoFontFamily)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "此操作无法撤销",
-                        color = ErrorNeon,
-                        fontFamily = MonoFontFamily,
-                        fontSize = 12.sp
-                    )
+                    Text("删除后可通过下方「撤销」按钮恢复", color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 12.sp)
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteDialog = false
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onDelete?.invoke(record)
-                    }
-                ) {
+                TextButton({
+                    showDeleteDialog = false
+                    onDelete?.invoke(record)
+                }) {
                     Text("删除", color = ErrorNeon, fontFamily = MonoFontFamily)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
+                TextButton({ showDeleteDialog = false }) {
                     Text("取消", color = TextSecondary, fontFamily = MonoFontFamily)
                 }
-            },
-            containerColor = DarkCard,
-            titleContentColor = TextPrimary,
-            textContentColor = TextSecondary
+            }
         )
     }
 
@@ -314,7 +297,7 @@ fun TimelineItem(
                         modifier = Modifier.width(52.dp)
                     ) {
                         Text(
-                            text = record.timestamp.format(DateTimeFormatter.ofPattern("MM.dd")),
+                            text = record.timestamp.format(DateDotFmt),
                             style = MaterialTheme.typography.titleMedium,
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold,
@@ -347,7 +330,7 @@ fun TimelineItem(
                         )
 
                         Text(
-                            text = record.timestamp.format(DateTimeFormatter.ofPattern("HH:mm")),
+                            text = record.timestamp.format(TimeFmt),
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary,
                             fontFamily = MonoFontFamily
@@ -504,7 +487,10 @@ fun TimelineItem(
                                 icon = Icons.Default.Delete,
                                 label = "删除",
                                 color = ErrorNeon,
-                                onClick = { showDeleteDialog = true }
+                                onClick = {
+                                    showActions = false
+                                    showDeleteDialog = true
+                                }
                             )
                         }
                     }

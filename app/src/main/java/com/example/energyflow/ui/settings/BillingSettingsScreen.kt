@@ -1,6 +1,10 @@
 package com.example.energyflow.ui.settings
 
 import android.content.Context
+import android.content.ContentValues
+import android.content.Intent
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -67,6 +71,7 @@ import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.NeonYellow
+import com.example.energyflow.ui.theme.SuccessGreen
 import com.example.energyflow.ui.theme.WarningNeon
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
@@ -91,23 +96,62 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain")
-    ) { uri ->
-        uri?.let {
-            scope.launch {
-                try {
-                    val text = viewModel.exportRecordsToText()
-                    withContext(Dispatchers.IO) {
-                        context.contentResolver.openOutputStream(it)?.use { os ->
-                            os.write(text.toByteArray(Charsets.UTF_8))
+    /** 导出文本到 Downloads（公共可访问）并同时存一份到 app Documents */
+    fun exportToMediaStore(fileName: String, text: String, mimeType: String, toastLabel: String) {
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val resolver = context.contentResolver
+                    // 1. 先删除 Downloads 中同名文件，确保覆盖
+                    val existingUri = resolver.query(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        arrayOf(MediaStore.Downloads._ID),
+                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
+                        arrayOf(fileName), null
+                    )
+                    existingUri?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val id = cursor.getLong(0)
+                            val uri = MediaStore.Downloads.EXTERNAL_CONTENT_URI.buildUpon()
+                                .appendPath(id.toString()).build()
+                            resolver.delete(uri, null, null)
                         }
                     }
-                    toast(context, "导出成功")
-                } catch (e: Exception) {
-                    toast(context, "导出失败: ${e.message}")
+                    // 2. 写入 Downloads
+                    val values = ContentValues().apply {
+                        put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                        put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                        put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    }
+                    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    uri?.let {
+                        resolver.openOutputStream(it)?.use { os -> os.write(text.toByteArray(Charsets.UTF_8)) }
+                    }
+                    // 3. 也存一份到 app 内部
+                    val appDir = java.io.File(
+                        context.getExternalFilesDir(null), "Documents"
+                    )
+                    appDir.mkdirs()
+                    java.io.File(appDir, fileName).writeText(text, Charsets.UTF_8)
                 }
+                toast(context, "已导出到 Downloads/$fileName")
+            } catch (e: Exception) {
+                toast(context, "导出失败: ${e.message}")
             }
+        }
+    }
+
+    fun exportToFile() {
+        scope.launch {
+            val text = viewModel.exportRecordsToText()
+            exportToMediaStore("EnergyFlow_Backup.txt", text, "text/plain", "数据备份")
+        }
+    }
+
+    fun exportRulesToFile() {
+        scope.launch {
+            val json = viewModel.exportRulesToJson()
+            exportToMediaStore("EnergyFlow_Rules.json", json, "application/json", "规则模板")
         }
     }
 
@@ -127,6 +171,26 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                         return@launch
                     }
                     val msg = viewModel.importRecordsFromText(text)
+                    toast(context, msg)
+                } catch (e: Exception) {
+                    toast(context, "导入失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    val rulesImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                try {
+                    val json = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(it)?.use { input ->
+                            BufferedReader(InputStreamReader(input, Charsets.UTF_8)).readText()
+                        } ?: ""
+                    }
+                    val msg = viewModel.importRulesFromJson(json)
                     toast(context, msg)
                 } catch (e: Exception) {
                     toast(context, "导入失败: ${e.message}")
@@ -289,7 +353,28 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                 }
             }
             if (deepSeekApiKey.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(8.dp))
+        DataActionButton(
+            icon = Icons.Default.Cloud,
+            label = "分享月度账单",
+            desc = "生成本月能耗账单并分享至微信/邮件",
+            color = NeonYellow,
+            onClick = {
+                scope.launch {
+                    val report = viewModel.generateShareReport()
+                    if (report != null) {
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, report)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "分享月度账单"))
+                    } else {
+                        toast(context, "暂无足够数据生成账单")
+                    }
+                }
+            }
+        )
+        Spacer(Modifier.height(16.dp))
                 TextButton(
                     onClick = {
                         viewModel.saveDeepSeekApiKey("")
@@ -328,9 +413,9 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         DataActionButton(
             icon = Icons.Default.FileDownload,
             label = "导出数据到文件",
-            desc = "将所有记录导出为 .txt 格式，可重新导入",
+            desc = "覆盖导出至 Downloads/EnergyFlow_Backup.txt",
             color = ElectricColor,
-            onClick = { exportLauncher.launch("EnergyFlow_数据备份.txt") }
+            onClick = { exportToFile() }
         )
         Spacer(Modifier.height(8.dp))
         DataActionButton(
@@ -339,6 +424,24 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
             desc = "选择之前导出的 .txt 文件恢复数据",
             color = NeonBlue,
             onClick = { importLauncher.launch(arrayOf("text/plain", "*/*")) }
+        )
+        Spacer(Modifier.height(16.dp))
+
+        // ── 计费规则模板 JSON ──
+        DataActionButton(
+            icon = Icons.Default.FileDownload,
+            label = "导出规则模板 (JSON)",
+            desc = "覆盖导出至 Downloads/EnergyFlow_Rules.json",
+            color = SuccessGreen,
+            onClick = { exportRulesToFile() }
+        )
+        Spacer(Modifier.height(8.dp))
+        DataActionButton(
+            icon = Icons.Default.FileUpload,
+            label = "导入规则模板 (JSON)",
+            desc = "选择 .json 模板一键切换计费规则",
+            color = SuccessGreen,
+            onClick = { rulesImportLauncher.launch(arrayOf("application/json", "*/*")) }
         )
         Spacer(Modifier.height(8.dp))
         DataActionButton(

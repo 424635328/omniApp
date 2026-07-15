@@ -1,6 +1,7 @@
 package com.example.energyflow.data
 
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.Serializable
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,6 +19,7 @@ import javax.inject.Singleton
  *   - 第二档 200-270 吨/年 → 4.32 元/吨（月均 22.5 吨）
  *   - 第三档 >270 吨/年 → 7.02 元/吨
  */
+@Serializable
 data class BillingRules(
     // ── 电价（分时） ──
     val peakPrice: Double = 0.5583,

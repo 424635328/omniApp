@@ -2,6 +2,7 @@ package com.example.energyflow.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.energyflow.data.BillReportGenerator
 import com.example.energyflow.data.BatchInsertResult
 import com.example.energyflow.data.BillingRules
 import com.example.energyflow.data.MeterRecord
@@ -11,13 +12,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import javax.inject.Inject
 import java.util.Locale
 
 @HiltViewModel
 class BillingSettingsViewModel @Inject constructor(
     private val userPreferences: UserPreferences,
-    private val repository: MeterRepository
+    private val repository: MeterRepository,
+    private val costEngine: com.example.energyflow.data.CostEngine
 ) : ViewModel() {
     val billingRulesFlow: Flow<BillingRules> = userPreferences.billingRules
     val deepSeekApiKeyFlow: Flow<String> = userPreferences.deepSeekApiKey
@@ -72,9 +76,37 @@ class BillingSettingsViewModel @Inject constructor(
         repository.deleteAll()
     }
 
+    // ── 计费规则模板 JSON 导入/导出 ─────────────────────────
+
+    suspend fun exportRulesToJson(): String {
+        val rules = billingRulesFlow.first()
+        return Json { prettyPrint = true }.encodeToString(rules)
+    }
+
+    suspend fun importRulesFromJson(json: String): String {
+        return try {
+            val rules = Json { ignoreUnknownKeys = true }.decodeFromString<BillingRules>(json)
+            userPreferences.setBillingRules(rules)
+            "计费规则模板导入成功"
+        } catch (e: Exception) {
+            "导入失败: ${e.message}"
+        }
+    }
+
+    suspend fun generateShareReport(): String? {
+        val electricRecords = repository.getElectricRecords().first()
+        val waterRecords = repository.getWaterRecords().first()
+        val gasRecords = repository.getAllRecords().first().filter { it.isGasRecorded }
+        val notesRecords = repository.getRecordsWithNotes().first()
+        val data = BillReportGenerator.buildReportData(
+            electricRecords, waterRecords, gasRecords, notesRecords, costEngine
+        ) ?: return null
+        return BillReportGenerator.generateTextReport(data)
+    }
+
     suspend fun exportRecordsToText(): String {
         val records = repository.getAllRecords().first()
-        return buildExportText(records)
+        return buildExportText(deduplicateRecords(records))
     }
 
     suspend fun importRecordsFromText(text: String): String {
@@ -88,12 +120,37 @@ class BillingSettingsViewModel @Inject constructor(
         }
     }
 
+    /** 去掉连续读数相同或同时间戳重复的记录（保留最新一条） */
+    private fun deduplicateRecords(records: List<MeterRecord>): List<MeterRecord> {
+        val sorted = records.sortedWith(compareByDescending<MeterRecord> { it.timestamp }.thenByDescending { it.id })
+        return sorted.filterIndexed { index, record ->
+            val prev = sorted.getOrNull(index - 1) ?: return@filterIndexed true
+            val hasAnyReading = record.isElectricRecorded || record.isWaterRecorded || record.isGasRecorded
+            if (!hasAnyReading) return@filterIndexed true
+            // 同时间戳 + 同读数 → 去重
+            if (record.timestamp == prev.timestamp) return@filterIndexed false
+            val eps = 0.1
+            fun same(d1: Double?, d2: Double?): Boolean = when {
+                d1 == null && d2 == null -> true
+                d1 == null || d2 == null -> false
+                else -> kotlin.math.abs(d1 - d2) < eps
+            }
+            val elecSame = same(record.electricTotal, prev.electricTotal)
+            val waterSame = same(record.waterTotal, prev.waterTotal)
+            val gasSame = same(record.gasTotal, prev.gasTotal)
+            !(elecSame && waterSame && gasSame)
+        }
+    }
+
     private fun buildExportText(records: List<MeterRecord>): String {
         if (records.isEmpty()) return ""
 
         val sb = StringBuilder()
         val sorted = records.sortedBy { it.timestamp }
         var lastDateStr = ""
+        var totalPeak = 0.0
+        var totalValley = 0.0
+        var totalKwh = 0.0
 
         for (record in sorted) {
             val ts = record.timestamp
@@ -108,15 +165,26 @@ class BillingSettingsViewModel @Inject constructor(
             val hasElec = record.isElectricRecorded && record.electricTotal != null
             val hasWater = record.isWaterRecorded && record.waterTotal != null
             val hasNote = !record.note.isNullOrBlank()
+            val isRecharge = hasNote && record.note.startsWith("充值")
 
             when {
+                isRecharge -> {
+                    sb.appendLine("# ${record.note}")
+                    continue
+                }
                 hasElec && hasWater -> {
                     sb.append("$timeStr ${formatExport(record.electricTotal!!)} ${formatExport(record.waterTotal!!)}")
+                    if (record.electricPeak != null && record.electricValley != null) {
+                        sb.append(" 峰${formatExport(record.electricPeak)} 谷${formatExport(record.electricValley)}")
+                    }
                     if (hasNote) sb.append(" ${record.note}")
                     sb.appendLine()
                 }
                 hasElec -> {
                     sb.append("$timeStr ${formatExport(record.electricTotal!!)}")
+                    if (record.electricPeak != null && record.electricValley != null) {
+                        sb.append(" 峰${formatExport(record.electricPeak)} 谷${formatExport(record.electricValley)}")
+                    }
                     if (hasNote) sb.append(" ${record.note}")
                     sb.appendLine()
                 }
@@ -126,6 +194,25 @@ class BillingSettingsViewModel @Inject constructor(
                 hasNote -> {
                     sb.appendLine("$timeStr ${record.note}")
                 }
+            }
+
+            // 累计峰谷统计
+            record.electricPeak?.let { totalPeak += it }
+            record.electricValley?.let { totalValley += it }
+            record.electricTotal?.let { totalKwh += it }
+        }
+
+        // ── 峰谷统计摘要 ──
+        if (totalPeak > 0 || totalValley > 0) {
+            sb.appendLine()
+            sb.appendLine("# ═══════════════════════════")
+            sb.appendLine("# 峰谷电统计 (所有记录累计)")
+            sb.appendLine("# ═══════════════════════════")
+            sb.appendLine("# 总峰电: ${formatExport(totalPeak)} 度")
+            sb.appendLine("# 总谷电: ${formatExport(totalValley)} 度")
+            if (totalPeak + totalValley > 0) {
+                val peakRatio = totalPeak / (totalPeak + totalValley) * 100.0
+                sb.appendLine("# 峰谷比: ${"%.1f".format(peakRatio)}% 峰 / ${"%.1f".format(100.0 - peakRatio)}% 谷")
             }
         }
 

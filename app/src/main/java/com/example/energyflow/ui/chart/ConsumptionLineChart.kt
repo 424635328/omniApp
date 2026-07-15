@@ -5,11 +5,15 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -24,6 +28,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.energyflow.ui.theme.DarkCard
@@ -66,6 +71,81 @@ fun ConsumptionLineChart(
     val gridColor = DarkCard.copy(alpha = 0.6f)
     val labelColor = TextSecondary
 
+    // ── 缓存 Paint 对象，避免每帧重建 ──
+    val density = LocalDensity.current
+    val gridTextPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.RIGHT
+        }
+    }
+    val dateTextPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+    }
+    val tooltipDatePaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.LEFT
+        }
+    }
+    val tooltipValuePaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.RIGHT
+            isFakeBoldText = true
+        }
+    }
+    val tempMaxPaint = remember {
+        android.graphics.Paint().apply {
+            color = Color(0xFFFF8800).toArgb()
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.LEFT
+            isFakeBoldText = true
+        }
+    }
+    val tempMinPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.LEFT
+            isFakeBoldText = true
+        }
+    }
+    val sepLabelPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.LEFT
+        }
+    }
+    val dashEffect = remember { PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f) }
+
+    // 动态属性在 LaunchedEffect 中更新（density / 颜色变化时）
+    LaunchedEffect(density, labelColor) {
+        val s10 = with(density) { 10.sp.toPx() }
+        val s13 = with(density) { 13.sp.toPx() }
+        val s11 = with(density) { 11.sp.toPx() }
+        val s9 = with(density) { 9.sp.toPx() }
+        gridTextPaint.color = labelColor.copy(alpha = 0.7f).toArgb()
+        gridTextPaint.textSize = s10
+        dateTextPaint.color = labelColor.copy(alpha = 0.6f).toArgb()
+        dateTextPaint.textSize = s9
+        tooltipDatePaint.color = TextSecondary.toArgb()
+        tooltipDatePaint.textSize = s10
+        tooltipValuePaint.color = Color.White.toArgb()
+        tooltipValuePaint.textSize = s13
+        tempMaxPaint.textSize = s11
+        tempMinPaint.color = NeonBlue.toArgb()
+        tempMinPaint.textSize = s11
+        sepLabelPaint.color = TextSecondary.copy(alpha = 0.4f).toArgb()
+        sepLabelPaint.textSize = s11
+    }
+
+    // ── 双指缩放 + 平移状态 ──
+    var scale by remember(consumptions) { mutableFloatStateOf(1f) }
+    var panX by remember(consumptions) { mutableFloatStateOf(0f) }
+
     Canvas(
         modifier = modifier
             .fillMaxWidth()
@@ -81,7 +161,27 @@ fun ConsumptionLineChart(
                     onSelectedIndexChange(if (selectedIndex == index) -1 else index)
                 }
             }
+            .pointerInput(consumptions) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    val newScale = (scale * zoom).coerceIn(1f, 4f)
+                    val maxPan = if (newScale > 1f)
+                        (size.width * (newScale - 1f) * 0.5f) else 0f
+                    scale = newScale
+                    panX = (panX + pan.x).coerceIn(-maxPan, maxPan)
+                    // 重置时清除选中
+                    onSelectedIndexChange(-1)
+                }
+            }
     ) {
+        // ── 应用缩放 + 平移变换 ──
+        val canvasWidth = size.width
+        val canvasHeight = size.height
+        val transformOffsetX = panX + (canvasWidth * (scale - 1f) / 2f)
+
+        drawContext.canvas.nativeCanvas.save()
+        drawContext.canvas.nativeCanvas.translate(transformOffsetX, 0f)
+        drawContext.canvas.nativeCanvas.scale(scale, 1f, canvasWidth / 2f, 0f)
+
         val paddingLeft = 54f
         val paddingBottom = 44f
         val paddingTop = 12f
@@ -112,15 +212,7 @@ fun ConsumptionLineChart(
         val visibleCount = (pointCount * progress).toInt().coerceIn(1, pointCount)
 
         // ── 网格线 ──
-        val gridTextPaint = android.graphics.Paint().apply {
-            color = labelColor.copy(alpha = 0.7f).toArgb()
-            textSize = 10.sp.toPx()
-            isAntiAlias = true
-            textAlign = android.graphics.Paint.Align.RIGHT
-        }
-
-        // 水平虚线
-        val dashEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+        // 使用已缓存的 gridTextPaint 和 dashEffect
         val lineCount = 4
         for (i in 0..lineCount) {
             val y = paddingTop + chartHeight * i / lineCount
@@ -279,47 +371,12 @@ fun ConsumptionLineChart(
             val tooltipPadH = 16f  // 水平内边距
             val tooltipRadius = 10f
 
-            // ── 测量文字宽度 ──
-            val datePaint = android.graphics.Paint().apply {
-                color = TextSecondary.toArgb()
-                textSize = 10.sp.toPx()
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.LEFT
-            }
-            val valuePaint = android.graphics.Paint().apply {
-                color = Color.White.toArgb()
-                textSize = 13.sp.toPx()
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.RIGHT
-                isFakeBoldText = true
-            }
-            val tempMaxPaint = android.graphics.Paint().apply {
-                color = Color(0xFFFF8800).toArgb()  // 暖橙
-                textSize = 11.sp.toPx()
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.LEFT
-                isFakeBoldText = true
-            }
-            val tempMinPaint = android.graphics.Paint().apply {
-                color = NeonBlue.toArgb()  // 冰蓝
-                textSize = 11.sp.toPx()
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.LEFT
-                isFakeBoldText = true
-            }
-            val sepLabelPaint = android.graphics.Paint().apply {
-                color = TextSecondary.copy(alpha = 0.4f).toArgb()
-                textSize = 11.sp.toPx()
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.LEFT
-            }
-
-            // 第一行：日期（左） + 数值（右）
+            // ── 测量文字宽度（使用已缓存的 Paint） ──
             val dateStr = selDate
-            val valueStr = selLabel  // e.g. "5.2 度" or "¥3.12"
-            val dw = datePaint.measureText(dateStr)
-            val vw = valuePaint.measureText(valueStr)
-            val row1W = dw + vw + 12f  // date + gap + value
+            val valueStr = selLabel
+            val dw = tooltipDatePaint.measureText(dateStr)
+            val vw = tooltipValuePaint.measureText(valueStr)
+            val row1W = dw + vw + 12f
 
             // 第二行：温度
             val wHighStr = if (hasWeather) "H${selWeather!!.tempMax.toInt()}°" else ""
@@ -362,10 +419,10 @@ fun ConsumptionLineChart(
             // ── 第一行：日期 | 数值 ──
             val row1Y = baseY + 20f
             drawContext.canvas.nativeCanvas.drawText(
-                dateStr, left + tooltipPadH, row1Y, datePaint
+                dateStr, left + tooltipPadH, row1Y, tooltipDatePaint
             )
             drawContext.canvas.nativeCanvas.drawText(
-                valueStr, right - tooltipPadH, row1Y, valuePaint
+                valueStr, right - tooltipPadH, row1Y, tooltipValuePaint
             )
 
             // ── 分隔线 ──
@@ -401,13 +458,7 @@ fun ConsumptionLineChart(
             drawPath(triPath, chartColor.copy(alpha = 0.3f), style = Stroke(1f))
         }
 
-        // ── 日期标签 ──
-        val dateTextPaint = android.graphics.Paint().apply {
-            color = labelColor.copy(alpha = 0.6f).toArgb()
-            textSize = 9.sp.toPx()
-            isAntiAlias = true
-            textAlign = android.graphics.Paint.Align.CENTER
-        }
+        // ── 日期标签（使用已缓存的 dateTextPaint） ──
         val dateStep = maxOf(1, pointCount / 6)
         consumptions.forEachIndexed { index, consumption ->
             if (index % dateStep == 0 || index == pointCount - 1) {
@@ -419,6 +470,9 @@ fun ConsumptionLineChart(
                 )
             }
         }
+
+        // ── 恢复画布变换 ──
+        drawContext.canvas.nativeCanvas.restore()
     }
 }
 

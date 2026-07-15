@@ -1,7 +1,10 @@
 package com.example.energyflow.data
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.LocalDateTime
 import javax.inject.Inject
@@ -43,9 +46,30 @@ class MeterRepository @Inject constructor(
 
     fun getWaterRecords(): Flow<List<MeterRecord>> = meterRecordDao.getWaterRecords()
 
+    fun getGasRecords(): Flow<List<MeterRecord>> = meterRecordDao.getGasRecords()
+
     fun getRecordsWithNotes(): Flow<List<MeterRecord>> = meterRecordDao.getRecordsWithNotes()
 
     fun getRecordCount(): Flow<Int> = meterRecordDao.getRecordCount()
+
+    /**
+     * 从历史备注中提取高频标签，按出现次数降序返回。
+     * 标签以空格分隔，支持 emoji 前缀。
+     */
+    fun getCommonTags(limit: Int = 8): Flow<List<String>> {
+        return meterRecordDao.getRecordsWithNotes().map { records ->
+            val tagCounts = mutableMapOf<String, Int>()
+            records.forEach { record ->
+                record.note?.split(Regex("\\s+"))?.filter { it.isNotBlank() }?.forEach { token ->
+                    tagCounts[token] = (tagCounts[token] ?: 0) + 1
+                }
+            }
+            tagCounts.entries
+                .sortedByDescending { it.value }
+                .take(limit)
+                .map { it.key }
+        }
+    }
 
     /**
      * 智能插入，带自适应阈值 + 单调递增 + 突增校验。
@@ -75,8 +99,15 @@ class MeterRepository @Inject constructor(
         }
 
         val record = result.toMeterRecord()
+
+        // ── 检查是否已存在相同记录 ──
+        val existing = meterRecordDao.getAllRecords().first()
+        if (existing.any { it.timestamp == record.timestamp && areValuesSame(it, record) }) {
+            return InsertResult.Error("该记录已存在，跳过重复导入")
+        }
+
         val id = meterRecordDao.insert(record)
-        classifier.reLearn() // 异步重学阈值
+        reLearnDebounced()
         return InsertResult.Success(id, record)
     }
 
@@ -111,18 +142,48 @@ class MeterRepository @Inject constructor(
         val interpolatedRecords = interpolateGaps(successRecords)
         successRecords.addAll(interpolatedRecords)
 
-        // 按时间排序后插入
-        val allRecords = (successRecords).sortedBy { it.timestamp }
-        allRecords.forEach { meterRecordDao.insert(it) }
+        // 按时间排序
+        val allRecords = successRecords.sortedBy { it.timestamp }
+
+        // ── 批内去重（先过滤同批次内的重复） ──
+        var prev: MeterRecord? = null
+        val dedupedWithinBatch = allRecords.filter { record ->
+            val keep = prev == null || prev!!.timestamp != record.timestamp || !areValuesSame(prev!!, record)
+            if (keep) prev = record
+            keep
+        }
+
+        // ── 过滤已存在的重复记录 ──
+        val existing = meterRecordDao.getAllRecords().first()
+        val uniqueCandidates = dedupedWithinBatch.filter { candidate ->
+            existing.none { e ->
+                e.timestamp == candidate.timestamp && areValuesSame(e, candidate)
+            }
+        }
+
+        uniqueCandidates.forEach { meterRecordDao.insert(it) }
 
         if (successRecords.isNotEmpty()) {
-            classifier.reLearn()
+            reLearnDebounced()
         }
 
         return when {
-            parseErrors.isEmpty() -> BatchInsertResult.Success(successRecords.size)
-            else -> BatchInsertResult.PartialSuccess(successRecords.size, parseErrors)
+            parseErrors.isEmpty() -> BatchInsertResult.Success(uniqueCandidates.size)
+            else -> BatchInsertResult.PartialSuccess(uniqueCandidates.size, parseErrors)
         }
+    }
+
+    /** 判断两条记录的实际读数是否相同（容差 0.1，null对null=相同，null对值=不同） */
+    private fun areValuesSame(a: MeterRecord, b: MeterRecord): Boolean {
+        val eps = 0.1
+        fun same(d1: Double?, d2: Double?): Boolean = when {
+            d1 == null && d2 == null -> true
+            d1 == null || d2 == null -> false
+            else -> kotlin.math.abs(d1 - d2) < eps
+        }
+        return same(a.electricTotal, b.electricTotal) &&
+               same(a.waterTotal, b.waterTotal) &&
+               same(a.gasTotal, b.gasTotal)
     }
 
     /**
@@ -260,13 +321,29 @@ class MeterRepository @Inject constructor(
 
     suspend fun insert(record: MeterRecord): Long {
         val id = meterRecordDao.insert(record)
-        classifier.reLearn()
+        reLearnDebounced()
         return id
     }
 
     suspend fun update(record: MeterRecord) {
         meterRecordDao.update(record)
-        classifier.reLearn()
+        reLearnDebounced()
+    }
+
+    private var lastReLearnTime = 0L
+    private val reLearnMinIntervalMs = 300_000L // 5分钟节流
+    private var reLearnJob: kotlinx.coroutines.Job? = null
+
+    private suspend fun reLearnDebounced() {
+        val now = System.currentTimeMillis()
+        if (now - lastReLearnTime < reLearnMinIntervalMs) return
+        lastReLearnTime = now
+        reLearnJob?.cancel()
+        reLearnJob = kotlinx.coroutines.coroutineScope {
+            launch(Dispatchers.IO) {
+                classifier.reLearn()
+            }
+        }
     }
 
     suspend fun delete(record: MeterRecord) = meterRecordDao.delete(record)

@@ -41,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -65,6 +66,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.data.WeatherInterpolator
+import com.example.energyflow.data.DailyWeather
+import com.example.energyflow.data.EventImpact
+import com.example.energyflow.data.MonthPrediction
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
@@ -83,6 +87,7 @@ import com.example.energyflow.ui.theme.NeonYellow
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.theme.TextTertiary
+import com.example.energyflow.ui.theme.WarningNeon
 import com.example.energyflow.ui.theme.WaterColor
 import com.example.energyflow.ui.utils.Formatters
 import java.time.LocalDate
@@ -91,6 +96,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // ═══════════════════════════════════════════════════════════════
@@ -117,7 +123,25 @@ fun ChartScreen(
     var showWeather by remember { mutableStateOf(false) }
     var selectedChartIndex by remember { mutableIntStateOf(-1) }
 
-    val isEmpty = chartData == ChartData.Empty
+    // ── 延迟渲染重面板，避免首帧 JIT 编译卡顿 ──
+    var renderHeavy by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(50)
+        renderHeavy = true
+    }
+
+    // ── 电/水/气 表类型 ──
+    val selectedMeterType by viewModel.selectedMeterType.collectAsState()
+    val waterChartData by viewModel.waterChartData.collectAsState()
+    val waterBillResult by viewModel.waterBillResult.collectAsState()
+    val waterPrediction by viewModel.waterPrediction.collectAsState()
+    val gasChartData by viewModel.gasChartData.collectAsState()
+
+    val isEmpty = when (selectedMeterType) {
+        ChartViewModel.MeterType.ELECTRIC -> chartData == ChartData.Empty
+        ChartViewModel.MeterType.WATER -> waterChartData == ChartData.Empty
+        ChartViewModel.MeterType.GAS -> gasChartData == ChartData.Empty
+    }
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -137,108 +161,43 @@ fun ChartScreen(
 
             TimeRangeSelector(timeRange) { viewModel.setTimeRange(it) }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // ── kWh / ¥ 切换 ──
-            ToggleCostButton(showCost = showCost, onToggle = { viewModel.toggleShowCost() })
+            // ── 电/水/气 表类型切换 ──
+            MeterTypeSelector(selectedMeterType) { viewModel.setMeterType(it) }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── kWh / ¥ 切换（仅电表） ──
+            if (selectedMeterType == ChartViewModel.MeterType.ELECTRIC) {
+                ToggleCostButton(showCost = showCost, onToggle = { viewModel.toggleShowCost() })
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             if (isEmpty) {
-                EmptyChartPlaceholder()
+                EmptyChartPlaceholder(selectedMeterType)
             } else {
-                // ═══ Hero KPIs ═══
                 AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 4 }
+                    visible = renderHeavy,
+                    enter = fadeIn(tween(100))
                 ) {
                     Column {
-                        HeroKpiRow(chartData, billResult, showCost)
-                        Spacer(modifier = Modifier.height(20.dp))
-                    }
-                }
-
-                // ═══ 折线图 ═══
-                if (chartData.dailyConsumptions.isNotEmpty()) {
-                    val consumptionDates = remember(chartData, weatherData) {
-                        chartData.dailyConsumptions.map { it.date.toLocalDate() }
-                    }
-                    val interpolatedWeather = remember(chartData, weatherData) {
-                        WeatherInterpolator.interpolate(weatherData, consumptionDates)
-                    }
-
-                    ChartSection(
-                        showCost = showCost,
-                        showWeather = showWeather && weatherData.isNotEmpty(),
-                        weatherLoading = weatherLoading,
-                        weatherError = weatherError,
-                        onToggleWeather = {
-                            showWeather = !showWeather
-                            if (weatherData.isEmpty() || weatherError != null) {
-                                viewModel.refreshWeather()
-                            }
-                        },
-                        chartContent = {
-                            Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
-                                ConsumptionLineChart(
-                                    consumptions = chartData.dailyConsumptions,
-                                    showCost = showCost,
-                                    selectedIndex = selectedChartIndex,
-                                    onSelectedIndexChange = { selectedChartIndex = it },
-                                    weatherByDate = interpolatedWeather
-                                )
-                                if (showWeather && weatherData.isNotEmpty()) {
-                                    val fullWeather = consumptionDates.mapNotNull { d ->
-                                        interpolatedWeather[d]?.let {
-                                            com.example.energyflow.data.DailyWeather(
-                                                date = d,
-                                                tempMax = it.tempMax,
-                                                tempMin = it.tempMin
-                                            )
-                                        }
-                                    }
-                                    WeatherOverlay(
-                                        weatherData = fullWeather,
-                                        consumptionDates = consumptionDates,
-                                        modifier = Modifier.matchParentSize()
-                                    )
-                                }
-                            }
+                        when (selectedMeterType) {
+                            ChartViewModel.MeterType.ELECTRIC -> ElectricAnalysisSection(
+                                chartData, billResult, showCost, prediction, predictedBill,
+                                predictionTracking, eventImpacts, aiAnalysis, aiLoading,
+                                weatherData, weatherLoading, weatherError, showWeather,
+                                { showWeather = it }, selectedChartIndex, { selectedChartIndex = it },
+                                viewModel
+                            )
+                            ChartViewModel.MeterType.WATER -> WaterAnalysisSection(
+                                waterChartData, waterBillResult, waterPrediction, showCost
+                            )
+                            ChartViewModel.MeterType.GAS -> GasAnalysisSection(
+                                gasChartData
+                            )
                         }
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
-
-                // ═══ 账单明细 ═══
-                if (billResult != null) {
-                    BillBreakdownPanel(billResult!!)
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
-
-                // ═══ 月度预测 ═══
-                if (prediction != null) {
-                    PredictionPanel(prediction!!, predictedBill, predictionTracking, showCost, billResult)
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
-
-                // ═══ 事件耗能分析 + AI ═══
-                if (eventImpacts.isNotEmpty()) {
-                    EventImpactPanel(
-                        impacts = eventImpacts,
-                        aiAnalysis = aiAnalysis,
-                        aiLoading = aiLoading,
-                        onTriggerAi = { viewModel.triggerAiAnalysis() },
-                        showCost = showCost,
-                        billResult = billResult
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
-
-                // ═══ 事件标注 ═══
-                if (chartData.annotations.isNotEmpty()) {
-                    AnnotationsList(chartData.annotations)
-                    Spacer(modifier = Modifier.height(24.dp))
+                    }
                 }
             }
         }
@@ -1759,7 +1718,12 @@ private fun AnnotationsList(annotations: List<MeterRecord>) {
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-private fun EmptyChartPlaceholder() {
+private fun EmptyChartPlaceholder(meterType: ChartViewModel.MeterType = ChartViewModel.MeterType.ELECTRIC) {
+    val (icon, label, color) = when (meterType) {
+        ChartViewModel.MeterType.ELECTRIC -> Triple(Icons.Default.Bolt, "电表", ElectricColor)
+        ChartViewModel.MeterType.WATER -> Triple(Icons.Default.WaterDrop, "水表", WaterColor)
+        ChartViewModel.MeterType.GAS -> Triple(Icons.Default.Bolt, "燃气", GasColor)
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1776,24 +1740,24 @@ private fun EmptyChartPlaceholder() {
                     .background(
                         Brush.radialGradient(
                             listOf(
-                                ElectricColor.copy(alpha = 0.15f),
-                                ElectricColor.copy(alpha = 0.05f),
+                                color.copy(alpha = 0.15f),
+                                color.copy(alpha = 0.05f),
                                 DarkCard
                             )
                         )
                     )
-                    .border(1.dp, ElectricColor.copy(alpha = 0.12f), CircleShape),
+                    .border(1.dp, color.copy(alpha = 0.12f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Default.Bolt, null,
-                    tint = ElectricColor.copy(alpha = 0.6f),
+                    icon, null,
+                    tint = color.copy(alpha = 0.6f),
                     modifier = Modifier.size(32.dp)
                 )
             }
             Spacer(modifier = Modifier.height(20.dp))
             Text(
-                "暂无能耗数据",
+                "暂无${label}数据",
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 fontFamily = MonoFontFamily,
@@ -1802,7 +1766,7 @@ private fun EmptyChartPlaceholder() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "在「记录」页面添加电表读数后，\n分析图表将在此展示",
+                "在「记录」页面添加${label}读数后，\n分析图表将在此展示",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextTertiary,
                 fontFamily = MonoFontFamily,
@@ -1928,5 +1892,639 @@ private fun BoldAwareLine(
         }
     }
     Text(annotated, lineHeight = 18.sp, modifier = modifier)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 电/水/气 表类型选择器
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun MeterTypeSelector(
+    selected: ChartViewModel.MeterType,
+    onSelect: (ChartViewModel.MeterType) -> Unit
+) {
+    val types = listOf(
+        ChartViewModel.MeterType.ELECTRIC to ("⚡ 电表" to ElectricColor),
+        ChartViewModel.MeterType.WATER to ("💧 水表" to WaterColor),
+        ChartViewModel.MeterType.GAS to ("🔥 燃气" to GasColor)
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(DarkCard)
+            .border(1.dp, ElectricColor.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .padding(4.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            types.forEach { (type, pair) ->
+                val (label, color) = pair
+                val isSelected = type == selected
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isSelected) color.copy(alpha = 0.15f) else Color.Transparent)
+                        .then(
+                            if (isSelected) Modifier.border(
+                                1.dp, color.copy(alpha = 0.25f), RoundedCornerShape(10.dp)
+                            ) else Modifier
+                        )
+                        .clickable { onSelect(type) }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) color else TextSecondary,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 电表分析面板
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun ElectricAnalysisSection(
+    chartData: ChartData,
+    billResult: BillData?,
+    showCost: Boolean,
+    prediction: MonthPrediction?,
+    predictedBill: PredictedBill?,
+    predictionTracking: PredictionTracking?,
+    eventImpacts: List<EventImpact>,
+    aiAnalysis: String?,
+    aiLoading: Boolean,
+    weatherData: List<DailyWeather>,
+    weatherLoading: Boolean,
+    weatherError: String?,
+    showWeather: Boolean,
+    onShowWeatherChange: (Boolean) -> Unit,
+    selectedChartIndex: Int,
+    onSelectedIndexChange: (Int) -> Unit,
+    viewModel: ChartViewModel
+) {
+    // ═══ Hero KPIs ═══
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 4 }
+    ) {
+        Column {
+            HeroKpiRow(chartData, billResult, showCost)
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+
+    // ═══ 折线图 ═══
+    if (chartData.dailyConsumptions.isNotEmpty()) {
+        val consumptionDates = remember(chartData, weatherData) {
+            chartData.dailyConsumptions.map { it.date.toLocalDate() }
+        }
+        val interpolatedWeather = remember(chartData, weatherData) {
+            WeatherInterpolator.interpolate(weatherData, consumptionDates)
+        }
+
+        ChartSection(
+            showCost = showCost,
+            showWeather = showWeather && weatherData.isNotEmpty(),
+            weatherLoading = weatherLoading,
+            weatherError = weatherError,
+            onToggleWeather = {
+                onShowWeatherChange(!showWeather)
+                if (weatherData.isEmpty() || weatherError != null) {
+                    viewModel.refreshWeather()
+                }
+            },
+            chartContent = {
+                Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
+                    ConsumptionLineChart(
+                        consumptions = chartData.dailyConsumptions,
+                        showCost = showCost,
+                        selectedIndex = selectedChartIndex,
+                        onSelectedIndexChange = onSelectedIndexChange,
+                        weatherByDate = interpolatedWeather
+                    )
+                    if (showWeather && weatherData.isNotEmpty()) {
+                        val fullWeather = remember(consumptionDates, interpolatedWeather) {
+                            consumptionDates.mapNotNull { d ->
+                                interpolatedWeather[d]?.let {
+                                    DailyWeather(date = d, tempMax = it.tempMax, tempMin = it.tempMin)
+                                }
+                            }
+                        }
+                        WeatherOverlay(
+                            weatherData = fullWeather,
+                            consumptionDates = consumptionDates,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
+                }
+            }
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    // ═══ 账单明细 ═══
+    if (billResult != null) {
+        BillBreakdownPanel(billResult)
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    // ═══ 月度预测 ═══
+    if (prediction != null) {
+        PredictionPanel(prediction, predictedBill, predictionTracking, showCost, billResult)
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    // ═══ 事件耗能分析 + AI ═══
+    if (eventImpacts.isNotEmpty()) {
+        EventImpactPanel(
+            impacts = eventImpacts,
+            aiAnalysis = aiAnalysis,
+            aiLoading = aiLoading,
+            onTriggerAi = { viewModel.triggerAiAnalysis() },
+            showCost = showCost,
+            billResult = billResult
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    // ═══ 事件标注 ═══
+    if (chartData.annotations.isNotEmpty()) {
+        AnnotationsList(chartData.annotations)
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 水表分析面板
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun WaterAnalysisSection(
+    chartData: ChartData,
+    waterBillResult: WaterBillData?,
+    waterPrediction: MonthPrediction?,
+    showCost: Boolean
+) {
+    // ═══ 水表 KPI ═══
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 4 }
+    ) {
+        Column {
+            WaterKpiRow(chartData, waterBillResult, showCost)
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+
+    // ═══ 水表趋势图 ═══
+    if (chartData.dailyConsumptions.isNotEmpty()) {
+        var selectedIndex by remember { mutableIntStateOf(-1) }
+        ChartSection(
+            showCost = showCost,
+            showWeather = false,
+            weatherLoading = false,
+            weatherError = null,
+            onToggleWeather = {},
+            chartContent = {
+                Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
+                    ConsumptionLineChart(
+                        consumptions = chartData.dailyConsumptions,
+                        showCost = showCost,
+                        selectedIndex = selectedIndex,
+                        onSelectedIndexChange = { selectedIndex = it }
+                    )
+                }
+            }
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    // ═══ 水费账单 ═══
+    if (waterBillResult != null) {
+        WaterBillPanel(waterBillResult)
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    // ═══ 月度预测 ═══
+    if (waterPrediction != null) {
+        WaterPredictionPanel(waterPrediction, waterBillResult)
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 气表分析面板
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun GasAnalysisSection(chartData: ChartData) {
+    // ═══ 气表 KPI ═══
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 4 }
+    ) {
+        Column {
+            GasKpiRow(chartData)
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+
+    // ═══ 气表趋势图 ═══
+    if (chartData.dailyConsumptions.isNotEmpty()) {
+        var selectedIndex by remember { mutableIntStateOf(-1) }
+        ChartSection(
+            showCost = false,
+            showWeather = false,
+            weatherLoading = false,
+            weatherError = null,
+            onToggleWeather = {},
+            chartContent = {
+                Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
+                    ConsumptionLineChart(
+                        consumptions = chartData.dailyConsumptions,
+                        showCost = false,
+                        selectedIndex = selectedIndex,
+                        onSelectedIndexChange = { selectedIndex = it }
+                    )
+                }
+            }
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 水表 KPI 行
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun WaterKpiRow(chartData: ChartData, waterBillResult: WaterBillData?, showCost: Boolean) {
+    if (chartData.records.size < 2) return
+
+    val first = chartData.records.first()
+    val last = chartData.records.last()
+    val totalTons = (last.waterTotal ?: 0.0) - (first.waterTotal ?: 0.0)
+    val totalDays = ChronoUnit.DAYS.between(first.timestamp, last.timestamp) + 1
+    val avgDaily = totalTons / totalDays
+
+    val effectiveRate = if (waterBillResult != null && waterBillResult.totalTons > 0)
+        waterBillResult.waterCost / waterBillResult.totalTons else 0.0
+    val totalCost = totalTons * effectiveRate
+    val dailyCost = avgDaily * effectiveRate
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (showCost) {
+            KpiCard(
+                icon = Icons.Filled.SwapHoriz,
+                label = "总水费",
+                value = Formatters.formatDecimal2(totalCost),
+                unit = "¥",
+                accentColor = SuccessGreen,
+                modifier = Modifier.weight(1f)
+            )
+            KpiCard(
+                icon = Icons.AutoMirrored.Filled.TrendingUp,
+                label = "日均水费",
+                value = Formatters.formatDecimal2(dailyCost),
+                unit = "¥/天",
+                accentColor = NeonYellow,
+                modifier = Modifier.weight(1f)
+            )
+            KpiCard(
+                icon = Icons.Default.WaterDrop,
+                label = "总用水",
+                value = Formatters.formatDecimal1(totalTons),
+                unit = "吨",
+                accentColor = WaterColor,
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            KpiCard(
+                icon = Icons.Default.WaterDrop,
+                label = "总用水",
+                value = Formatters.formatDecimal1(totalTons),
+                unit = "吨",
+                accentColor = WaterColor,
+                modifier = Modifier.weight(1f)
+            )
+            KpiCard(
+                icon = Icons.AutoMirrored.Filled.TrendingUp,
+                label = "日均用水",
+                value = Formatters.formatDecimal1(avgDaily),
+                unit = "吨/天",
+                accentColor = NeonYellow,
+                modifier = Modifier.weight(1f)
+            )
+            if (waterBillResult != null) {
+                KpiCard(
+                    icon = Icons.Filled.SwapHoriz,
+                    label = "总水费",
+                    value = Formatters.formatDecimal2(waterBillResult.waterCost),
+                    unit = "¥",
+                    accentColor = SuccessGreen,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 气表 KPI 行
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun GasKpiRow(chartData: ChartData) {
+    if (chartData.records.size < 2) return
+
+    val first = chartData.records.first()
+    val last = chartData.records.last()
+    val totalM3 = (last.gasTotal ?: 0.0) - (first.gasTotal ?: 0.0)
+    val totalDays = ChronoUnit.DAYS.between(first.timestamp, last.timestamp) + 1
+    val avgDaily = totalM3 / totalDays
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        KpiCard(
+            icon = Icons.Default.Bolt,
+            label = "总用气",
+            value = Formatters.formatDecimal1(totalM3),
+            unit = "m³",
+            accentColor = GasColor,
+            modifier = Modifier.weight(1f)
+        )
+        KpiCard(
+            icon = Icons.AutoMirrored.Filled.TrendingUp,
+            label = "日均用气",
+            value = Formatters.formatDecimal1(avgDaily),
+            unit = "m³/天",
+            accentColor = NeonYellow,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 水费账单面板
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun WaterBillPanel(bill: WaterBillData) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(DarkCard)
+            .border(1.dp, WaterColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
+            .padding(18.dp)
+    ) {
+        // 标题
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(4.dp, 16.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(WaterColor)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "水费明细",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontFamily = MonoFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                "${Formatters.formatDecimal1(bill.totalTons)} 吨",
+                color = TextTertiary,
+                fontFamily = MonoFontFamily,
+                fontSize = 12.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 阶梯水价进度
+        val tier1Ratio = (bill.totalTons / bill.tier1Limit).toFloat().coerceAtMost(1f)
+        val isOverTier1 = bill.totalTons > bill.tier1Limit
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(DarkSurface)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(tier1Ratio)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            if (isOverTier1) listOf(ErrorNeon, ErrorNeon.copy(alpha = 0.6f))
+                            else listOf(WaterColor, WaterColor.copy(alpha = 0.6f))
+                        )
+                    )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 档位标注
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("一档 ≤${bill.tier1Limit.toInt()}吨", color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 9.sp)
+            Text("二档 ${bill.tier1Limit.toInt()}-${bill.tier2Limit.toInt()}吨", color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 9.sp)
+            Text("三档 >${bill.tier2Limit.toInt()}吨", color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 9.sp)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 总计
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(WaterColor.copy(alpha = 0.06f))
+                .border(1.dp, WaterColor.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                .padding(14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("合计 ", color = TextSecondary, fontFamily = MonoFontFamily)
+                Text(
+                    "¥${Formatters.formatDecimal2(bill.waterCost)}",
+                    color = WaterColor,
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "(${Formatters.formatDecimal2(bill.waterPrice)}/吨)",
+                    color = TextTertiary,
+                    fontFamily = MonoFontFamily,
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        // 接近阈值提示
+        val remaining = bill.tier1Limit - bill.totalTons
+        if (remaining > 0 && remaining < 3) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "⚠ 距二档水价仅剩 ${Formatters.formatDecimal1(remaining)} 吨",
+                color = WarningNeon,
+                fontFamily = MonoFontFamily,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 水表月度预测面板
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun WaterPredictionPanel(
+    prediction: MonthPrediction,
+    waterBillResult: WaterBillData?
+) {
+    val rate = if (waterBillResult != null && waterBillResult.totalTons > 0)
+        waterBillResult.waterCost / waterBillResult.totalTons else 0.0
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(DarkCard)
+            .border(1.dp, WaterColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
+            .padding(18.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(4.dp, 16.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(WaterColor)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "水表月度预测",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontFamily = MonoFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 月份进度条
+        val totalMonthDays = prediction.daysElapsed + prediction.daysRemaining
+        val elapsedRatio = if (totalMonthDays > 0)
+            prediction.daysElapsed.toFloat() / totalMonthDays.toFloat() else 0f
+
+        val animatedElapsed by animateFloatAsState(
+            targetValue = elapsedRatio,
+            animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+            label = "elapsedRatio"
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(DarkSurface)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(animatedElapsed)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Brush.horizontalGradient(listOf(WaterColor, WaterColor.copy(alpha = 0.6f))))
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 关键数据三列
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PredictionStatCard(
+                label = "已消耗",
+                value = "${Formatters.formatDecimal1(prediction.consumedSoFarKwh)} 吨",
+                accentColor = TextSecondary,
+                modifier = Modifier.weight(1f)
+            )
+            PredictionStatCard(
+                label = "日均",
+                value = "${Formatters.formatDecimal1(prediction.dailyRateKwh)} 吨/天",
+                accentColor = WaterColor,
+                modifier = Modifier.weight(1f)
+            )
+            PredictionStatCard(
+                label = "预计全月",
+                value = "${Formatters.formatDecimal1(prediction.predictedTotalKwh)} 吨",
+                accentColor = NeonYellow,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (rate > 0) {
+            Spacer(modifier = Modifier.height(12.dp))
+            val predictedCost = prediction.predictedTotalKwh * rate
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(WaterColor.copy(alpha = 0.06f))
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text("预计水费 ", color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 13.sp)
+                    Text(
+                        "¥${Formatters.formatDecimal2(predictedCost)}",
+                        color = WaterColor,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+            }
+        }
+    }
 }
 

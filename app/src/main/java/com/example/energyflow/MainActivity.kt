@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import com.example.energyflow.data.ThemeDistColors
 import com.example.energyflow.data.ThemeDistRepository
 import com.example.energyflow.data.UserPreferences
+import com.example.energyflow.ui.OnboardingScreen
 import com.example.energyflow.ui.SplashScreen
 import com.example.energyflow.ui.navigation.AppNavGraph
 import com.example.energyflow.ui.theme.DarkBackground
@@ -66,6 +67,14 @@ class MainActivity : ComponentActivity() {
             }
 
             var showSplash by remember { mutableStateOf(true) }
+            val isOnboardingComplete by userPreferences.isOnboardingComplete.collectAsState(initial = true)
+            var onboardingDismissed by remember { mutableStateOf(false) }
+
+            LaunchedEffect(onboardingDismissed) {
+                if (onboardingDismissed && !isOnboardingComplete) {
+                    userPreferences.completeOnboarding()
+                }
+            }
 
             EnergyFlowTheme(
                 darkTheme = darkTheme,
@@ -85,7 +94,15 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxSize(),
                             color = DarkBackground
                         ) {
-                            AppNavGraph()
+                            if (!isOnboardingComplete && !onboardingDismissed) {
+                                OnboardingScreen(
+                                    onComplete = {
+                                        onboardingDismissed = true
+                                    }
+                                )
+                            } else {
+                                AppNavGraph()
+                            }
                         }
                     }
                 }
