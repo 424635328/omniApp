@@ -30,24 +30,52 @@ object Formatters {
     }
 
     /**
-     * 格式化电量（保留两位小数，补0）
+     * 格式化电量（保留两位小数，补0）— 用于编辑/详情
      */
     fun formatElectric(value: Double?): String {
         return if (value != null) formatDecimal2(value) else "0.00"
     }
 
     /**
-     * 格式化水量（保留两位小数，补0）
+     * 格式化水量（保留两位小数，补0）— 用于编辑/详情
      */
     fun formatWater(value: Double?): String {
         return if (value != null) formatDecimal2(value) else "0.00"
     }
 
     /**
-     * 格式燃气（保留两位小数，补0）
+     * 格式燃气（保留两位小数，补0）— 用于编辑/详情
      */
     fun formatGas(value: Double?): String {
         return if (value != null) formatDecimal2(value) else "0.00"
+    }
+
+    /**
+     * 主页展示用：电量显示为整数，隐藏小数
+     */
+    fun formatElecDisplay(value: Double?): String {
+        return if (value != null) formatInt(value) else "-"
+    }
+
+    /**
+     * 主页展示用：水量显示为整数，隐藏小数
+     */
+    fun formatWaterDisplay(value: Double?): String {
+        return if (value != null) formatInt(value) else "-"
+    }
+
+    /**
+     * 主页展示用：燃气显示为整数，隐藏小数
+     */
+    fun formatGasDisplay(value: Double?): String {
+        return if (value != null) formatInt(value) else "-"
+    }
+
+    /**
+     * 主页展示用：峰谷值显示为整数
+     */
+    fun formatPeakValleyDisplay(value: Double?): String {
+        return if (value != null) formatInt(value) else "-"
     }
 
     /**

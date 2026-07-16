@@ -182,6 +182,8 @@ class MeterRepository @Inject constructor(
             else -> kotlin.math.abs(d1 - d2) < eps
         }
         return same(a.electricTotal, b.electricTotal) &&
+               same(a.electricPeak, b.electricPeak) &&
+               same(a.electricValley, b.electricValley) &&
                same(a.waterTotal, b.waterTotal) &&
                same(a.gasTotal, b.gasTotal)
     }
@@ -394,6 +396,8 @@ private fun ParseResult.Success.toMeterRecord(): MeterRecord {
         electricValley = electricValley,
         isWaterRecorded = isWater,
         waterTotal = waterTotal,
+        isGasRecorded = isGas,
+        gasTotal = gasTotal,
         note = note
     )
 }

@@ -10,7 +10,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.emitAll
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -84,29 +86,55 @@ class UserPreferences @Inject constructor(
      * 计费规则 — 带版本迁移。
      *
      * 首次启动或版本号低于 CURRENT_BILLING_VERSION 时，
-     * 自动重置为南京建邺区 2026 年最新默认值。
+     * 自动重置为南京建邺区 2026 年最新默认值 **并写入 DataStore**，
+     * 确保迁移只触发一次，避免 Compose 重组引发循环。
      */
-    val billingRules: Flow<BillingRules> = dataStore.data.map { prefs ->
-        val savedVersion = prefs[BILLING_VERSION] ?: 0
+    val billingRules: Flow<BillingRules> = flow {
+        val initial = dataStore.data.first()
+        val savedVersion = initial[BILLING_VERSION] ?: 0
+
         if (savedVersion < CURRENT_BILLING_VERSION) {
             Log.i("UserPreferences", "Billing rules migration v$savedVersion → v$CURRENT_BILLING_VERSION — using Nanjing defaults")
-            BillingRules() // 全部使用最新默认值
-        } else {
-            BillingRules(
-                peakPrice = prefs[PEAK_PRICE] ?: 0.5583,
-                valleyPrice = prefs[VALLEY_PRICE] ?: 0.3583,
-                flatPrice = prefs[FLAT_PRICE] ?: 0.5283,
-                electricTier1Limit = prefs[ELEC_TIER1_LIMIT] ?: 230.0,
-                electricTier2Limit = prefs[ELEC_TIER2_LIMIT] ?: 400.0,
-                electricTier2Surcharge = prefs[ELEC_TIER2_SURCHARGE] ?: 0.05,
-                electricTier3Surcharge = prefs[ELEC_TIER3_SURCHARGE] ?: 0.30,
-                waterTier1Limit = prefs[WATER_TIER_1_LIMIT] ?: 16.67,
-                waterTier2Limit = prefs[WATER_TIER_2_LIMIT] ?: 22.5,
-                waterTier1Price = prefs[WATER_PRICE] ?: 3.42,
-                waterTier2Price = prefs[WATER_TIER_2_PRICE] ?: 4.32,
-                waterTier3Price = prefs[WATER_TIER_3_PRICE] ?: 7.02
-            )
+            // ═══ 写入版本号 + 默认值，确保后继不再触发迁移 ═══
+            dataStore.edit {
+                it[BILLING_VERSION] = CURRENT_BILLING_VERSION
+                val defaults = BillingRules()
+                it[PEAK_PRICE] = defaults.peakPrice
+                it[VALLEY_PRICE] = defaults.valleyPrice
+                it[FLAT_PRICE] = defaults.flatPrice
+                it[ELEC_TIER1_LIMIT] = defaults.electricTier1Limit
+                it[ELEC_TIER2_LIMIT] = defaults.electricTier2Limit
+                it[ELEC_TIER2_SURCHARGE] = defaults.electricTier2Surcharge
+                it[ELEC_TIER3_SURCHARGE] = defaults.electricTier3Surcharge
+                it[WATER_TIER_1_LIMIT] = defaults.waterTier1Limit
+                it[WATER_TIER_2_LIMIT] = defaults.waterTier2Limit
+                it[WATER_PRICE] = defaults.waterTier1Price
+                it[WATER_TIER_2_PRICE] = defaults.waterTier2Price
+                it[WATER_TIER_3_PRICE] = defaults.waterTier3Price
+            }
+            emit(BillingRules())
         }
+
+        // 后继变更（含迁移写回后触发的新 emit）统一通过 reactive 订阅
+        emitAll(dataStore.data.map { prefs -> collectBillingRules(prefs) })
+    }
+
+    /** 从 Preferences 读取计费规则（假设版本已是最新） */
+    private fun collectBillingRules(prefs: Preferences): BillingRules {
+        return BillingRules(
+            peakPrice = prefs[PEAK_PRICE] ?: 0.5583,
+            valleyPrice = prefs[VALLEY_PRICE] ?: 0.3583,
+            flatPrice = prefs[FLAT_PRICE] ?: 0.5283,
+            electricTier1Limit = prefs[ELEC_TIER1_LIMIT] ?: 230.0,
+            electricTier2Limit = prefs[ELEC_TIER2_LIMIT] ?: 400.0,
+            electricTier2Surcharge = prefs[ELEC_TIER2_SURCHARGE] ?: 0.05,
+            electricTier3Surcharge = prefs[ELEC_TIER3_SURCHARGE] ?: 0.30,
+            waterTier1Limit = prefs[WATER_TIER_1_LIMIT] ?: 16.67,
+            waterTier2Limit = prefs[WATER_TIER_2_LIMIT] ?: 22.5,
+            waterTier1Price = prefs[WATER_PRICE] ?: 3.42,
+            waterTier2Price = prefs[WATER_TIER_2_PRICE] ?: 4.32,
+            waterTier3Price = prefs[WATER_TIER_3_PRICE] ?: 7.02
+        )
     }
     val peakPrice: Flow<Double> = billingRules.map { it.peakPrice }
     val valleyPrice: Flow<Double> = billingRules.map { it.valleyPrice }

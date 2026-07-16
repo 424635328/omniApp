@@ -17,7 +17,7 @@ class SmartInputParser {
      * @param thresholds 可选的自适应阈值，不传则使用默认值。
      */
     fun parseWithContext(input: String, thresholds: ClassificationThresholds? = null): List<ParseResult> {
-        val lines = input.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val lines = input.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
         val results = mutableListOf<ParseResult>()
         var currentMonth: Int? = null
         var currentDay: Int? = null
@@ -116,8 +116,8 @@ class SmartInputParser {
             val day = match.groupValues[2].toInt()
             val hour = match.groupValues[3].toInt()
             val minute = match.groupValues[4].toInt()
-            if (!isValidDateTime(month, day, hour, minute)) return ContextParseResult.Error("日期或时间无效: $line")
-            val value = match.groupValues[5].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
+            if (!isValidDateTime(month, day, hour, minute)) return@let null  // fall through => 后续 pattern 可能匹配
+            val value = match.groupValues[5].toDoubleOrNull() ?: return@let null
             val note = match.groupValues[6].trim().ifEmpty { null }
             return ContextParseResult.RecordWithDate(month, day, classifyValue(month, day, hour, minute, value, note, thresholds))
         }
@@ -128,7 +128,7 @@ class SmartInputParser {
             val day = match.groupValues[2].toInt()
             val value1 = match.groupValues[3].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
             val value2 = match.groupValues[4].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
-            if (!isValidDate(month, day)) return ContextParseResult.Error("日期无效: $line")
+            if (!isValidDate(month, day)) return@let null  // fall through => 后续 pattern 可能匹配
             val note = match.groupValues[5].trim().ifEmpty { null }
             // 较大的是电表，较小的是水表
             val (electric, water) = if (value1 > value2) value1 to value2 else value2 to value1
@@ -215,6 +215,60 @@ class SmartInputParser {
             )
         }
 
+        // 模式6b: 时间 + 标记值（电/水/气/峰/谷）[备注]
+        // 导出的格式化行：14.30 电12345 水67.89 气12.34 峰678 谷901 备注
+        Regex("""^(\d{1,2})\.(\d{2})\s+((?:[电水气峰谷]\d+\.?\d*\s*)+)(.*)$""").matchEntire(line)?.let { match ->
+            val hour = match.groupValues[1].toInt()
+            val minute = match.groupValues[2].toInt()
+            val valuesPart = match.groupValues[3]
+            val note = match.groupValues[4].trim().ifEmpty { null }
+            if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
+            if (!isValidTime(hour, minute)) return ContextParseResult.Error("时间无效: $line")
+
+            val electric = Regex("""电(\d+\.?\d*)""").find(valuesPart)?.groupValues?.get(1)?.toDoubleOrNull()
+            val water = Regex("""水(\d+\.?\d*)""").find(valuesPart)?.groupValues?.get(1)?.toDoubleOrNull()
+            val gas = Regex("""气(\d+\.?\d*)""").find(valuesPart)?.groupValues?.get(1)?.toDoubleOrNull()
+            val peak = Regex("""峰(\d+\.?\d*)""").find(valuesPart)?.groupValues?.get(1)?.toDoubleOrNull()
+            val valley = Regex("""谷(\d+\.?\d*)""").find(valuesPart)?.groupValues?.get(1)?.toDoubleOrNull()
+
+            return ContextParseResult.Record(
+                ParseResult.Success(
+                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
+                    isElectric = electric != null || peak != null || valley != null,
+                    electricTotal = electric,
+                    electricPeak = peak,
+                    electricValley = valley,
+                    isWater = water != null,
+                    waterTotal = water,
+                    isGas = gas != null,
+                    gasTotal = gas,
+                    note = note?.let { extractPeakValleyFromNote(it).third }
+                )
+            )
+        }
+
+        // 模式7a: 时间 + 电表 + 水表 [备注]
+        // 必须在模式7之前，否则"12.00 16639 880 两家"会被模式7吞成"时间+单值+备注"
+        Regex("""^(\d{1,2})\.(\d{2})\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s*(.*)$""").matchEntire(line)?.let { match ->
+            val hour = match.groupValues[1].toInt()
+            val minute = match.groupValues[2].toInt()
+            val value1 = match.groupValues[3].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
+            val value2 = match.groupValues[4].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
+            if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
+            if (!isValidTime(hour, minute)) return ContextParseResult.Error("时间无效: $line")
+            val note = match.groupValues[5].trim().ifEmpty { null }
+            // 较大的是电表，较小的是水表（与模式4一致）
+            val (electric, water) = if (value1 > value2) value1 to value2 else value2 to value1
+            return ContextParseResult.Record(
+                ParseResult.Success(
+                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
+                    isElectric = true, electricTotal = electric,
+                    isWater = true, waterTotal = water,
+                    note = note
+                )
+            )
+        }
+
         // 模式7: 时间 + 数值
         Regex("""^(\d{1,2})\.(\d{2})\s+(\d+\.?\d*)\s*(.*)$""").matchEntire(line)?.let { match ->
             val hour = match.groupValues[1].toInt()
@@ -254,6 +308,43 @@ class SmartInputParser {
             )
         }
 
+        // 模式9a: 时间 + 水表标记
+        Regex("""^(\d{1,2})\.(\d{2})\s+水(\d+\.?\d*)\s*(.*)$""").matchEntire(line)?.let { match ->
+            val hour = match.groupValues[1].toInt()
+            val minute = match.groupValues[2].toInt()
+            val value = match.groupValues[3].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
+            if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
+            if (!isValidTime(hour, minute)) return ContextParseResult.Error("时间无效: $line")
+            val note = match.groupValues[4].trim().ifEmpty { null }
+            return ContextParseResult.Record(
+                ParseResult.Success(
+                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
+                    isElectric = false, electricTotal = null,
+                    isWater = true, waterTotal = value,
+                    note = note
+                )
+            )
+        }
+
+        // 模式9b: 时间 + 燃气标记
+        Regex("""^(\d{1,2})\.(\d{2})\s+气(\d+\.?\d*)\s*(.*)$""").matchEntire(line)?.let { match ->
+            val hour = match.groupValues[1].toInt()
+            val minute = match.groupValues[2].toInt()
+            val value = match.groupValues[3].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
+            if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
+            if (!isValidTime(hour, minute)) return ContextParseResult.Error("时间无效: $line")
+            val note = match.groupValues[4].trim().ifEmpty { null }
+            return ContextParseResult.Record(
+                ParseResult.Success(
+                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
+                    isElectric = false, electricTotal = null,
+                    isWater = false,
+                    isGas = true, gasTotal = value,
+                    note = note
+                )
+            )
+        }
+
         // 模式10: 水表前缀
         Regex("""^水\s*(\d+\.?\d*)$""").matchEntire(line)?.let { match ->
             val value = match.groupValues[1].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
@@ -263,6 +354,20 @@ class SmartInputParser {
                     timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, 12, 0),
                     isElectric = false, electricTotal = null,
                     isWater = true, waterTotal = value,
+                    note = null
+                )
+            )
+        }
+        // 模式10b: 燃气前缀
+        Regex("""^气\s*(\d+\.?\d*)$""").matchEntire(line)?.let { match ->
+            val value = match.groupValues[1].toDoubleOrNull() ?: return ContextParseResult.Error("数值格式错误")
+            if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
+            return ContextParseResult.Record(
+                ParseResult.Success(
+                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, 12, 0),
+                    isElectric = false, electricTotal = null,
+                    isWater = false,
+                    isGas = true, gasTotal = value,
                     note = null
                 )
             )
@@ -304,6 +409,17 @@ class SmartInputParser {
      *   ≥ totalElectricMin    → 总电表
      *   其他                  → 默认为总电表
      */
+    /** 从备注中提取 峰X 谷X 并返回清洗后文本（移除已提取的峰谷标记） */
+    private fun extractPeakValleyFromNote(note: String?): Triple<Double?, Double?, String?> {
+        if (note == null) return Triple(null, null, null)
+        val peak = Regex("""峰(\d+\.?\d*)""").find(note)?.groupValues?.get(1)?.toDoubleOrNull()
+        val valley = Regex("""谷(\d+\.?\d*)""").find(note)?.groupValues?.get(1)?.toDoubleOrNull()
+        val cleaned = if (peak != null || valley != null)
+            note.replace(Regex("[峰谷]\\d+\\.?\\d*"), "").trim().ifEmpty { null }
+        else note
+        return Triple(peak, valley, cleaned)
+    }
+
     private fun classifyValue(
         month: Int, day: Int, hour: Int, minute: Int,
         value: Double, note: String?,
@@ -312,43 +428,51 @@ class SmartInputParser {
         val t = thresholds ?: ClassificationThresholds.DEFAULTS
         val timestamp = LocalDateTime.of(currentYear, month, day, hour, minute)
 
-        return when {
+        // 先从备注提取峰谷值
+        val (notePeak, noteValley, cleanedNote) = extractPeakValleyFromNote(note)
+
+        val result = when {
             // 水表
             value < t.waterMax -> ParseResult.Success(
                 timestamp = timestamp,
                 isElectric = false, electricTotal = null,
                 isWater = true, waterTotal = value,
-                note = note
+                note = cleanedNote
             )
-            // 峰电
+            // 峰电（同时提取备注中的谷值）
             value in t.peakMin..t.peakMax -> ParseResult.Success(
                 timestamp = timestamp,
                 isElectric = true, electricTotal = value, electricPeak = value,
+                electricValley = noteValley,
                 isWater = false, waterTotal = null,
-                note = note
+                note = cleanedNote
             )
-            // 谷电
+            // 谷电（同时提取备注中的峰值）
             value in t.valleyMin..t.valleyMax -> ParseResult.Success(
                 timestamp = timestamp,
                 isElectric = true, electricTotal = value, electricValley = value,
+                electricPeak = notePeak,
                 isWater = false, waterTotal = null,
-                note = note
+                note = cleanedNote
             )
-            // 总电
+            // 总电（提取备注中的峰谷值）
             value >= t.totalElectricMin -> ParseResult.Success(
                 timestamp = timestamp,
                 isElectric = true, electricTotal = value,
+                electricPeak = notePeak, electricValley = noteValley,
                 isWater = false, waterTotal = null,
-                note = note
+                note = cleanedNote
             )
             // 中间值：默认为总电
             else -> ParseResult.Success(
                 timestamp = timestamp,
                 isElectric = true, electricTotal = value,
+                electricPeak = notePeak, electricValley = noteValley,
                 isWater = false, waterTotal = null,
-                note = note
+                note = cleanedNote
             )
         }
+        return result
     }
 
     /**
@@ -437,6 +561,8 @@ sealed class ParseResult {
         val electricValley: Double? = null,
         val isWater: Boolean,
         val waterTotal: Double? = null,
+        val isGas: Boolean = false,
+        val gasTotal: Double? = null,
         val note: String? = null
     ) : ParseResult()
 

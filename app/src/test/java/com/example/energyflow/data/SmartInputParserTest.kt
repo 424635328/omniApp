@@ -202,6 +202,53 @@ class SmartInputParserTest {
     }
 
     // ════════════════════════════════════════════════════
+    // 模式 7a: 时间 + 电表 + 水表 [备注]（导出→导入往返格式）
+    // ════════════════════════════════════════════════════
+
+    @Test
+    fun `pattern7a - time with electric and water values`() {
+        val input = """
+            7.1
+            12.00 16639 880 两家
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertTrue(success.isElectric)
+        assertTrue(success.isWater)
+        assertEquals(16639.0, success.electricTotal!!, 0.01)
+        assertEquals(880.0, success.waterTotal!!, 0.01)
+        assertEquals("两家", success.note)
+    }
+
+    @Test
+    fun `pattern7a - time with electric and water no note`() {
+        val input = """
+            7.1
+            12.00 16639 880
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertTrue(success.isElectric)
+        assertTrue(success.isWater)
+        assertEquals(16639.0, success.electricTotal!!, 0.01)
+        assertEquals(880.0, success.waterTotal!!, 0.01)
+        assertNull(success.note)
+    }
+
+    @Test
+    fun `pattern7a - reversed order water then electric`() {
+        // 模式7a 同模式4：较大的是电表，较小的是水表
+        val input = """
+            7.1
+            12.00 880 16639
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertEquals(16639.0, success.electricTotal!!, 0.01)
+        assertEquals(880.0, success.waterTotal!!, 0.01)
+    }
+
+    // ════════════════════════════════════════════════════
     // 模式 8: 紧凑时间 + 数值
     // ════════════════════════════════════════════════════
 
@@ -497,5 +544,167 @@ class SmartInputParserTest {
         // 1500 < 2000 → water
         assertTrue(success.isWater)
         assertEquals(1500.0, success.waterTotal!!, 0.01)
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🆕 模式 0: # 注释行跳过
+    // ════════════════════════════════════════════════════
+
+    @Test
+    fun `comment - hash lines are skipped`() {
+        val input = """
+            7.14
+            # 这是注释
+            17.17 16776
+            # ═════ 分隔线 ═════
+            22.30 16789
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val successes = results.filterIsInstance<ParseResult.Success>()
+        assertEquals(2, successes.size)
+        assertEquals(16776.0, successes[0].electricTotal!!, 0.01)
+        assertEquals(16789.0, successes[1].electricTotal!!, 0.01)
+    }
+
+    @Test
+    fun `comment - only hash lines produce no records`() {
+        val results = parser.parseWithContext("# just a comment\n# another", defaults)
+        assertEquals(0, results.size)
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🆕 模式 6b: 时间 + 标记值（电/水/气/峰/谷）
+    // ════════════════════════════════════════════════════
+
+    @Test
+    fun `pattern6b - labeled electric water gas peak valley`() {
+        val input = """
+            7.14
+            14.30 电12345 水67.89 气12.34 峰678 谷901 备注文本
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertTrue(success.isElectric)
+        assertTrue(success.isWater)
+        assertTrue(success.isGas)
+        assertEquals(12345.0, success.electricTotal!!, 0.01)
+        assertEquals(67.89, success.waterTotal!!, 0.01)
+        assertEquals(12.34, success.gasTotal!!, 0.01)
+        assertEquals(678.0, success.electricPeak!!, 0.01)
+        assertEquals(901.0, success.electricValley!!, 0.01)
+        assertEquals("备注文本", success.note)
+    }
+
+    @Test
+    fun `pattern6b - labeled electric only`() {
+        val input = """
+            7.14
+            14.30 电12345
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertTrue(success.isElectric)
+        assertFalse(success.isWater)
+        assertFalse(success.isGas)
+        assertEquals(12345.0, success.electricTotal!!, 0.01)
+    }
+
+    @Test
+    fun `pattern6b - labeled water only with time`() {
+        val input = """
+            7.14
+            14.30 水67.89
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertFalse(success.isElectric)
+        assertTrue(success.isWater)
+        assertFalse(success.isGas)
+        assertEquals(67.89, success.waterTotal!!, 0.01)
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🆕 模式 9a: 时间 + 水表标记
+    // ════════════════════════════════════════════════════
+
+    @Test
+    fun `pattern9a - timed water with label`() {
+        val input = """
+            7.14
+            14.30 水12.34 卫生间
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertTrue(success.isWater)
+        assertEquals(12.34, success.waterTotal!!, 0.01)
+        assertEquals("卫生间", success.note)
+        assertEquals(14, success.timestamp.hour)
+        assertEquals(30, success.timestamp.minute)
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🆕 模式 9b: 时间 + 燃气标记
+    // ════════════════════════════════════════════════════
+
+    @Test
+    fun `pattern9b - timed gas with label`() {
+        val input = """
+            7.14
+            14.30 气5.67
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertTrue(success.isGas)
+        assertFalse(success.isElectric)
+        assertFalse(success.isWater)
+        assertEquals(5.67, success.gasTotal!!, 0.01)
+        assertEquals(14, success.timestamp.hour)
+        assertEquals(30, success.timestamp.minute)
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🆕 模式 10b: 燃气前缀
+    // ════════════════════════════════════════════════════
+
+    @Test
+    fun `pattern10b - gas prefix`() {
+        val input = """
+            7.14
+            气5.67
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertTrue(success.isGas)
+        assertEquals(5.67, success.gasTotal!!, 0.01)
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🆕 峰谷值从备注提取
+    // ════════════════════════════════════════════════════
+
+    @Test
+    fun `peakValleyFromNote - electric total with peak valley in note`() {
+        val input = """
+            7.14
+            17.17 16776 峰678 谷901
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertEquals(16776.0, success.electricTotal!!, 0.01)
+        assertEquals(678.0, success.electricPeak!!, 0.01)
+        assertEquals(901.0, success.electricValley!!, 0.01)
+    }
+
+    @Test
+    fun `peakValleyFromNote - note is cleaned after extraction`() {
+        val input = """
+            7.14
+            14.30 16776 峰678 谷901 今晚读数
+        """.trimIndent()
+        val results = parser.parseWithContext(input, defaults)
+        val success = results.filterIsInstance<ParseResult.Success>().first()
+        assertEquals(678.0, success.electricPeak!!, 0.01)
+        assertEquals(901.0, success.electricValley!!, 0.01)
+        assertEquals("今晚读数", success.note)
     }
 }

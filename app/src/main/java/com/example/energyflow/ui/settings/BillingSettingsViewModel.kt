@@ -98,8 +98,9 @@ class BillingSettingsViewModel @Inject constructor(
         val waterRecords = repository.getWaterRecords().first()
         val gasRecords = repository.getAllRecords().first().filter { it.isGasRecorded }
         val notesRecords = repository.getRecordsWithNotes().first()
+        val rules = billingRulesFlow.first() // 获取用户自定义的计费规则
         val data = BillReportGenerator.buildReportData(
-            electricRecords, waterRecords, gasRecords, notesRecords, costEngine
+            electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules
         ) ?: return null
         return BillReportGenerator.generateTextReport(data)
     }
@@ -127,18 +128,19 @@ class BillingSettingsViewModel @Inject constructor(
             val prev = sorted.getOrNull(index - 1) ?: return@filterIndexed true
             val hasAnyReading = record.isElectricRecorded || record.isWaterRecorded || record.isGasRecorded
             if (!hasAnyReading) return@filterIndexed true
-            // 同时间戳 + 同读数 → 去重
-            if (record.timestamp == prev.timestamp) return@filterIndexed false
             val eps = 0.1
             fun same(d1: Double?, d2: Double?): Boolean = when {
                 d1 == null && d2 == null -> true
                 d1 == null || d2 == null -> false
                 else -> kotlin.math.abs(d1 - d2) < eps
             }
+            // 同读数（含峰谷）才去重；同时间戳但不同表/不同峰谷的记录都要保留
             val elecSame = same(record.electricTotal, prev.electricTotal)
+            val peakSame = same(record.electricPeak, prev.electricPeak)
+            val valleySame = same(record.electricValley, prev.electricValley)
             val waterSame = same(record.waterTotal, prev.waterTotal)
             val gasSame = same(record.gasTotal, prev.gasTotal)
-            !(elecSame && waterSame && gasSame)
+            !(elecSame && peakSame && valleySame && waterSame && gasSame)
         }
     }
 
@@ -146,74 +148,66 @@ class BillingSettingsViewModel @Inject constructor(
         if (records.isEmpty()) return ""
 
         val sb = StringBuilder()
-        val sorted = records.sortedBy { it.timestamp }
-        var lastDateStr = ""
-        var totalPeak = 0.0
-        var totalValley = 0.0
-        var totalKwh = 0.0
+        // 按日期分组后取最新一条记录（作为主时间戳），但合并同一天的所有计量值
+        val grouped = records.groupBy { it.timestamp.toLocalDate() }
+        val sortedDates = grouped.keys.sorted()
 
-        for (record in sorted) {
-            val ts = record.timestamp
-            val dateStr = "${ts.monthValue}.${ts.dayOfMonth}"
-            val timeStr = "${ts.hour.toString().padStart(2, '0')}.${ts.minute.toString().padStart(2, '0')}"
+        for (date in sortedDates) {
+            val dailyRecords = grouped[date]!!
+            val latest = dailyRecords.maxBy { it.timestamp }
 
-            if (dateStr != lastDateStr) {
-                sb.appendLine(dateStr)
-                lastDateStr = dateStr
+            sb.appendLine("${date.monthValue}.${date.dayOfMonth}")
+            val timeStr = "${latest.timestamp.hour.toString().padStart(2, '0')}.${latest.timestamp.minute.toString().padStart(2, '0')}"
+
+            // 合并同一天的电、水、气读数（取各自最新的非空值）
+            val electric = dailyRecords.firstOrNull { it.electricTotal != null }?.electricTotal
+            val peak = dailyRecords.firstOrNull { it.electricPeak != null }?.electricPeak
+            val valley = dailyRecords.firstOrNull { it.electricValley != null }?.electricValley
+            val water = dailyRecords.firstOrNull { it.waterTotal != null }?.waterTotal
+            val gas = dailyRecords.firstOrNull { it.gasTotal != null }?.gasTotal
+            val note = dailyRecords.firstOrNull { !it.note.isNullOrBlank() }?.note
+
+            val parts = mutableListOf<String>()
+            if (electric != null) parts.add("电${formatExport(electric)}")
+            if (water != null) parts.add("水${formatExport(water)}")
+            if (gas != null) parts.add("气${formatExport(gas)}")
+            if (peak != null && valley != null) {
+                parts.add("峰${formatExport(peak)}")
+                parts.add("谷${formatExport(valley)}")
             }
-
-            val hasElec = record.isElectricRecorded && record.electricTotal != null
-            val hasWater = record.isWaterRecorded && record.waterTotal != null
-            val hasNote = !record.note.isNullOrBlank()
-            val isRecharge = hasNote && record.note.startsWith("充值")
-
-            when {
-                isRecharge -> {
-                    sb.appendLine("# ${record.note}")
-                    continue
-                }
-                hasElec && hasWater -> {
-                    sb.append("$timeStr ${formatExport(record.electricTotal!!)} ${formatExport(record.waterTotal!!)}")
-                    if (record.electricPeak != null && record.electricValley != null) {
-                        sb.append(" 峰${formatExport(record.electricPeak)} 谷${formatExport(record.electricValley)}")
-                    }
-                    if (hasNote) sb.append(" ${record.note}")
-                    sb.appendLine()
-                }
-                hasElec -> {
-                    sb.append("$timeStr ${formatExport(record.electricTotal!!)}")
-                    if (record.electricPeak != null && record.electricValley != null) {
-                        sb.append(" 峰${formatExport(record.electricPeak)} 谷${formatExport(record.electricValley)}")
-                    }
-                    if (hasNote) sb.append(" ${record.note}")
-                    sb.appendLine()
-                }
-                hasWater -> {
-                    sb.appendLine("水${formatExport(record.waterTotal!!)}")
-                }
-                hasNote -> {
-                    sb.appendLine("$timeStr ${record.note}")
-                }
-            }
-
-            // 累计峰谷统计
-            record.electricPeak?.let { totalPeak += it }
-            record.electricValley?.let { totalValley += it }
-            record.electricTotal?.let { totalKwh += it }
+            sb.append(timeStr)
+            if (parts.isNotEmpty()) sb.append(" ${parts.joinToString(" ")}")
+            if (!note.isNullOrBlank()) sb.append(" $note")
+            sb.appendLine()
         }
 
-        // ── 峰谷统计摘要 ──
-        if (totalPeak > 0 || totalValley > 0) {
+        // ── 电耗统计（首末差值） ──
+        val allElectric = records
+            .filter { it.isElectricRecorded && it.electricTotal != null }
+            .sortedBy { it.timestamp }
+            .mapNotNull { it.electricTotal }
+
+        val allPeaks = records
+            .filter { it.electricPeak != null }
+            .sortedBy { it.timestamp }
+            .mapNotNull { it.electricPeak }
+
+        val allValleys = records
+            .filter { it.electricValley != null }
+            .sortedBy { it.timestamp }
+            .mapNotNull { it.electricValley }
+
+        val sumLine = mutableListOf<String>()
+        if (allElectric.size >= 2)
+            sumLine.add("总电: ${formatExport(allElectric.last() - allElectric.first())} 度")
+        if (allPeaks.size >= 2)
+            sumLine.add("峰电: ${formatExport(allPeaks.last() - allPeaks.first())} 度")
+        if (allValleys.size >= 2)
+            sumLine.add("谷电: ${formatExport(allValleys.last() - allValleys.first())} 度")
+
+        if (sumLine.isNotEmpty()) {
             sb.appendLine()
-            sb.appendLine("# ═══════════════════════════")
-            sb.appendLine("# 峰谷电统计 (所有记录累计)")
-            sb.appendLine("# ═══════════════════════════")
-            sb.appendLine("# 总峰电: ${formatExport(totalPeak)} 度")
-            sb.appendLine("# 总谷电: ${formatExport(totalValley)} 度")
-            if (totalPeak + totalValley > 0) {
-                val peakRatio = totalPeak / (totalPeak + totalValley) * 100.0
-                sb.appendLine("# 峰谷比: ${"%.1f".format(peakRatio)}% 峰 / ${"%.1f".format(100.0 - peakRatio)}% 谷")
-            }
+            sb.appendLine("# ${sumLine.joinToString(" · ")}")
         }
 
         return sb.toString()

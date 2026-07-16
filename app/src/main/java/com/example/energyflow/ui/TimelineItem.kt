@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -55,6 +56,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -90,6 +93,8 @@ private val TimeFmt = DateTimeFormatter.ofPattern("HH:mm")
 fun TimelineItem(
     record: MeterRecord,
     electricDelta: Double? = null,
+    peakDelta: Double? = null,
+    valleyDelta: Double? = null,
     waterDelta: Double? = null,
     gasDelta: Double? = null,
     onDelete: ((MeterRecord) -> Unit)? = null,
@@ -240,6 +245,18 @@ fun TimelineItem(
                     spotColor = ElectricColor.copy(alpha = if (isPressed || showActions) 0.15f else 0.05f)
                 )
                 .drawBehind {
+                    // 左侧类型标识色条（电=橙/水=蓝/气=紫，一眼识别）
+                    val accentWidth = 3.dp.toPx()
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            listOf(cardGlowColor.copy(alpha = 0.6f), cardGlowColor.copy(alpha = 0.15f))
+                        ),
+                        topLeft = Offset.Zero,
+                        size = Size(accentWidth, size.height),
+                        cornerRadius = CornerRadius(16.dp.toPx())
+                    )
+                }
+                .drawBehind {
                     drawRoundRect(
                         brush = Brush.horizontalGradient(
                             listOf(
@@ -343,15 +360,16 @@ fun TimelineItem(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             if (record.isElectricRecorded && record.electricTotal != null) {
                                 MeterValueCard(
                                     icon = Icons.Default.Bolt,
                                     iconColor = ElectricColor,
                                     label = "电量",
-                                    value = Formatters.formatElectric(record.electricTotal),
+                                    value = Formatters.formatElecDisplay(record.electricTotal),
                                     unit = "度",
+                                    delta = electricDelta,
                                     peak = record.electricPeak,
                                     valley = record.electricValley,
                                     modifier = Modifier.weight(1f)
@@ -362,8 +380,9 @@ fun TimelineItem(
                                     icon = Icons.Default.WaterDrop,
                                     iconColor = WaterColor,
                                     label = "水表",
-                                    value = Formatters.formatWater(record.waterTotal),
+                                    value = Formatters.formatWaterDisplay(record.waterTotal),
                                     unit = "吨",
+                                    delta = waterDelta,
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -372,41 +391,39 @@ fun TimelineItem(
                                     icon = Icons.Default.Bolt,
                                     iconColor = GasColor,
                                     label = "燃气",
-                                    value = Formatters.formatGas(record.gasTotal),
+                                    value = Formatters.formatGasDisplay(record.gasTotal),
                                     unit = "m³",
+                                    delta = gasDelta,
                                     modifier = Modifier.weight(1f)
                                 )
                             }
                         }
 
-                        val elecStr = electricDelta?.let { "${if (it >= 0) "+" else ""}${Formatters.formatDecimal2(it)} 度" }
-                        val waterStr = waterDelta?.let { "${if (it >= 0) "+" else ""}${Formatters.formatDecimal2(it)} 吨" }
-                        val gasStr = gasDelta?.let { "${if (it >= 0) "+" else ""}${Formatters.formatDecimal2(it)} m³" }
-                        if (elecStr != null || waterStr != null || gasStr != null) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                elecStr?.let {
+                        // ── 峰谷独立消耗差值（仅在电表有峰谷时额外展示） ──
+                        if (peakDelta != null || valleyDelta != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                peakDelta?.let {
+                                    val sign = if (it >= 0) "+" else ""
                                     Text(
-                                        text = "⚡ $it",
+                                        text = "峰 $sign${Formatters.formatDecimal2(it)} 度",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = ElectricColor.copy(alpha = 0.7f),
-                                        fontFamily = MonoFontFamily
+                                        color = ElectricPeakColor.copy(alpha = 0.6f),
+                                        fontFamily = MonoFontFamily,
+                                        fontSize = 10.sp
                                     )
                                 }
-                                waterStr?.let {
+                                valleyDelta?.let {
+                                    val sign = if (it >= 0) "+" else ""
                                     Text(
-                                        text = "💧 $it",
+                                        text = "谷 $sign${Formatters.formatDecimal2(it)} 度",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = WaterColor.copy(alpha = 0.7f),
-                                        fontFamily = MonoFontFamily
-                                    )
-                                }
-                                gasStr?.let {
-                                    Text(
-                                        text = "🔥 $it",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = GasColor.copy(alpha = 0.7f),
-                                        fontFamily = MonoFontFamily
+                                        color = ElectricValleyColor.copy(alpha = 0.6f),
+                                        fontFamily = MonoFontFamily,
+                                        fontSize = 10.sp
                                     )
                                 }
                             }
@@ -559,6 +576,7 @@ private fun MeterValueCard(
     label: String,
     value: String,
     unit: String,
+    delta: Double? = null,
     peak: Double? = null,
     valley: Double? = null,
     modifier: Modifier = Modifier
@@ -568,14 +586,27 @@ private fun MeterValueCard(
             .clip(RoundedCornerShape(12.dp))
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(DarkSurface, DarkSurface.copy(alpha = 0.8f))
+                    colors = listOf(
+                        iconColor.copy(alpha = 0.06f),
+                        DarkSurface.copy(alpha = 0.9f)
+                    )
                 )
             )
+            .border(0.5.dp, iconColor.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
             .padding(12.dp)
     ) {
+        // ── 标签行：圆底图标 + 名称 ──
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = label, tint = iconColor, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(iconColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = label, tint = iconColor, modifier = Modifier.size(12.dp))
+            }
+            Spacer(modifier = Modifier.width(5.dp))
             Text(
                 label,
                 style = MaterialTheme.typography.labelSmall,
@@ -586,12 +617,45 @@ private fun MeterValueCard(
         Spacer(modifier = Modifier.height(6.dp))
 
         if (peak != null && valley != null) {
-            ValueRow("总", value, ElectricColor, unit)
-            Spacer(modifier = Modifier.height(4.dp))
-            ValueRow("峰", Formatters.formatDecimal2(peak), ElectricPeakColor, unit)
-            Spacer(modifier = Modifier.height(4.dp))
-            ValueRow("谷", Formatters.formatDecimal2(valley), ElectricValleyColor, unit)
+            // ── 峰谷电：大数值显示总电 + 紧凑峰谷读数额外行 ──
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    value,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = iconColor,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = MonoFontFamily,
+                    fontSize = 20.sp
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                    unit,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                    fontFamily = MonoFontFamily,
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "峰 ${Formatters.formatPeakValleyDisplay(peak)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ElectricPeakColor.copy(alpha = 0.65f),
+                    fontFamily = MonoFontFamily,
+                    fontSize = 10.sp
+                )
+                Text(
+                    "谷 ${Formatters.formatPeakValleyDisplay(valley)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ElectricValleyColor.copy(alpha = 0.65f),
+                    fontFamily = MonoFontFamily,
+                    fontSize = 10.sp
+                )
+            }
         } else {
+            // ── 普通读数：大数值 + 单位 ──
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     value,
@@ -607,39 +671,24 @@ private fun MeterValueCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary,
                     fontFamily = MonoFontFamily,
+                    fontSize = 11.sp,
                     modifier = Modifier.padding(bottom = 3.dp)
                 )
             }
         }
+
+        // ── 消耗差值 ──
+        if (delta != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            val sign = if (delta >= 0) "+" else ""
+            Text(
+                "$sign${Formatters.formatDecimal2(delta)} $unit",
+                style = MaterialTheme.typography.labelSmall,
+                color = iconColor.copy(alpha = 0.6f),
+                fontFamily = MonoFontFamily,
+                fontSize = 11.sp
+            )
+        }
     }
 }
 
-@Composable
-private fun ValueRow(label: String, value: String, color: Color, unit: String) {
-    Row(verticalAlignment = Alignment.Bottom) {
-        Text(
-            "$label ",
-            style = MaterialTheme.typography.labelSmall,
-            color = TextSecondary,
-            fontFamily = MonoFontFamily,
-            fontSize = 11.sp
-        )
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = color,
-            fontWeight = FontWeight.Bold,
-            fontFamily = MonoFontFamily,
-            fontSize = 18.sp
-        )
-        Spacer(modifier = Modifier.width(3.dp))
-        Text(
-            unit,
-            style = MaterialTheme.typography.labelSmall,
-            color = TextSecondary,
-            fontFamily = MonoFontFamily,
-            fontSize = 10.sp,
-            modifier = Modifier.padding(bottom = 1.dp)
-        )
-    }
-}

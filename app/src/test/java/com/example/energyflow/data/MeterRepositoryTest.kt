@@ -146,6 +146,23 @@ class MeterRepositoryTest {
     }
 
     @Test
+    fun `batchInsert keeps peak-valley record alongside same-timestamp total`() = runTest {
+        // 迷惑数据：同一天同一时间(12:00)，纯总电 16608.41 与 峰9310.75+谷7297.66=16608.41
+        // 两条记录 electricTotal 完全相同(容差内)，但一条带峰谷、一条不带。
+        // 旧去重只比 electricTotal → 误判重复丢掉峰谷记录；修复后应保留两条。
+        val input = """
+7.14
+16608.41
+9310.75
+7297.66
+        """.trimIndent()
+        val result = repository.batchInsert(input)
+        assertTrue(result is BatchInsertResult.Success)
+        val success = result as BatchInsertResult.Success
+        assertEquals("纯总电 + 峰谷记录都应保留", 2, success.count)
+    }
+
+    @Test
     fun `batchInsert with parse errors returns PartialSuccess`() = runTest {
         val result = repository.batchInsert(
             """7.14 12.00 20000

@@ -1,6 +1,7 @@
 package com.example.energyflow.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -95,7 +96,10 @@ import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ErrorNeon
+import com.example.energyflow.ui.theme.GasColor
+import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.SuccessGreen
+import com.example.energyflow.ui.theme.WaterColor
 import com.example.energyflow.ui.theme.WarningNeon
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.TextPrimary
@@ -114,6 +118,15 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 private enum class RecordFilter { ALL, ELECTRIC, WATER, GAS, WITH_NOTES }
+
+/** 首页时间线相邻记录间的消耗差值（含总电 + 峰谷独立差值） */
+private data class RecordDeltas(
+    val electric: Double? = null,
+    val peak: Double? = null,
+    val valley: Double? = null,
+    val water: Double? = null,
+    val gas: Double? = null
+)
 
 // ── 缓存 DateTimeFormatter ──
 private val DateDotFmt = java.time.format.DateTimeFormatter.ofPattern("MM.dd")
@@ -184,10 +197,14 @@ fun MainScreen(
                 d1 == null || d2 == null -> false
                 else -> kotlin.math.abs(d1 - d2) < eps
             }
+            // 峰谷也参与比较：否则同时间戳下"峰谷记录"与"纯总电记录"
+            // 总读数相近时会被误判为重复，导致峰谷电不显示
             val elecSame = same(record.electricTotal, prev.electricTotal)
+            val peakSame = same(record.electricPeak, prev.electricPeak)
+            val valleySame = same(record.electricValley, prev.electricValley)
             val waterSame = same(record.waterTotal, prev.waterTotal)
             val gasSame = same(record.gasTotal, prev.gasTotal)
-            !(elecSame && waterSame && gasSame)
+            !(elecSame && peakSame && valleySame && waterSame && gasSame)
         }
         result
     }
@@ -383,18 +400,21 @@ fun MainScreen(
                         onBatchImport = { showBatchImport = true }
                     )
                 } else {
-                    // ── 预计算 delta，避免 itemsIndexed 内每帧重算 ──
+                    // ── 预计算 delta（含总电 + 峰谷独立差值），避免每帧重算 ──
                     val recordDeltas = remember(filteredRecords) {
                         filteredRecords.mapIndexed { index, record ->
                             val prev = filteredRecords.getOrNull(index + 1)
-                            Triple(
-                                if (prev != null && record.electricTotal != null && prev.electricTotal != null)
-                                    record.electricTotal!! - prev.electricTotal!! else null,
-                                if (prev != null && record.waterTotal != null && prev.waterTotal != null)
-                                    record.waterTotal!! - prev.waterTotal!! else null,
-                                if (prev != null && record.gasTotal != null && prev.gasTotal != null)
-                                    record.gasTotal!! - prev.gasTotal!! else null
-                            )
+                            val elecD = if (prev != null && record.electricTotal != null && prev.electricTotal != null)
+                                record.electricTotal!! - prev.electricTotal!! else null
+                            val peakD = if (prev != null && record.electricPeak != null && prev.electricPeak != null)
+                                record.electricPeak!! - prev.electricPeak!! else null
+                            val valleyD = if (prev != null && record.electricValley != null && prev.electricValley != null)
+                                record.electricValley!! - prev.electricValley!! else null
+                            val waterD = if (prev != null && record.waterTotal != null && prev.waterTotal != null)
+                                record.waterTotal!! - prev.waterTotal!! else null
+                            val gasD = if (prev != null && record.gasTotal != null && prev.gasTotal != null)
+                                record.gasTotal!! - prev.gasTotal!! else null
+                            RecordDeltas(elecD, peakD, valleyD, waterD, gasD)
                         }
                     }
 
@@ -409,7 +429,7 @@ fun MainScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         itemsIndexed(items = filteredRecords, key = { _, r -> r.id }) { index, record ->
-                            val (elecDelta, waterDelta, gasDelta) = recordDeltas[index]
+                            val (elecDelta, peakDelta, valleyDelta, waterDelta, gasDelta) = recordDeltas[index]
 
                             // 记住 lambda，避免每帧创建新实例阻碍跳过重组
                             val onDeleteRecord = remember(record.id) {
@@ -434,6 +454,8 @@ fun MainScreen(
                             TimelineItem(
                                 record = record,
                                 electricDelta = elecDelta,
+                                peakDelta = peakDelta,
+                                valleyDelta = valleyDelta,
                                 waterDelta = waterDelta,
                                 gasDelta = gasDelta,
                                 onDelete = onDeleteRecord,
@@ -787,6 +809,14 @@ private fun FilterBar(
     onFilterChange: (RecordFilter) -> Unit,
     counts: Map<RecordFilter, Int>
 ) {
+    fun RecordFilter.chipColor(): Color = when (this) {
+        RecordFilter.ALL -> ElectricColor
+        RecordFilter.ELECTRIC -> ElectricColor
+        RecordFilter.WATER -> WaterColor
+        RecordFilter.GAS -> GasColor
+        RecordFilter.WITH_NOTES -> NeonBlue
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -796,21 +826,35 @@ private fun FilterBar(
         RecordFilter.entries.forEach { filter ->
             val isSelected = filter == currentFilter
             val count = counts[filter] ?: 0
+            val chipColor = filter.chipColor()
+
+            // 背景色 + 边框动画：spring 弹性过渡
+            val chipBg by animateColorAsState(
+                targetValue = if (isSelected) chipColor.copy(alpha = 0.12f) else DarkCard.copy(alpha = 0.45f),
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "chipBg"
+            )
+            val chipBorderAlpha by animateFloatAsState(
+                targetValue = if (isSelected) 0.25f else 0f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "chipBorder"
+            )
+
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (isSelected) ElectricColor.copy(alpha = 0.12f) else DarkCard.copy(alpha = 0.5f))
-                    .then(
-                        if (isSelected) Modifier.drawBehind {
+                    .background(chipBg)
+                    .drawBehind {
+                        if (chipBorderAlpha > 0.01f) {
                             drawRoundRect(
                                 brush = Brush.horizontalGradient(
-                                    listOf(ElectricColor.copy(alpha = 0.25f), ElectricColor.copy(alpha = 0.08f))
+                                    listOf(chipColor.copy(alpha = chipBorderAlpha), chipColor.copy(alpha = chipBorderAlpha * 0.3f))
                                 ),
                                 style = Stroke(width = 1.5f),
                                 cornerRadius = CornerRadius(16.dp.toPx())
                             )
-                        } else Modifier
-                    )
+                        }
+                    }
                     .clickable { onFilterChange(filter) }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
@@ -823,7 +867,7 @@ private fun FilterBar(
                             RecordFilter.GAS -> "🔥气"
                             RecordFilter.WITH_NOTES -> "📝备注"
                         },
-                        color = if (isSelected) ElectricColor else TextSecondary,
+                        color = if (isSelected) chipColor else TextSecondary,
                         fontFamily = MonoFontFamily,
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
@@ -831,7 +875,7 @@ private fun FilterBar(
                     if (count > 0) {
                         Text(
                             "$count",
-                            color = if (isSelected) ElectricColor.copy(alpha = 0.7f) else TextTertiary,
+                            color = if (isSelected) chipColor.copy(alpha = 0.7f) else TextTertiary,
                             fontFamily = MonoFontFamily,
                             fontSize = 10.sp
                         )
@@ -855,6 +899,12 @@ private fun DateFilterBar(
     onClear: () -> Unit
 ) {
     val hasFilter = startDate != null || endDate != null
+    val dateBg by animateColorAsState(
+        targetValue = if (hasFilter) ElectricColor.copy(alpha = 0.12f) else ElectricColor.copy(alpha = 0.06f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "dateBg"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -865,7 +915,7 @@ private fun DateFilterBar(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(16.dp))
-                .background(ElectricColor.copy(alpha = 0.08f))
+                .background(dateBg)
                 .clickable { onStartClick() }
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
@@ -884,7 +934,7 @@ private fun DateFilterBar(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(16.dp))
-                .background(ElectricColor.copy(alpha = 0.08f))
+                .background(dateBg)
                 .clickable { onEndClick() }
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
@@ -965,8 +1015,13 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                 Box(
                     modifier = Modifier
                         .size(iconSize)
+                        .shadow(3.dp, RoundedCornerShape(6.dp), ambientColor = ElectricColor.copy(0.2f), spotColor = ElectricColor.copy(0.2f))
                         .clip(RoundedCornerShape(6.dp))
-                        .background(ElectricColor.copy(alpha = 0.12f)),
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(ElectricColor.copy(alpha = 0.18f), ElectricColor.copy(alpha = 0.06f))
+                            )
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -992,8 +1047,13 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                     Box(
                         modifier = Modifier
                             .size(iconSize)
+                            .shadow(4.dp, RoundedCornerShape(8.dp), ambientColor = ElectricColor.copy(0.3f), spotColor = ElectricColor.copy(0.3f))
                             .clip(RoundedCornerShape(8.dp))
-                            .background(ElectricColor.copy(alpha = 0.12f)),
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(ElectricColor.copy(alpha = 0.18f), ElectricColor.copy(alpha = 0.06f))
+                                )
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(

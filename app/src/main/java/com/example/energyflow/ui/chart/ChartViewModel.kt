@@ -307,12 +307,8 @@ class ChartViewModel @Inject constructor(
             val peakKwh = (lastPeak - firstPeak).coerceAtLeast(0.0).coerceAtMost(totalKwh)
             val valleyKwh = (lastValley - firstValley).coerceAtLeast(0.0).coerceAtMost(totalKwh - peakKwh)
 
-            // 水表基线同理
-            val firstWater = if (first.isWaterRecorded) (first.waterTotal ?: 0.0)
-                else records.filter { it.timestamp < first.timestamp && it.isWaterRecorded && it.waterTotal != null }
-                    .maxByOrNull { it.timestamp }?.waterTotal ?: 0.0
-            val lastWater = if (last.isWaterRecorded) (last.waterTotal ?: 0.0) else 0.0
-            val waterTons = (lastWater - firstWater).coerceAtLeast(0.0)
+            // 水量增量：用独立的水表记录计算，避免锚定电表时间戳导致基线缺失产生虚高值
+            val waterTons = calculateWaterConsumptionInWindow(waterRecords.value, windowStart)
 
             val bill = costEngine.calculateBill(totalKwh, peakKwh, valleyKwh, waterTons)
             effectiveCostPerKwh = if (totalKwh > 0.0) bill.electricTotalCost / totalKwh else 0.0
@@ -443,23 +439,17 @@ class ChartViewModel @Inject constructor(
         )
 
         // 水费计算
-        if (inWindowRecords.size >= 2) {
-            val first = inWindowRecords.first()
-            val last = inWindowRecords.last()
-            val totalTons = (last.waterTotal ?: 0.0) - (first.waterTotal ?: 0.0)
-            if (totalTons > 0) {
-                val rules = billingRules.value
-                val bill = CostEngine.calculate(rules, 0.0, waterTons = totalTons)
-                _waterBillResult.value = WaterBillData(
-                    totalTons = totalTons,
-                    waterCost = bill.waterTotalCost,
-                    waterPrice = bill.waterPrice,
-                    tier1Limit = rules.waterTier1Limit,
-                    tier2Limit = rules.waterTier2Limit
-                )
-            } else {
-                _waterBillResult.value = null
-            }
+        val totalTons = calculateWaterConsumptionInWindow(records, windowStart)
+        if (totalTons > 0) {
+            val rules = billingRules.value
+            val bill = CostEngine.calculate(rules, 0.0, waterTons = totalTons)
+            _waterBillResult.value = WaterBillData(
+                totalTons = totalTons,
+                waterCost = bill.waterTotalCost,
+                waterPrice = bill.waterPrice,
+                tier1Limit = rules.waterTier1Limit,
+                tier2Limit = rules.waterTier2Limit
+            )
         } else {
             _waterBillResult.value = null
         }
@@ -500,6 +490,39 @@ class ChartViewModel @Inject constructor(
             daysRemaining = daysRemaining,
             predictedRemainingKwh = predictedRemaining
         )
+    }
+
+    /**
+     * 在给定时间窗口内计算水量增量（末次读数 - 首次读数）。
+     * 如果窗口内的首条记录不是窗口起点的数据，尝试补入窗口前最近的一条基线记录。
+     * 电表分析和水表分析共用此方法，确保水费计算一致。
+     */
+    private fun calculateWaterConsumptionInWindow(
+        waterRecords: List<MeterRecord>,
+        windowStart: LocalDate?
+    ): Double {
+        val sorted = waterRecords
+            .filter { it.waterTotal != null }
+            .sortedBy { it.timestamp }
+        if (sorted.size < 2) return 0.0
+
+        val inWindow = if (windowStart != null) {
+            sorted.filter { !it.timestamp.toLocalDate().isBefore(windowStart) }
+        } else sorted
+        if (inWindow.size < 2) return 0.0
+
+        val firstWR = inWindow.first()
+        val lastWR = inWindow.last()
+
+        // 如果窗口内首条记录晚于窗口起点，补入窗口前最近的一条水量基线
+        val effectiveFirst = if (windowStart != null && firstWR.timestamp.toLocalDate() > windowStart) {
+            sorted.filter { it.timestamp < firstWR.timestamp }
+                .maxByOrNull { it.timestamp } ?: firstWR
+        } else firstWR
+
+        val totalTons = ((lastWR.waterTotal ?: 0.0) - (effectiveFirst.waterTotal ?: 0.0)).coerceAtLeast(0.0)
+        // 当窗口内第一 / 末条数据与补入基线完全相同时返回 0（基线未更新）
+        return if (effectiveFirst.id == lastWR.id) 0.0 else totalTons
     }
 
     private fun prependWaterBaseline(

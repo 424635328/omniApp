@@ -73,9 +73,7 @@ import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
-import com.example.energyflow.ui.theme.ElectricEnd
 import com.example.energyflow.ui.theme.ElectricPeakColor
-import com.example.energyflow.ui.theme.ElectricStart
 import com.example.energyflow.ui.theme.ElectricValleyColor
 import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.GasColor
@@ -157,7 +155,7 @@ fun ChartScreen(
                 .background(DarkBackground)
                 .verticalScroll(scrollState)
         ) {
-            ChartTopBar(chartData, isEmpty, timeRange)
+            ChartTopBar(chartData, isEmpty, timeRange, selectedMeterType)
 
             TimeRangeSelector(timeRange) { viewModel.setTimeRange(it) }
 
@@ -202,9 +200,12 @@ fun ChartScreen(
             }
         }
 
-        // ── 回到顶部按钮 ──
+        // ── 回到顶部按钮（右下角） ──
         AnimatedVisibility(
             visible = isScrolledPastTop && !isEmpty,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp),
             enter = scaleIn(
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -220,8 +221,6 @@ fun ChartScreen(
         ) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 20.dp, bottom = 20.dp)
                     .size(40.dp)
                     .shadow(6.dp, CircleShape, ambientColor = ElectricColor.copy(0.3f))
                     .clip(CircleShape)
@@ -245,13 +244,17 @@ fun ChartScreen(
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-private fun ChartTopBar(chartData: ChartData, isEmpty: Boolean, timeRange: TimeRange) {
+private fun ChartTopBar(
+    chartData: ChartData,
+    isEmpty: Boolean,
+    timeRange: TimeRange,
+    meterType: ChartViewModel.MeterType
+) {
     val today = LocalDate.now()
     val fmt = DateTimeFormatter.ofPattern("MM.dd")
     val dateRangeLabel = when {
         isEmpty -> today.format(DateTimeFormatter.ofPattern("yyyy年M月"))
         timeRange != TimeRange.ALL && chartData.records.size >= 2 -> {
-            // 按/周/月/年 显示窗口范围（用户期望的日期区间）
             val start = when (timeRange) {
                 TimeRange.WEEK  -> today.minusDays(6)
                 TimeRange.MONTH -> today.minusDays(29)
@@ -269,6 +272,11 @@ private fun ChartTopBar(chartData: ChartData, isEmpty: Boolean, timeRange: TimeR
             DateTimeFormatter.ofPattern("yyyy年M月dd日")
         )
     }
+    val (topIcon, topColor, topTitle) = when (meterType) {
+        ChartViewModel.MeterType.ELECTRIC -> Triple(Icons.Default.Bolt, ElectricColor, "能耗分析")
+        ChartViewModel.MeterType.WATER -> Triple(Icons.Default.WaterDrop, WaterColor, "用水分析")
+        ChartViewModel.MeterType.GAS -> Triple(Icons.Default.Bolt, GasColor, "燃气分析")
+    }
 
     Box(
         modifier = Modifier
@@ -276,8 +284,8 @@ private fun ChartTopBar(chartData: ChartData, isEmpty: Boolean, timeRange: TimeR
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        ElectricColor.copy(alpha = 0.08f),
-                        ElectricColor.copy(alpha = 0.03f),
+                        topColor.copy(alpha = 0.08f),
+                        topColor.copy(alpha = 0.03f),
                         DarkBackground
                     )
                 )
@@ -290,19 +298,19 @@ private fun ChartTopBar(chartData: ChartData, isEmpty: Boolean, timeRange: TimeR
                     modifier = Modifier
                         .size(32.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(ElectricColor.copy(alpha = 0.12f)),
+                        .background(topColor.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.Bolt,
+                        topIcon,
                         contentDescription = null,
-                        tint = ElectricColor,
+                        tint = topColor,
                         modifier = Modifier.size(18.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    "能耗分析",
+                    topTitle,
                     style = MaterialTheme.typography.headlineMedium,
                     color = TextPrimary,
                     fontFamily = MonoFontFamily,
@@ -452,19 +460,30 @@ private fun ChartSection(
     weatherLoading: Boolean,
     weatherError: String?,
     onToggleWeather: () -> Unit,
+    meterType: ChartViewModel.MeterType,
     chartContent: @Composable () -> Unit
 ) {
+    val chartTitle = when (meterType) {
+        ChartViewModel.MeterType.ELECTRIC -> if (showCost) "费用趋势" else "电量趋势"
+        ChartViewModel.MeterType.WATER -> if (showCost) "费用趋势" else "用水趋势"
+        ChartViewModel.MeterType.GAS -> "燃气趋势"
+    }
+    val accentColor = when (meterType) {
+        ChartViewModel.MeterType.ELECTRIC -> ElectricColor
+        ChartViewModel.MeterType.WATER -> WaterColor
+        ChartViewModel.MeterType.GAS -> GasColor
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(DarkCard)
-            .border(1.dp, ElectricColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
+            .border(1.dp, accentColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
             .drawBehind {
                 drawRoundRect(
                     brush = Brush.horizontalGradient(
-                        listOf(ElectricColor.copy(alpha = 0.10f), ElectricColor.copy(alpha = 0.02f))
+                        listOf(accentColor.copy(alpha = 0.10f), accentColor.copy(alpha = 0.02f))
                     ),
                     style = Stroke(width = 1.5f),
                     cornerRadius = CornerRadius(16.dp.toPx())
@@ -484,12 +503,12 @@ private fun ChartSection(
                         .size(4.dp, 16.dp)
                         .clip(RoundedCornerShape(2.dp))
                         .background(
-                            Brush.verticalGradient(listOf(ElectricStart, ElectricEnd))
+                            Brush.verticalGradient(listOf(accentColor, accentColor.copy(alpha = 0.5f)))
                         )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    if (showCost) "费用趋势" else "电量趋势",
+                    chartTitle,
                     style = MaterialTheme.typography.titleMedium,
                     color = TextPrimary,
                     fontFamily = MonoFontFamily,
@@ -498,35 +517,37 @@ private fun ChartSection(
                 )
             }
 
-            // ── 天气切换 ──
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(
-                        if (showWeather) NeonBlue.copy(alpha = 0.12f)
-                        else DarkSurface
-                    )
-                    .clickable { onToggleWeather() }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (weatherLoading) {
-                        Text("⏳", fontSize = 12.sp)
-                    } else {
-                        Text("🌡", fontSize = 12.sp)
+            // ── 天气切换（仅电表支持） ──
+            if (meterType == ChartViewModel.MeterType.ELECTRIC) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (showWeather) NeonBlue.copy(alpha = 0.12f)
+                            else DarkSurface
+                        )
+                        .clickable { onToggleWeather() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (weatherLoading) {
+                            Text("⏳", fontSize = 12.sp)
+                        } else {
+                            Text("🌡", fontSize = 12.sp)
+                        }
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = when {
+                                weatherLoading -> "加载中"
+                                showWeather -> "隐藏"
+                                else -> "温度"
+                            },
+                            fontFamily = MonoFontFamily,
+                            fontSize = 11.sp,
+                            color = if (showWeather) NeonBlue else TextTertiary,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = when {
-                            weatherLoading -> "加载中"
-                            showWeather -> "隐藏"
-                            else -> "温度"
-                        },
-                        fontFamily = MonoFontFamily,
-                        fontSize = 11.sp,
-                        color = if (showWeather) NeonBlue else TextTertiary,
-                        fontWeight = FontWeight.Medium
-                    )
                 }
             }
         }
@@ -2005,6 +2026,7 @@ private fun ElectricAnalysisSection(
                     viewModel.refreshWeather()
                 }
             },
+            meterType = ChartViewModel.MeterType.ELECTRIC,
             chartContent = {
                 Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
                     ConsumptionLineChart(
@@ -2097,13 +2119,16 @@ private fun WaterAnalysisSection(
             weatherLoading = false,
             weatherError = null,
             onToggleWeather = {},
+            meterType = ChartViewModel.MeterType.WATER,
             chartContent = {
                 Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
                     ConsumptionLineChart(
                         consumptions = chartData.dailyConsumptions,
                         showCost = showCost,
                         selectedIndex = selectedIndex,
-                        onSelectedIndexChange = { selectedIndex = it }
+                        onSelectedIndexChange = { selectedIndex = it },
+                        accentColor = WaterColor,
+                        unitLabel = "吨"
                     )
                 }
             }
@@ -2150,13 +2175,16 @@ private fun GasAnalysisSection(chartData: ChartData) {
             weatherLoading = false,
             weatherError = null,
             onToggleWeather = {},
+            meterType = ChartViewModel.MeterType.GAS,
             chartContent = {
                 Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
                     ConsumptionLineChart(
                         consumptions = chartData.dailyConsumptions,
                         showCost = false,
                         selectedIndex = selectedIndex,
-                        onSelectedIndexChange = { selectedIndex = it }
+                        onSelectedIndexChange = { selectedIndex = it },
+                        accentColor = GasColor,
+                        unitLabel = "m³"
                     )
                 }
             }

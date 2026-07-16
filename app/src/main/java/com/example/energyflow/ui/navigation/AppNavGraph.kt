@@ -1,14 +1,10 @@
 package com.example.energyflow.ui.navigation
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -32,12 +28,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import com.example.energyflow.ui.MainScreen
 import com.example.energyflow.ui.MainViewModel
 import com.example.energyflow.ui.camera.ScanScreen
@@ -62,10 +52,33 @@ sealed class Screen(
     object Settings : Screen("settings", "计费", Icons.Default.Settings)
 }
 
+/**
+ * AppNavGraph — 快速标签页切换
+ *
+ * 核心策略：ViewModel 常驻内存（通过 Activity 级 hiltViewModel 缓存），
+ * 标签页内容按需渲染（when 分支切换）。省去 NavHost 的 composable 销毁重建、
+ * saveState/restoreState 开销以及 350ms 动画延迟，实现极速切换。
+ *
+ * 三个 ViewModel 在 AppNavGraph 层级一次性获取（hiltViewModel 内部缓存），
+ * 切换标签时 Compose 树虽然重建，但 ViewModel 数据瞬时可用。
+ *
+ * 扫码页作为 state 驱动的覆盖层，OCR 结果通过 pendingOcrResult 回传。
+ */
 @Composable
 fun AppNavGraph() {
-    val navController = rememberNavController()
+    // ── 当前标签页 ──
+    var currentTab by remember { mutableStateOf<Screen>(Screen.Home) }
     val bottomBarScreens = listOf(Screen.Home, Screen.Chart, Screen.Settings)
+
+    // ── 扫码覆盖层 & OCR 回传 ──
+    var showScan by remember { mutableStateOf(false) }
+    var pendingOcrResult by remember { mutableStateOf<String?>(null) }
+
+    // ── ViewModel 常驻内存：在此处一次性获取，切换时不重建 ──
+    // hiltViewModel() 内部查 ViewModelStore，已存在则直接返回缓存实例
+    val mainVM: MainViewModel = hiltViewModel()
+    val chartVM: ChartViewModel = hiltViewModel()
+    val settingsVM: BillingSettingsViewModel = hiltViewModel()
 
     Scaffold(
         bottomBar = {
@@ -73,13 +86,10 @@ fun AppNavGraph() {
                 containerColor = DarkBackground,
                 contentColor = TextPrimary
             ) {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
-
                 bottomBarScreens.forEach { screen ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                    val selected = currentTab == screen
 
-                    // ── 图标弹跳动画 ──
+                    // 图标弹跳动画
                     val iconScale by animateFloatAsState(
                         targetValue = if (selected) 1.18f else 1f,
                         animationSpec = spring(
@@ -106,15 +116,7 @@ fun AppNavGraph() {
                             )
                         },
                         selected = selected,
-                        onClick = {
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onClick = { currentTab = screen },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = ElectricColor,
                             selectedTextColor = ElectricColor,
@@ -127,61 +129,44 @@ fun AppNavGraph() {
             }
         }
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Home.route,
-            modifier = Modifier.padding(innerPadding),
-            enterTransition = {
-                slideInHorizontally(tween(350)) { it / 4 } + fadeIn(tween(350))
-            },
-            exitTransition = {
-                slideOutHorizontally(tween(350)) { -it / 4 } + fadeOut(tween(250))
-            },
-            popEnterTransition = {
-                slideInHorizontally(tween(350)) { -it / 4 } + fadeIn(tween(350))
-            },
-            popExitTransition = {
-                slideOutHorizontally(tween(350)) { it / 4 } + fadeOut(tween(250))
-            }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
         ) {
-            composable(Screen.Home.route) {
-                val mainVM: MainViewModel = hiltViewModel()
-                // ── OCR 结果消费：监听 scan 页面回传的识别文本 ──
-                val ocrResult = it.savedStateHandle.get<String>("ocr_result")
-                var ocrTriggered by remember { mutableStateOf(false) }
-                LaunchedEffect(ocrResult) {
-                    if (ocrResult != null && !ocrTriggered) {
-                        ocrTriggered = true
-                        it.savedStateHandle.remove<String>("ocr_result")
-                        mainVM.ocrAutoFill(ocrResult)
+            // ── 按当前标签渲染页面（Compose 树重建，但 ViewModel 数据瞬时可用） ──
+            when (currentTab) {
+                Screen.Home -> {
+                    // OCR 结果消费：扫码页返回时触发自动填充
+                    LaunchedEffect(pendingOcrResult) {
+                        pendingOcrResult?.let {
+                            mainVM.ocrAutoFill(it)
+                            pendingOcrResult = null
+                        }
                     }
+                    MainScreen(
+                        viewModel = mainVM,
+                        onScan = { showScan = true }
+                    )
                 }
-                MainScreen(
-                    viewModel = mainVM,
-                    onScan = { navController.navigate("scan") }
-                )
+
+                Screen.Chart -> {
+                    ChartScreen(viewModel = chartVM)
+                }
+
+                Screen.Settings -> {
+                    BillingSettingsScreen(viewModel = settingsVM)
+                }
             }
 
-            composable(Screen.Chart.route) {
-                val chartVM: ChartViewModel = hiltViewModel()
-                ChartScreen(viewModel = chartVM)
-            }
-
-            composable(Screen.Settings.route) {
-                val settingsVM: BillingSettingsViewModel = hiltViewModel()
-                BillingSettingsScreen(viewModel = settingsVM)
-            }
-
-            composable("scan") {
+            // ── 扫码覆盖层（位于标签页之上） ──
+            if (showScan) {
                 ScanScreen(
                     onResult = { recognizedText ->
-                        // 返回识别结果到首页
-                        navController.previousBackStackEntry
-                            ?.savedStateHandle
-                            ?.set("ocr_result", recognizedText)
-                        navController.popBackStack()
+                        pendingOcrResult = recognizedText
+                        showScan = false
                     },
-                    onDismiss = { navController.popBackStack() }
+                    onDismiss = { showScan = false }
                 )
             }
         }

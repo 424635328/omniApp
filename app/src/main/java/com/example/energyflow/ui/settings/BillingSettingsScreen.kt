@@ -312,10 +312,6 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         }
 
         // ═══════════════════════════════════════════════
-        // 天气
-        // ═══════════════════════════════════════════════
-        Spacer(Modifier.height(28.dp))
-        // ═══════════════════════════════════════════════
         // DeepSeek AI
         // ═══════════════════════════════════════════════
         Spacer(Modifier.height(28.dp))
@@ -353,7 +349,31 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                 }
             }
             if (deepSeekApiKey.isNotBlank()) {
-        Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
+                TextButton(
+                    onClick = {
+                        viewModel.saveDeepSeekApiKey("")
+                        apiKeyText = ""
+                        toast(context, "API Key 已清除")
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.Delete, null,
+                        tint = ErrorNeon.copy(alpha = 0.6f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("清除 Key", color = ErrorNeon.copy(alpha = 0.6f), fontFamily = MonoFontFamily, fontSize = 11.sp)
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════
+        // 账单分享（始终可用，不依赖 API Key）
+        // ═══════════════════════════════════════════════
+        Spacer(Modifier.height(28.dp))
+        SectionHeader(Icons.Default.Cloud, "📋 账单管理", NeonYellow)
+        Spacer(Modifier.height(12.dp))
         DataActionButton(
             icon = Icons.Default.Cloud,
             label = "分享月度账单",
@@ -374,27 +394,12 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                 }
             }
         )
-        Spacer(Modifier.height(16.dp))
-                TextButton(
-                    onClick = {
-                        viewModel.saveDeepSeekApiKey("")
-                        apiKeyText = ""
-                        toast(context, "API Key 已清除")
-                    }
-                ) {
-                    Icon(
-                        Icons.Default.Delete, null,
-                        tint = ErrorNeon.copy(alpha = 0.6f),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("清除 Key", color = ErrorNeon.copy(alpha = 0.6f), fontFamily = MonoFontFamily, fontSize = 11.sp)
-                }
-            }
-        }
+        Spacer(Modifier.height(8.dp))
+        SectionHint("至少需要 2 条本月电表读数才能生成账单报告")
 
-        Spacer(Modifier.height(28.dp))
-        SectionHeader(Icons.Default.Cloud, "天气叠层（Open-Meteo）", NeonBlue)
+        // ═══════════════════════════════════════════════
+        // 天气叠层（Open-Meteo）
+        // ═══════════════════════════════════════════════
         Spacer(Modifier.height(8.dp))
         Text(
             "图表页面选择「周」或「月」，点击「显示温度」即可查看天气叠层。数据来源 Open-Meteo，完全免费，无需配置。",

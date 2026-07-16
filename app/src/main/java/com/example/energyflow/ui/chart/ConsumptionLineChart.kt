@@ -4,8 +4,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -52,6 +53,8 @@ fun ConsumptionLineChart(
     selectedIndex: Int = -1,
     onSelectedIndexChange: (Int) -> Unit = {},
     weatherByDate: Map<LocalDate, DailyWeather> = emptyMap(),
+    accentColor: Color = ElectricColor,
+    unitLabel: String = "度",
     modifier: Modifier = Modifier
 ) {
     if (consumptions.isEmpty()) return
@@ -67,7 +70,7 @@ fun ConsumptionLineChart(
         )
     }
 
-    val chartColor = ElectricColor
+    val chartColor = accentColor
     val gridColor = DarkCard.copy(alpha = 0.6f)
     val labelColor = TextSecondary
 
@@ -162,14 +165,50 @@ fun ConsumptionLineChart(
                 }
             }
             .pointerInput(consumptions) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val newScale = (scale * zoom).coerceIn(1f, 4f)
-                    val maxPan = if (newScale > 1f)
-                        (size.width * (newScale - 1f) * 0.5f) else 0f
-                    scale = newScale
-                    panX = (panX + pan.x).coerceIn(-maxPan, maxPan)
-                    // 重置时清除选中
-                    onSelectedIndexChange(-1)
+                awaitEachGesture {
+                    val firstDown = awaitFirstDown()
+                    var lastPos = firstDown.position
+                    var isHorizontal: Boolean? = null
+                    var initialSpan = 0f
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val changes = event.changes
+                        if (changes.isEmpty() || !changes.any { it.pressed }) break
+                        // 双指缩放
+                        if (changes.size >= 2 && changes.all { it.pressed }) {
+                            val span = (changes[0].position - changes[1].position).getDistance()
+                            if (initialSpan > 0f) {
+                                val newScale = (scale * span / initialSpan).coerceIn(1f, 4f)
+                                scale = newScale
+                                onSelectedIndexChange(-1)
+                            }
+                            initialSpan = span
+                            changes.forEach { it.consume() }
+                            continue
+                        }
+                        initialSpan = 0f
+                        val change = changes.first()
+                        if (!change.pressed) break
+                        val delta = change.position - lastPos
+                        lastPos = change.position
+                        if (isHorizontal == null) {
+                            val totalDelta = change.position - firstDown.position
+                            if (kotlin.math.abs(totalDelta.x) > 8f || kotlin.math.abs(totalDelta.y) > 8f) {
+                                isHorizontal = kotlin.math.abs(totalDelta.x) > kotlin.math.abs(totalDelta.y)
+                            }
+                        }
+                        when (isHorizontal) {
+                            true -> {
+                                change.consume()
+                                val maxPan = if (scale > 1f) (size.width * (scale - 1f) * 0.5f) else 0f
+                                panX = (panX + delta.x).coerceIn(-maxPan, maxPan)
+                                onSelectedIndexChange(-1)
+                            }
+                            // 垂直滑动 → 不消费事件，父容器 verticalScroll 正常响应
+                            false -> { /* pass through */ }
+                            null -> { change.consume() }
+                        }
+                    }
                 }
             }
     ) {
@@ -348,7 +387,7 @@ fun ConsumptionLineChart(
         if (selectedIndex in points.indices && selectedIndex < visibleCount) {
             val selPoint = points[selectedIndex]
             val selValue = values[selectedIndex]
-            val selLabel = if (showCost) "¥${formatDecimal1(selValue)}" else "${formatDecimal1(selValue)} 度"
+            val selLabel = if (showCost) "¥${formatDecimal1(selValue)}" else "${formatDecimal1(selValue)} $unitLabel"
             val selDate = consumptions[selectedIndex].date.format(
                 DateTimeFormatter.ofPattern("MM.dd")
             )
