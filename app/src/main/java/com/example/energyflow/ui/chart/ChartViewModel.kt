@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.energyflow.data.BillingRules
 import com.example.energyflow.data.CostEngine
+import com.example.energyflow.shared.CostEngineShared
 import com.example.energyflow.data.DailyWeather
 import com.example.energyflow.data.EventImpact
 import com.example.energyflow.data.EventImpactAnalyzer
@@ -442,7 +443,7 @@ class ChartViewModel @Inject constructor(
         val totalTons = calculateWaterConsumptionInWindow(records, windowStart)
         if (totalTons > 0) {
             val rules = billingRules.value
-            val bill = CostEngine.calculate(rules, 0.0, waterTons = totalTons)
+            val bill = CostEngineShared.calculate(rules, 0.0, waterTons = totalTons)
             _waterBillResult.value = WaterBillData(
                 totalTons = totalTons,
                 waterCost = bill.waterTotalCost,
@@ -477,7 +478,7 @@ class ChartViewModel @Inject constructor(
             first.timestamp.toLocalDate(), last.timestamp.toLocalDate()
         ).coerceAtLeast(1)
         val dailyRate = consumed / daysElapsed
-        val totalMonthDays = now.lengthOfMonth().toLong()
+        val totalMonthDays = now.lengthOfMonth()
         val daysRemaining = totalMonthDays - today.dayOfMonth
         val predictedRemaining = dailyRate * daysRemaining
         val predicted = consumed + predictedRemaining

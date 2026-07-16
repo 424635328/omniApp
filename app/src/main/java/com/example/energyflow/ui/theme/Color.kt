@@ -8,29 +8,35 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 // ════════════════════════════════════════════
-// Midnight Slate — 暗黑石板 + 渐变霓虹
+// Crystal — 通透晶石色板
+// 暗色=中性干净基底，亮色=清爽微白；层次跨度大，主色 #00A3FF 负责出彩
 // ════════════════════════════════════════════
 
-// 基础暗黑石板
-val BackgroundDark = Color(0xFF0D0F12)     // 最底层背景
-val SurfaceDark = Color(0xFF161A22)        // 卡片层
-val SurfaceVariant = Color(0xFF1F242F)     // 悬浮层/BottomSheet
-val OutlineDark = Color(0xFF333B4D)        // 边框/分割线
+// ── 暗色模式 · 晶石灰（中性，不偏色） ──
+// 层间亮度差 ~10-15 点，视觉深度一目了然
+val BackgroundDark = Color(0xFF0C0E14)     // 底层 — 深灰近乎黑，干净
+val SurfaceDark = Color(0xFF171A26)        // 表面层 — 清晰跃升
+val SurfaceVariant = Color(0xFF212538)     // 卡片/浮层 — 更进一步
+val OutlineDark = Color(0xFF30364B)        // 边框 — 含蓄灰蓝
+val OutlineVariant = Color(0xFF23283D)     // 弱化边框
 
-// 霓虹渐变基础色
-val ElectricStart = Color(0xFF00FFC4)      // 荧光青绿
-val ElectricEnd = Color(0xFF00B3FF)        // 电光蓝
-val WaterStart = Color(0xFF00E5FF)         // 科技纯蓝
-val WaterEnd = Color(0xFF0088FF)           // 深海蓝
-val GasStart = Color(0xFFFF9100)           // 温暖橙
+// ── 亮色模式 · 晶石白（清爽微冷） ──
+val LightBackground = Color(0xFFF6F8FC)    // 底层 — 微冷白
+val LightSurface = Color(0xFFEDF0F6)       // 表面层 — 层次分明
+val LightCard = Color(0xFFFFFFFF)          // 卡片 — 纯白
+
+// ── 霓虹渐变基础色 ──
+val ElectricStart = Color(0xFF00A3FF)      // 荧光蓝（主色）
+val ElectricEnd = Color(0xFF0055FF)        // 电光深蓝
+val WaterStart = Color(0xFF00D4AA)         // 碧波青
+val WaterEnd = Color(0xFF0088CC)           // 深海蓝
+val GasStart = Color(0xFFFF8C42)           // 暖橙
 val GasEnd = Color(0xFFFF3D00)             // 赤焰红
 
-// 特殊状态色
-val ErrorNeon = Color(0xFFFF3366)          // 赛博红 — 删除/错误
-val WarningNeon = Color(0xFFFFB020)        // 警示黄 — 警告
-
-// 成功绿（保留，与霓虹体系独立）
-val SuccessGreen = Color(0xFF00E676)
+// ── 语义色（暗色/亮色共用） ──
+val ErrorNeon = Color(0xFFFF3366)          // 错误/删除 — 赛博红
+val WarningNeon = Color(0xFFFFB020)        // 警告 — 琥珀黄
+val SuccessGreen = Color(0xFF00E676)        // 成功 — 翠绿
 
 // ════════════════════════════════════════════
 // 渐变 Brush — 用于装饰性元素
@@ -44,17 +50,17 @@ val GasGradient: Brush get() = Brush.linearGradient(listOf(GasStart, GasEnd))
 // ════════════════════════════════════════════
 data class AppColors(
     val electricColor: Color = ElectricStart,
-    val electricPeakColor: Color = Color(0xFFFF8800),
-    val electricValleyColor: Color = Color(0xFF4488FF),
+    val electricPeakColor: Color = StaticPeakColor,
+    val electricValleyColor: Color = StaticValleyColor,
     val waterColor: Color = WaterStart,
     val gasColor: Color = GasStart,
     val isDark: Boolean = true,
     val darkBackground: Color = BackgroundDark,
     val darkSurface: Color = SurfaceDark,
     val darkCard: Color = SurfaceVariant,
-    val lightBackground: Color = Color(0xFFF5F5F5),
-    val lightSurface: Color = Color(0xFFEEEEEE),
-    val lightCard: Color = Color(0xFFFFFFFF),
+    val lightBackground: Color = LightBackground,
+    val lightSurface: Color = LightSurface,
+    val lightCard: Color = LightCard,
     val textPrimary: Color = Color(0xFFE2E8F0),
     val textSecondary: Color = Color(0xFF94A3B8),
     val textTertiary: Color = Color(0xFF64748B),
@@ -79,11 +85,11 @@ object ThemeState {
     /** 根据当日最高温调整 UI 强调色，让 App 有"温度感"。 */
     fun applyWeatherTheme(tempMax: Double) {
         colors = colors.copy(electricColor = when {
-            tempMax > 38 -> Color(0xFFFF4500)
-            tempMax > 32 -> Color(0xFFFF8800)
-            tempMax > 20 -> ElectricStart
-            tempMax > 10 -> Color(0xFF00B3FF)
-            else -> Color(0xFF4488FF)
+            tempMax > 38 -> Color(0xFFFF4500)   // 酷暑红
+            tempMax > 32 -> Color(0xFFFF8800)   // 炎热橙
+            tempMax > 20 -> ElectricStart       // 常温荧光蓝
+            tempMax > 10 -> ElectricEnd         // 偏冷深蓝
+            else -> ElectricValleyColor         // 寒冷蓝紫
         })
     }
 }
@@ -96,6 +102,10 @@ val ElectricPeakColor: Color get() = ThemeState.colors.electricPeakColor
 val ElectricValleyColor: Color get() = ThemeState.colors.electricValleyColor
 val WaterColor: Color get() = ThemeState.colors.waterColor
 val GasColor: Color get() = ThemeState.colors.gasColor
+
+// 静态语义色（不跟随主题变化）
+val StaticPeakColor: Color = Color(0xFFFF8800)
+val StaticValleyColor: Color = Color(0xFF8866DD)
 
 /** 自动跟随暗/亮模式 */
 val AppBackground: Color get() = if (ThemeState.colors.isDark) ThemeState.colors.darkBackground else ThemeState.colors.lightBackground
@@ -115,9 +125,9 @@ val TextPrimary: Color get() = AppTextPrimary
 val TextSecondary: Color get() = AppTextSecondary
 val TextTertiary: Color get() = AppTextTertiary
 
-// 遗留霓虹名称 — 值已更新为新色板
-val NeonYellow: Color get() = ElectricStart
-val NeonOrange: Color get() = Color(0xFFFF8800)
+// 遗留霓虹名称 — 保持向后兼容
+val NeonYellow: Color get() = ElectricStart    // 原名青绿，现为荧光蓝
+val NeonOrange: Color get() = StaticPeakColor
 val NeonBlue: Color get() = WaterStart
 val NeonCyan: Color get() = Color(0xFF4488FF)
 val NeonRed: Color get() = GasStart

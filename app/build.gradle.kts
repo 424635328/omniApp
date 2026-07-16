@@ -5,13 +5,12 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.kover)
 }
 
 android {
     namespace = "com.example.energyflow"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     @Suppress("UnstableApiUsage")
     experimentalProperties["android.experimental.r8.dex-startup-optimization"] = true
@@ -87,6 +86,10 @@ dependencies {
     implementation(libs.ktor.client.android)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
+
+    // Shared KMP module
+    implementation(project(":shared"))
+    implementation(libs.kotlinx.datetime)
 
     // Baseline Profiles (ART optimization, ~30% cold-start speedup)
     implementation(libs.androidx.profileinstaller)

@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.energyflow.data.ImagePreprocessor
 import com.example.energyflow.data.OcrSmartProcessor
 import com.example.energyflow.data.ParseResult
 import com.example.energyflow.data.SmartInputParser
@@ -295,11 +296,13 @@ private fun CameraPreviewSection(
                                             image.close()
                                             return
                                         }
-                                        val inputImage = InputImage.fromMediaImage(mediaImage, image.imageInfo.rotationDegrees)
-                                        
+                                        val inputImage = ImagePreprocessor.preprocess(
+                                            imageProxy = image,
+                                            roiRegion = null
+                                        )
+
                                         textRecognizer.process(inputImage)
                                             .addOnSuccessListener { visionText ->
-                                                // 将沉重的正则和字符串拼接丢到 IO/Default 线程
                                                 coroutineScope.launch(Dispatchers.Default) {
                                                     val rawText = visionText.text.trim()
                                                     if (rawText.isBlank()) {
@@ -309,8 +312,14 @@ private fun CameraPreviewSection(
                                                         }
                                                     } else {
                                                         val smartText = OcrSmartProcessor.process(rawText)
+                                                        val confidence = OcrSmartProcessor.calculateConfidence(rawText, smartText)
                                                         withContext(Dispatchers.Main) {
-                                                            onSuccess(smartText)
+                                                            if (confidence < 0.3) {
+                                                                errorMessage = "识别置信度较低（${"%.0f".format(confidence * 100)}%），请重新拍摄"
+                                                                isProcessing = false
+                                                            } else {
+                                                                onSuccess(smartText)
+                                                            }
                                                         }
                                                     }
                                                 }

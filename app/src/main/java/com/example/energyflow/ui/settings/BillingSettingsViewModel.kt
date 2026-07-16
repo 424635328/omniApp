@@ -14,8 +14,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
-import javax.inject.Inject
+import java.time.YearMonth
 import java.util.Locale
+import javax.inject.Inject
 
 @HiltViewModel
 class BillingSettingsViewModel @Inject constructor(
@@ -93,16 +94,48 @@ class BillingSettingsViewModel @Inject constructor(
         }
     }
 
-    suspend fun generateShareReport(): String? {
+    // ── 账单分享 ──────────────────────────────────────────
+
+    /**
+     * 生成纯文本账单报告（指定月份）。
+     */
+    suspend fun generateShareReport(yearMonth: YearMonth = YearMonth.now()): String? {
         val electricRecords = repository.getElectricRecords().first()
         val waterRecords = repository.getWaterRecords().first()
         val gasRecords = repository.getAllRecords().first().filter { it.isGasRecorded }
         val notesRecords = repository.getRecordsWithNotes().first()
-        val rules = billingRulesFlow.first() // 获取用户自定义的计费规则
+        val rules = billingRulesFlow.first()
+
         val data = BillReportGenerator.buildReportData(
-            electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules
+            electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules, yearMonth
         ) ?: return null
-        return BillReportGenerator.generateTextReport(data)
+
+        val comparison = BillReportGenerator.buildComparison(
+            data, electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules
+        )
+
+        return BillReportGenerator.generateTextReport(data, comparison)
+    }
+
+    /**
+     * 生成 HTML 账单报告（指定月份）。
+     */
+    suspend fun generateShareHtml(yearMonth: YearMonth = YearMonth.now()): String? {
+        val electricRecords = repository.getElectricRecords().first()
+        val waterRecords = repository.getWaterRecords().first()
+        val gasRecords = repository.getAllRecords().first().filter { it.isGasRecorded }
+        val notesRecords = repository.getRecordsWithNotes().first()
+        val rules = billingRulesFlow.first()
+
+        val data = BillReportGenerator.buildReportData(
+            electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules, yearMonth
+        ) ?: return null
+
+        val comparison = BillReportGenerator.buildComparison(
+            data, electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules
+        )
+
+        return BillReportGenerator.generateHtmlReport(data, comparison)
     }
 
     suspend fun exportRecordsToText(): String {
@@ -134,7 +167,6 @@ class BillingSettingsViewModel @Inject constructor(
                 d1 == null || d2 == null -> false
                 else -> kotlin.math.abs(d1 - d2) < eps
             }
-            // 同读数（含峰谷）才去重；同时间戳但不同表/不同峰谷的记录都要保留
             val elecSame = same(record.electricTotal, prev.electricTotal)
             val peakSame = same(record.electricPeak, prev.electricPeak)
             val valleySame = same(record.electricValley, prev.electricValley)
@@ -148,7 +180,6 @@ class BillingSettingsViewModel @Inject constructor(
         if (records.isEmpty()) return ""
 
         val sb = StringBuilder()
-        // 按日期分组后取最新一条记录（作为主时间戳），但合并同一天的所有计量值
         val grouped = records.groupBy { it.timestamp.toLocalDate() }
         val sortedDates = grouped.keys.sorted()
 
@@ -159,7 +190,6 @@ class BillingSettingsViewModel @Inject constructor(
             sb.appendLine("${date.monthValue}.${date.dayOfMonth}")
             val timeStr = "${latest.timestamp.hour.toString().padStart(2, '0')}.${latest.timestamp.minute.toString().padStart(2, '0')}"
 
-            // 合并同一天的电、水、气读数（取各自最新的非空值）
             val electric = dailyRecords.firstOrNull { it.electricTotal != null }?.electricTotal
             val peak = dailyRecords.firstOrNull { it.electricPeak != null }?.electricPeak
             val valley = dailyRecords.firstOrNull { it.electricValley != null }?.electricValley
@@ -181,7 +211,6 @@ class BillingSettingsViewModel @Inject constructor(
             sb.appendLine()
         }
 
-        // ── 电耗统计（首末差值） ──
         val allElectric = records
             .filter { it.isElectricRecorded && it.electricTotal != null }
             .sortedBy { it.timestamp }

@@ -43,12 +43,12 @@ class PredictiveAnalyzerTest {
         val records = listOf(
             reading(now.minusDays(1), 100.0)
         )
-        assertNull(analyzer.predictMonth(records, now))
+        assertNull(analyzer.predictMonth(records, now = now))
     }
 
     @Test
     fun `empty records returns null`() {
-        assertNull(analyzer.predictMonth(emptyList(), now))
+        assertNull(analyzer.predictMonth(emptyList(), now = now))
     }
 
     @Test
@@ -57,7 +57,7 @@ class PredictiveAnalyzerTest {
             MeterRecord(timestamp = now.minusDays(1), isElectricRecorded = false, electricTotal = null),
             MeterRecord(timestamp = now, isElectricRecorded = false, electricTotal = null)
         )
-        assertNull(analyzer.predictMonth(records, now))
+        assertNull(analyzer.predictMonth(records, now = now))
     }
 
     @Test
@@ -66,7 +66,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(2), 100.0),
             MeterRecord(timestamp = now.minusDays(1))
         )
-        assertNull(analyzer.predictMonth(records, now))
+        assertNull(analyzer.predictMonth(records, now = now))
     }
 
     // ── 递减记录过滤 ──
@@ -79,7 +79,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(2), 103.0),  // 下降 → 被过滤
             reading(now.minusDays(1), 110.0)
         )
-        val result = analyzer.predictMonth(records, now)
+        val result = analyzer.predictMonth(records, now = now)
         assertNotNull(result)
         assertTrue(result!!.consumedSoFarKwh > 0)
     }
@@ -91,7 +91,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(2), 95.0),
             reading(now.minusDays(1), 90.0)
         )
-        assertNull(analyzer.predictMonth(records, now))
+        assertNull(analyzer.predictMonth(records, now = now))
     }
 
     // ── 本月推算 ──
@@ -102,7 +102,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(10), 100.0),  // 7月5日 — 月内
             reading(now.minusDays(1), 120.0)     // 7月14日 — 月内
         )
-        val result = analyzer.predictMonth(records, now)
+        val result = analyzer.predictMonth(records, now = now)
         assertNotNull(result)
 
         // 7月5日→14日 = 9天, 耗电 120-100 = 20度 → 日均 20/9 ≈ 2.222
@@ -126,7 +126,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(5), 120.0),   // 7月10日
             reading(now.minusDays(1), 130.0)    // 7月14日
         )
-        val result = analyzer.predictMonth(records, now)
+        val result = analyzer.predictMonth(records, now = now)
         assertNotNull(result)
 
         // 使用首尾: 7月1日→14日 = 13天, 耗电 130-100 = 30 → 日均 30/13 ≈ 2.308
@@ -140,7 +140,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(5), 100.0),
             reading(now.minusDays(1), 100.0)  // 零增长
         )
-        assertNull(analyzer.predictMonth(records, now))
+        assertNull(analyzer.predictMonth(records, now = now))
     }
 
     // ── 历史回退 ──
@@ -153,7 +153,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(12), 122.0),     // 7月3日 — 本月
             reading(now.minusDays(1), 130.0)       // 7月14日 — 本月
         )
-        val result = analyzer.predictMonth(records, now)
+        val result = analyzer.predictMonth(records, now = now)
         assertNotNull(result)
 
         // 本月有2条 → 用本月首尾推算, 7月3日→14日 = 11天, 130-122 = 8
@@ -168,7 +168,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(20), 110.0),  // 6月25日
             reading(now.minusDays(15), 125.0)   // 6月30日
         )
-        val result = analyzer.predictMonth(records, now)
+        val result = analyzer.predictMonth(records, now = now)
         assertNotNull(result)
 
         // 使用最近5条（实际3条）的斜率
@@ -188,7 +188,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(6), 1050.0),   // 7月9日
             reading(now.minusDays(1), 1070.0)    // 7月14日
         )
-        val result = analyzer.predictMonth(records, now)
+        val result = analyzer.predictMonth(records, now = now)
         assertNotNull(result)
 
         // 本月有3条 → 用本月首尾: 7月2日→14日 = 12天, 1070-1020 = 50 → 54.167
@@ -203,7 +203,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(5), 200.0),   // 7月10日
             reading(now.minusDays(1), 220.0)    // 7月14日
         )
-        val result = analyzer.predictMonth(records, now)
+        val result = analyzer.predictMonth(records, now = now)
         assertNotNull(result)
 
         // 7月10日→14日 = 4天, 20度 → 日均 5.0
@@ -222,7 +222,7 @@ class PredictiveAnalyzerTest {
             reading(firstOfMonth, 1000.0),
             reading(firstOfMonth.plusHours(12), 1005.0)
         )
-        val result = analyzer.predictMonth(records, firstOfMonth)
+        val result = analyzer.predictMonth(records, now = firstOfMonth)
         assertNotNull(result)
 
         // 第一天: 1天已过, 30天剩余
@@ -237,7 +237,7 @@ class PredictiveAnalyzerTest {
             reading(lastOfMonth.minusDays(5), 100.0),
             reading(lastOfMonth.minusDays(1), 120.0)
         )
-        val result = analyzer.predictMonth(records, lastOfMonth)
+        val result = analyzer.predictMonth(records, now = lastOfMonth)
         assertNotNull(result)
 
         // 第31天: 31天已过, 0天剩余
@@ -255,7 +255,7 @@ class PredictiveAnalyzerTest {
             reading(now.minusDays(30), 100.0),  // 6月15日
             reading(now.minusDays(1), 200.0)     // 7月14日 — 跨度29天
         )
-        val result = analyzer.predictMonth(records, now)
+        val result = analyzer.predictMonth(records, now = now)
         assertNotNull(result)
 
         // 只有1条本月记录 → 使用最近窗口（最多5条）

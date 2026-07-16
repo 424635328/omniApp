@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,15 +27,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -54,7 +60,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -82,6 +90,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.time.YearMonth
 
 @Composable
 fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel()) {
@@ -94,6 +103,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
 
     var showClearDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
     /** 导出文本到 Downloads（公共可访问）并同时存一份到 app Documents */
@@ -369,33 +379,119 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         }
 
         // ═══════════════════════════════════════════════
-        // 账单分享（始终可用，不依赖 API Key）
+        // 账单分享（月份选择 + 多种分享方式）
         // ═══════════════════════════════════════════════
         Spacer(Modifier.height(28.dp))
-        SectionHeader(Icons.Default.Cloud, "📋 账单管理", NeonYellow)
+        SectionHeader(Icons.Default.Cloud, "📋 账单分享", NeonYellow)
         Spacer(Modifier.height(12.dp))
-        DataActionButton(
-            icon = Icons.Default.Cloud,
-            label = "分享月度账单",
-            desc = "生成本月能耗账单并分享至微信/邮件",
-            color = NeonYellow,
-            onClick = {
-                scope.launch {
-                    val report = viewModel.generateShareReport()
-                    if (report != null) {
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, report)
+
+        // ── 月份选择器 ──
+        var selectedMonth by remember { mutableStateOf(YearMonth.now()) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            IconButton(onClick = { selectedMonth = selectedMonth.minusMonths(1) }) {
+                Icon(Icons.Default.ChevronLeft, "上月", tint = TextSecondary, modifier = Modifier.size(28.dp))
+            }
+            Box(
+                modifier = Modifier
+                    .width(160.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(DarkCard)
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "${selectedMonth.year}年${selectedMonth.monthValue}月",
+                    color = TextPrimary,
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+            }
+            IconButton(onClick = {
+                val now = YearMonth.now()
+                if (selectedMonth.isBefore(now)) selectedMonth = selectedMonth.plusMonths(1)
+            }) {
+                Icon(
+                    Icons.Default.ChevronRight, "下月", tint = if (selectedMonth.isBefore(YearMonth.now())) TextSecondary else TextTertiary,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        SectionHint("选择月份后，使用下方按钮分享该月账单")
+
+        // ── 分享操作按钮组 ──
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ShareActionButton(
+                icon = Icons.Default.Share,
+                label = "文字",
+                desc = "纯文本分享",
+                color = ElectricColor,
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    scope.launch {
+                        val report = viewModel.generateShareReport(selectedMonth)
+                        if (report != null) {
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
+                        } else {
+                            toast(context, "该月数据不足，至少需要 2 条电表读数")
                         }
-                        context.startActivity(Intent.createChooser(intent, "分享月度账单"))
-                    } else {
-                        toast(context, "暂无足够数据生成账单")
                     }
                 }
-            }
-        )
-        Spacer(Modifier.height(8.dp))
-        SectionHint("至少需要 2 条本月电表读数才能生成账单报告")
+            )
+            ShareActionButton(
+                icon = Icons.Default.Cloud,
+                label = "HTML",
+                desc = "精美格式",
+                color = NeonYellow,
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    scope.launch {
+                        val html = viewModel.generateShareHtml(selectedMonth)
+                        if (html != null) {
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/html"
+                                putExtra(Intent.EXTRA_TEXT, html)
+                                putExtra(Intent.EXTRA_HTML_TEXT, html)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
+                        } else {
+                            toast(context, "该月数据不足，至少需要 2 条电表读数")
+                        }
+                    }
+                }
+            )
+            ShareActionButton(
+                icon = Icons.Default.ContentCopy,
+                label = "复制",
+                desc = "复制文字到剪贴板",
+                color = WaterColor,
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    scope.launch {
+                        val report = viewModel.generateShareReport(selectedMonth)
+                        if (report != null) {
+                            clipboardManager.setText(AnnotatedString(report))
+                            toast(context, "账单已复制到剪贴板")
+                        } else {
+                            toast(context, "该月数据不足，至少需要 2 条电表读数")
+                        }
+                    }
+                }
+            )
+        }
 
         // ═══════════════════════════════════════════════
         // 天气叠层（Open-Meteo）
@@ -490,6 +586,30 @@ private fun SectionHint(text: String) {
         fontSize = 11.sp,
         modifier = Modifier.padding(bottom = 4.dp)
     )
+}
+
+@Composable
+private fun ShareActionButton(
+    icon: ImageVector,
+    label: String,
+    desc: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(56.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = DarkCard, contentColor = color),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.height(2.dp))
+            Text(label, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = color)
+            Text(desc, fontFamily = MonoFontFamily, fontSize = 8.sp, color = TextSecondary)
+        }
+    }
 }
 
 @Composable

@@ -231,7 +231,7 @@ fun SplashScreen(onFinished: () -> Unit) {
 
                 // 图标本身
                 Image(
-                    painter = painterResource(id = R.mipmap.ic_launcher),
+                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
                     contentDescription = "EnergyFlow",
                     modifier = Modifier
                         .size(72.dp)

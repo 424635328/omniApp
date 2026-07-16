@@ -153,10 +153,10 @@ fun MainScreen(
         derivedStateOf { listState.firstVisibleItemIndex > 2 }
     }
 
-    // ── 顶栏折叠状态：滚过 80dp 后压缩顶栏 ──
+    // ── 顶栏折叠状态：快速滚过 30dp 后压缩顶栏 ──
     val isCollapsed by remember {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 80
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 30
         }
     }
 
@@ -978,35 +978,26 @@ private fun DateFilterBar(
 @Composable
 private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
     val topPadding by animateDpAsState(
-        targetValue = if (collapsed) 8.dp else 18.dp,
+        targetValue = if (collapsed) 6.dp else 8.dp,
         animationSpec = tween(250), label = "topPad"
     )
     val bottomPadding by animateDpAsState(
-        targetValue = if (collapsed) 4.dp else 10.dp,
+        targetValue = if (collapsed) 4.dp else 6.dp,
         animationSpec = tween(250), label = "botPad"
     )
     val iconSize by animateDpAsState(
-        targetValue = if (collapsed) 24.dp else 32.dp,
+        targetValue = if (collapsed) 22.dp else 26.dp,
         animationSpec = tween(250), label = "iconSize"
     )
     val titleSize by animateFloatAsState(
-        targetValue = if (collapsed) 16f else 24f,
+        targetValue = if (collapsed) 15f else 20f,
         animationSpec = tween(250), label = "titleSize"
     )
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        DarkBackground,
-                        DarkBackground.copy(alpha = 0.97f),
-                        DarkBackground.copy(alpha = 0.85f),
-                        DarkBackground.copy(alpha = 0f)
-                    )
-                )
-            )
+            .background(DarkBackground)
             .padding(start = 20.dp, end = 20.dp, top = topPadding, bottom = bottomPadding)
     ) {
         if (collapsed) {
@@ -1071,7 +1062,7 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                     )
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(

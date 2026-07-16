@@ -1,12 +1,14 @@
 package com.example.energyflow.data
 
+import com.example.energyflow.shared.BillingRules
+import com.example.energyflow.shared.CostEngineShared
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class CostEngineTest {
     @Test
     fun `electric tiers apply additive surcharge`() {
-        val bill = CostEngine.calculate(
+        val bill = CostEngineShared.calculate(
             rules = BillingRules(
                 peakPrice = 0.6,
                 valleyPrice = 0.3,
@@ -32,7 +34,7 @@ class CostEngineTest {
 
     @Test
     fun `tier3 surcharge kicks in above tier2 limit`() {
-        val bill = CostEngine.calculate(
+        val bill = CostEngineShared.calculate(
             rules = BillingRules(
                 peakPrice = 0.5583,
                 valleyPrice = 0.3583,
@@ -56,7 +58,7 @@ class CostEngineTest {
 
     @Test
     fun `within tier1 no surcharge applied`() {
-        val bill = CostEngine.calculate(
+        val bill = CostEngineShared.calculate(
             rules = BillingRules(
                 peakPrice = 0.5583,
                 valleyPrice = 0.3583,
@@ -79,7 +81,7 @@ class CostEngineTest {
 
     @Test
     fun `water price follows configured tiers`() {
-        val bill = CostEngine.calculate(
+        val bill = CostEngineShared.calculate(
             rules = BillingRules(
                 waterTier1Limit = 10.0,
                 waterTier2Limit = 20.0,

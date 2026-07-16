@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 单色层（Android 13+ 主题图标适配） -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.55"
+        android:scaleY="0.55"
+        android:translateX="24"
+        android:translateY="24">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M45,4L18,60h24l-6,44l42,-56H54l6,-44z" />
+    </group>
+</vector>

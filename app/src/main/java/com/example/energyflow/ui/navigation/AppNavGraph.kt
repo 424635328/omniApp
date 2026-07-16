@@ -1,8 +1,16 @@
 package com.example.energyflow.ui.navigation
 
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -66,19 +74,25 @@ sealed class Screen(
  */
 @Composable
 fun AppNavGraph() {
-    // ── 当前标签页 ──
+    // ── 当前标签页 + 返回导航栈 ──
     var currentTab by remember { mutableStateOf<Screen>(Screen.Home) }
+    val tabHistory = remember { mutableListOf<Screen>() }
     val bottomBarScreens = listOf(Screen.Home, Screen.Chart, Screen.Settings)
 
     // ── 扫码覆盖层 & OCR 回传 ──
     var showScan by remember { mutableStateOf(false) }
     var pendingOcrResult by remember { mutableStateOf<String?>(null) }
 
-    // ── ViewModel 常驻内存：在此处一次性获取，切换时不重建 ──
-    // hiltViewModel() 内部查 ViewModelStore，已存在则直接返回缓存实例
+    // ── ViewModel 常驻内存 ──
     val mainVM: MainViewModel = hiltViewModel()
     val chartVM: ChartViewModel = hiltViewModel()
     val settingsVM: BillingSettingsViewModel = hiltViewModel()
+
+    // ── 预测性返回：非 Home 标签时返回 Home ──
+    PredictiveBackHandler(enabled = currentTab != Screen.Home) {
+        val prevTab = tabHistory.removeLastOrNull() ?: Screen.Home
+        currentTab = prevTab
+    }
 
     Scaffold(
         bottomBar = {
@@ -89,7 +103,6 @@ fun AppNavGraph() {
                 bottomBarScreens.forEach { screen ->
                     val selected = currentTab == screen
 
-                    // 图标弹跳动画
                     val iconScale by animateFloatAsState(
                         targetValue = if (selected) 1.18f else 1f,
                         animationSpec = spring(
@@ -116,7 +129,12 @@ fun AppNavGraph() {
                             )
                         },
                         selected = selected,
-                        onClick = { currentTab = screen },
+                        onClick = {
+                            if (currentTab != screen) {
+                                tabHistory.add(currentTab)
+                                currentTab = screen
+                            }
+                        },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = ElectricColor,
                             selectedTextColor = ElectricColor,
@@ -134,33 +152,58 @@ fun AppNavGraph() {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // ── 按当前标签渲染页面（Compose 树重建，但 ViewModel 数据瞬时可用） ──
-            when (currentTab) {
-                Screen.Home -> {
-                    // OCR 结果消费：扫码页返回时触发自动填充
-                    LaunchedEffect(pendingOcrResult) {
-                        pendingOcrResult?.let {
-                            mainVM.ocrAutoFill(it)
-                            pendingOcrResult = null
-                        }
+            // ── AnimatedContent + Predictive Back 过渡动画 ──
+            AnimatedContent(
+                targetState = currentTab,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    val order = listOf(Screen.Home, Screen.Chart, Screen.Settings)
+                    val direction = when {
+                        order.indexOf(initialState) > order.indexOf(targetState) -> -1
+                        else -> 1
                     }
-                    MainScreen(
-                        viewModel = mainVM,
-                        onScan = { showScan = true }
-                    )
-                }
+                    (slideInHorizontally(
+                        animationSpec = tween(280),
+                        initialOffsetX = { fullWidth -> direction * fullWidth / 4 }
+                    ) + fadeIn(animationSpec = tween(200)))
+                        .togetherWith(
+                            slideOutHorizontally(
+                                animationSpec = tween(280),
+                                targetOffsetX = { fullWidth -> -direction * fullWidth / 4 }
+                            ) + fadeOut(animationSpec = tween(200))
+                        )
+                },
+                label = "tabTransition"
+            ) { tab ->
+                when (tab) {
+                    Screen.Home -> {
+                        LaunchedEffect(pendingOcrResult) {
+                            pendingOcrResult?.let {
+                                mainVM.ocrAutoFill(it)
+                                pendingOcrResult = null
+                            }
+                        }
+                        MainScreen(
+                            viewModel = mainVM,
+                            onScan = { showScan = true }
+                        )
+                    }
 
-                Screen.Chart -> {
-                    ChartScreen(viewModel = chartVM)
-                }
+                    Screen.Chart -> {
+                        ChartScreen(viewModel = chartVM)
+                    }
 
-                Screen.Settings -> {
-                    BillingSettingsScreen(viewModel = settingsVM)
+                    Screen.Settings -> {
+                        BillingSettingsScreen(viewModel = settingsVM)
+                    }
                 }
             }
 
-            // ── 扫码覆盖层（位于标签页之上） ──
+            // ── 扫码覆盖层（预测性返回手势） ──
             if (showScan) {
+                PredictiveBackHandler(enabled = showScan) {
+                    showScan = false
+                }
                 ScanScreen(
                     onResult = { recognizedText ->
                         pendingOcrResult = recognizedText
