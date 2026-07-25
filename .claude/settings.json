@@ -1,0 +1,84 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[Pre-Edit] ⚠️ 确认: 1)已读对应skill? 2)只改任务相关代码? 3)不改相邻代码?\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[Pre-Bash] 💡 优先用 Grep/Glob/Read 等专用工具替代 Bash find/grep/cat\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && if echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"shared/src/commonMain\"; then echo \"[Post-Edit] 🔍 KMP边界检查...\"; grep -rn \"java\\.time\\|android\\.\" shared/src/commonMain/ --include=\"*.kt\" 2>/dev/null && echo \"❌ KMP violation found!\" || echo \"✅ KMP边界 OK\"; fi; true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[Stop] 🏁 任务完成检查: 如果改了代码 → 编译+测试过了吗？如果改了shared → KMP边界检查了吗？如果有新UI → 颜色/字体/状态收集合规吗？\""
+          }
+        ]
+      }
+    ]
+  },
+  "allowed-tools": [
+    {
+      "tool": "Read",
+      "description": "Reading files is always safe"
+    },
+    {
+      "tool": "Glob",
+      "description": "File pattern matching is always safe"
+    },
+    {
+      "tool": "Grep",
+      "description": "Content search is always safe"
+    },
+    {
+      "tool": "Bash",
+      "rules": {
+        "safe": [
+          "./gradlew :app:compileDebugKotlin",
+          "./gradlew :shared:compileDebugKotlinAndroid",
+          "./gradlew :app:testDebugUnitTest",
+          "ls ",
+          "find ",
+          "echo ",
+          "cat ",
+          "wc -l",
+          "mkdir -p",
+          "grep -rn",
+          "git diff",
+          "git status",
+          "git log",
+          "git branch",
+          "git stash",
+          "java -version",
+          "cat >"
+        ]
+      }
+    }
+  ]
+}
