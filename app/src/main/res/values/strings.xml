@@ -107,4 +107,11 @@
 
     <!-- Quick Settings Tile -->
     <string name="tile_label">Energy Flow</string>
+
+    <!-- App Shortcuts -->
+    <string name="shortcut_record_electric">记电费</string>
+    <string name="shortcut_record_electric_long">快速记录电表读数</string>
+    <string name="shortcut_view_chart">查看图表</string>
+    <string name="shortcut_view_chart_long">查看能耗分析图表</string>
+    <string name="shortcut_disabled">该快捷方式暂不可用</string>
 </resources>

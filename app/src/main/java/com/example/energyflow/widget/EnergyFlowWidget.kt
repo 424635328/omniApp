@@ -21,10 +21,13 @@ import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
+import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.width
 import androidx.glance.state.GlanceStateDefinition
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
@@ -32,6 +35,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.example.energyflow.MainActivity
+import com.example.energyflow.ui.QuickRecordActivity
 
 class EnergyFlowWidget : GlanceAppWidget() {
 
@@ -50,15 +54,16 @@ class EnergyFlowWidget : GlanceAppWidget() {
         val kwh = prefs[KEY_KWH] ?: 0.0
         val month = prefs[KEY_MONTH] ?: ""
 
-        val intent = Intent(context, MainActivity::class.java)
+        val mainIntent = Intent(context, MainActivity::class.java)
+        val quickRecordIntent = Intent(context, QuickRecordActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION or Intent.FLAG_ACTIVITY_NEW_TASK)
 
         GlanceTheme {
             Box(
                 modifier = GlanceModifier
                     .fillMaxSize()
                     .background(Color(0xFF0D0F12))
-                    .padding(12.dp)
-                    .clickable(actionStartActivity(intent)),
+                    .padding(12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -66,45 +71,70 @@ class EnergyFlowWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "⚡ Energy Flow",
-                        style = TextStyle(
-                            color = ColorProvider(Color(0xFF00FFC4)),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
+                    Column(
+                        modifier = GlanceModifier.clickable(actionStartActivity(mainIntent)),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "⚡ Energy Flow",
+                            style = TextStyle(
+                                color = ColorProvider(Color(0xFF00FFC4)),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         )
-                    )
+
+                        Spacer(modifier = GlanceModifier.height(8.dp))
+
+                        Text(
+                            text = if (cost > 0) "¥${"%.1f".format(cost)}" else "--",
+                            style = TextStyle(
+                                color = ColorProvider(Color(0xFF00FFC4)),
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+
+                        Spacer(modifier = GlanceModifier.height(4.dp))
+
+                        Text(
+                            text = if (kwh > 0) "${"%.1f".format(kwh)} 度" else "暂无数据",
+                            style = TextStyle(
+                                color = ColorProvider(if (kwh > 0) Color(0xFFE2E8F0) else Color(0xFF64748B)),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+
+                        Spacer(modifier = GlanceModifier.height(6.dp))
+
+                        if (month.isNotBlank()) {
+                            Text(
+                                text = month,
+                                style = TextStyle(
+                                    color = ColorProvider(Color(0xFF64748B)),
+                                    fontSize = 10.sp
+                                )
+                            )
+                        }
+                    }
 
                     Spacer(modifier = GlanceModifier.height(8.dp))
 
-                    Text(
-                        text = if (cost > 0) "¥${"%.1f".format(cost)}" else "--",
-                        style = TextStyle(
-                            color = ColorProvider(Color(0xFF00FFC4)),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-
-                    Spacer(modifier = GlanceModifier.height(4.dp))
-
-                    Text(
-                        text = if (kwh > 0) "${"%.1f".format(kwh)} 度" else "暂无数据",
-                        style = TextStyle(
-                            color = ColorProvider(if (kwh > 0) Color(0xFFE2E8F0) else Color(0xFF64748B)),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    )
-
-                    Spacer(modifier = GlanceModifier.height(6.dp))
-
-                    if (month.isNotBlank()) {
+                    Row(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .clickable(actionStartActivity(quickRecordIntent)),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
-                            text = month,
+                            text = "⚡ 快速记录",
                             style = TextStyle(
-                                color = ColorProvider(Color(0xFF64748B)),
-                                fontSize = 10.sp
+                                color = ColorProvider(Color(0xFF00FFC4)),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         )
                     }

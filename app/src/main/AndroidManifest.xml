@@ -32,7 +32,23 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="energyflow" android:host="record" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- ── Quick Record Activity ── -->
+        <activity
+            android:name="com.example.energyflow.ui.QuickRecordActivity"
+            android:exported="false"
+            android:theme="@style/Theme.EnergyFlow.Transparent"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <!-- ── Widget ── -->
         <receiver
