@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.WaterDrop
@@ -42,7 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -96,6 +97,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.example.energyflow.shared.CarbonResult
 
 // ═══════════════════════════════════════════════════════════════
 // 主屏幕
@@ -103,21 +105,23 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun ChartScreen(
-    viewModel: ChartViewModel = hiltViewModel()
+    viewModel: ChartViewModel = hiltViewModel(),
+    onWrapped: () -> Unit = {}
 ) {
-    val chartData by viewModel.chartData.collectAsStateWithLifecycle()
-    val timeRange by viewModel.timeRange.collectAsStateWithLifecycle()
-    val showCost by viewModel.showCost.collectAsStateWithLifecycle()
-    val billResult by viewModel.billResult.collectAsStateWithLifecycle()
-    val prediction by viewModel.prediction.collectAsStateWithLifecycle()
-    val predictedBill by viewModel.predictedBill.collectAsStateWithLifecycle()
-    val predictionTracking by viewModel.predictionTracking.collectAsStateWithLifecycle()
-    val eventImpacts by viewModel.eventImpacts.collectAsStateWithLifecycle()
-    val aiAnalysis by viewModel.aiAnalysis.collectAsStateWithLifecycle()
-    val aiLoading by viewModel.aiLoading.collectAsStateWithLifecycle()
-    val weatherData by viewModel.weatherData.collectAsStateWithLifecycle()
-    val weatherLoading by viewModel.weatherLoading.collectAsStateWithLifecycle()
-    val weatherError by viewModel.weatherError.collectAsStateWithLifecycle()
+    val chartData by viewModel.chartData.collectAsState()
+    val timeRange by viewModel.timeRange.collectAsState()
+    val showCost by viewModel.showCost.collectAsState()
+    val billResult by viewModel.billResult.collectAsState()
+    val prediction by viewModel.prediction.collectAsState()
+    val predictedBill by viewModel.predictedBill.collectAsState()
+    val predictionTracking by viewModel.predictionTracking.collectAsState()
+    val eventImpacts by viewModel.eventImpacts.collectAsState()
+    val aiAnalysis by viewModel.aiAnalysis.collectAsState()
+    val aiLoading by viewModel.aiLoading.collectAsState()
+    val carbonData by viewModel.carbonData.collectAsState()
+    val weatherData by viewModel.weatherData.collectAsState()
+    val weatherLoading by viewModel.weatherLoading.collectAsState()
+    val weatherError by viewModel.weatherError.collectAsState()
     var showWeather by remember { mutableStateOf(false) }
     var selectedChartIndex by remember { mutableIntStateOf(-1) }
 
@@ -129,11 +133,11 @@ fun ChartScreen(
     }
 
     // ── 电/水/气 表类型 ──
-    val selectedMeterType by viewModel.selectedMeterType.collectAsStateWithLifecycle()
-    val waterChartData by viewModel.waterChartData.collectAsStateWithLifecycle()
-    val waterBillResult by viewModel.waterBillResult.collectAsStateWithLifecycle()
-    val waterPrediction by viewModel.waterPrediction.collectAsStateWithLifecycle()
-    val gasChartData by viewModel.gasChartData.collectAsStateWithLifecycle()
+    val selectedMeterType by viewModel.selectedMeterType.collectAsState()
+    val waterChartData by viewModel.waterChartData.collectAsState()
+    val waterBillResult by viewModel.waterBillResult.collectAsState()
+    val waterPrediction by viewModel.waterPrediction.collectAsState()
+    val gasChartData by viewModel.gasChartData.collectAsState()
 
     val isEmpty = when (selectedMeterType) {
         ChartViewModel.MeterType.ELECTRIC -> chartData == ChartData.Empty
@@ -155,7 +159,7 @@ fun ChartScreen(
                 .background(DarkBackground)
                 .verticalScroll(scrollState)
         ) {
-            ChartTopBar(chartData, isEmpty, timeRange, selectedMeterType)
+            ChartTopBar(chartData, isEmpty, timeRange, selectedMeterType, onWrapped)
 
             TimeRangeSelector(timeRange) { viewModel.setTimeRange(it) }
 
@@ -182,7 +186,7 @@ fun ChartScreen(
                     Column {
                         when (selectedMeterType) {
                             ChartViewModel.MeterType.ELECTRIC -> ElectricAnalysisSection(
-                                chartData, billResult, showCost, prediction, predictedBill,
+                                chartData, billResult, carbonData, showCost, prediction, predictedBill,
                                 predictionTracking, eventImpacts, aiAnalysis, aiLoading,
                                 weatherData, weatherLoading, weatherError, showWeather,
                                 { showWeather = it }, selectedChartIndex, { selectedChartIndex = it },
@@ -248,7 +252,8 @@ private fun ChartTopBar(
     chartData: ChartData,
     isEmpty: Boolean,
     timeRange: TimeRange,
-    meterType: ChartViewModel.MeterType
+    meterType: ChartViewModel.MeterType,
+    onWrapped: () -> Unit = {}
 ) {
     val today = LocalDate.now()
     val fmt = DateTimeFormatter.ofPattern("MM.dd")
@@ -317,6 +322,34 @@ private fun ChartTopBar(
                     fontWeight = FontWeight.Bold,
                     fontSize = 24.sp
                 )
+                Spacer(modifier = Modifier.weight(1f))
+                // ── 年度报告按钮 ──
+                if (meterType == ChartViewModel.MeterType.ELECTRIC) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ElectricColor.copy(alpha = 0.1f))
+                            .clickable { onWrapped() }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Assessment,
+                                contentDescription = "报告",
+                                tint = ElectricColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "报告",
+                                fontFamily = MonoFontFamily,
+                                fontSize = 12.sp,
+                                color = ElectricColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1979,6 +2012,7 @@ private fun MeterTypeSelector(
 private fun ElectricAnalysisSection(
     chartData: ChartData,
     billResult: BillData?,
+    carbonData: CarbonResult? = null,
     showCost: Boolean,
     prediction: MonthPrediction?,
     predictedBill: PredictedBill?,
@@ -2556,3 +2590,122 @@ private fun WaterPredictionPanel(
     }
 }
 
+@Composable
+private fun CarbonSummaryCard(carbonResult: CarbonResult) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(DarkCard)
+            .border(1.dp, SuccessGreen.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
+            .padding(18.dp)
+    ) {
+        // ── 标题 ──
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(4.dp, 16.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(SuccessGreen)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "碳足迹",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontFamily = MonoFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text("🌿", fontSize = 16.sp)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── 关键指标行 ──
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // CO2 kg
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSurface)
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "${Formatters.formatDecimal1(carbonResult.totalKgCO2)}",
+                        color = SuccessGreen,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                    Text(
+                        "kg CO₂",
+                        color = TextTertiary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // 其中电排放
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSurface)
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "${Formatters.formatDecimal1(carbonResult.electricKgCO2)}",
+                        color = ElectricColor,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                    Text(
+                        "电排放 kg",
+                        color = TextTertiary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // Tree days
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSurface)
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "${carbonResult.treeDays}",
+                        color = SuccessGreen,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                    Text(
+                        "等效树·天",
+                        color = TextTertiary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+    }
+}

@@ -7,9 +7,13 @@ import com.example.energyflow.data.BatchInsertResult
 import com.example.energyflow.data.BillingRules
 import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.data.MeterRepository
+import com.example.energyflow.data.ReportExporter
 import com.example.energyflow.data.UserPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -85,6 +89,73 @@ class BillingSettingsViewModel @Inject constructor(
     }
     fun updateCarbonTreeKgPerYear(value: Double) = viewModelScope.launch {
         userPreferences.setCarbonTreeKgPerYear(value)
+    }
+
+    // ── 报告图片导出 ──────────────────────────────────────────
+
+    private val _reportImageUri = MutableStateFlow<android.net.Uri?>(null)
+    val reportImageUri: StateFlow<android.net.Uri?> = _reportImageUri.asStateFlow()
+
+    private val _reportExporting = MutableStateFlow(false)
+    val reportExporting: StateFlow<Boolean> = _reportExporting.asStateFlow()
+
+    suspend fun generateReportImage(context: android.content.Context, yearMonth: YearMonth = YearMonth.now()): android.net.Uri? {
+        _reportExporting.value = true
+        try {
+            val electricRecords = repository.getElectricRecords().first()
+            val monthRecords = electricRecords.filter {
+                YearMonth.from(it.timestamp) == yearMonth && it.electricTotal != null
+            }.sortedBy { it.timestamp }
+            if (monthRecords.size < 2) return null
+
+            val first = monthRecords.first()
+            val last = monthRecords.last()
+            val totalKwh = (last.electricTotal!! - first.electricTotal!!).coerceAtLeast(0.0)
+
+            val firstPeak = first.electricPeak ?: 0.0
+            val firstValley = first.electricValley ?: 0.0
+            val lastPeak = last.electricPeak ?: 0.0
+            val lastValley = last.electricValley ?: 0.0
+            val peakKwh = (lastPeak - firstPeak).coerceAtLeast(0.0).coerceAtMost(totalKwh)
+            val valleyKwh = (lastValley - firstValley).coerceAtLeast(0.0).coerceAtMost(totalKwh - peakKwh)
+            val flatKwh = (totalKwh - peakKwh - valleyKwh).coerceAtLeast(0.0)
+
+            val bill = costEngine.calculateBill(totalKwh, peakKwh, valleyKwh)
+            val totalCo2Kg = totalKwh * 0.7
+            val treeDays = (totalCo2Kg / 20.0).toInt().coerceAtLeast(0)
+
+            val badges = mutableListOf<String>()
+            if (totalKwh < 300) badges.add("⚡节能先锋")
+            else if (totalKwh < 500) badges.add("⚡合理用电")
+            if (treeDays > 5) badges.add("🌿绿色达人")
+            if (peakKwh / totalKwh < 0.3 && totalKwh > 0) badges.add("🏔️错峰能手")
+            if (totalKwh > 0) badges.add("📊坚持记录")
+            if (badges.isEmpty()) badges.add("🌱初来乍到")
+
+            val tips = mutableListOf<String>()
+            if (peakKwh > 0) tips.add("将大功率电器移至谷电时段使用可节省电费")
+            tips.add("定期记录数据，获取更精准的能耗分析")
+
+            val content = ReportExporter.ReportContent(
+                period = "${yearMonth.year}年${yearMonth.monthValue}月",
+                totalKwh = totalKwh,
+                totalCost = bill.totalCost,
+                co2Kg = totalCo2Kg,
+                peakKwh = peakKwh,
+                valleyKwh = valleyKwh,
+                flatKwh = flatKwh,
+                treeDays = treeDays,
+                badges = badges,
+                previousCost = null,
+                tips = tips,
+                recordCount = monthRecords.size
+            )
+            val uri = ReportExporter.export(context, content)
+            _reportImageUri.value = uri
+            return uri
+        } finally {
+            _reportExporting.value = false
+        }
     }
 
     // ── 数据管理 ────────────────────────────────────────────

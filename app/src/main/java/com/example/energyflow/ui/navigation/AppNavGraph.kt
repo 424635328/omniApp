@@ -2,7 +2,6 @@ package com.example.energyflow.ui.navigation
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -10,9 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.energyflow.ui.MainScreen
 import com.example.energyflow.ui.MainViewModel
+import com.example.energyflow.ui.WrappedScreen
 import com.example.energyflow.ui.camera.ScanScreen
 import com.example.energyflow.ui.chart.ChartScreen
 import com.example.energyflow.ui.chart.ChartViewModel
@@ -49,7 +47,7 @@ import com.example.energyflow.ui.settings.BillingSettingsViewModel
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.ElectricColor
-import com.example.energyflow.ui.theme.AppFontFamily
+import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
 
@@ -85,6 +83,9 @@ fun AppNavGraph() {
     // ── 扫码覆盖层 & OCR 回传 ──
     var showScan by remember { mutableStateOf(false) }
     var pendingOcrResult by remember { mutableStateOf<String?>(null) }
+
+    // ── 年度报告覆盖层 ──
+    var showWrapped by remember { mutableStateOf(false) }
 
     // ── ViewModel 常驻内存 ──
     val mainVM: MainViewModel = hiltViewModel()
@@ -128,7 +129,7 @@ fun AppNavGraph() {
                         label = {
                             Text(
                                 text = screen.title,
-                                fontFamily = AppFontFamily
+                                fontFamily = MonoFontFamily
                             )
                         },
                         selected = selected,
@@ -166,17 +167,14 @@ fun AppNavGraph() {
                         else -> 1
                     }
                     (slideInHorizontally(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
-                        initialOffsetX = { fullWidth -> direction * fullWidth / 5 }
-                    ) + fadeIn(animationSpec = tween(180, delayMillis = 40)))
+                        animationSpec = tween(280),
+                        initialOffsetX = { fullWidth -> direction * fullWidth / 4 }
+                    ) + fadeIn(animationSpec = tween(200)))
                         .togetherWith(
                             slideOutHorizontally(
-                                animationSpec = tween(240),
-                                targetOffsetX = { fullWidth -> -direction * fullWidth / 12 }
-                            ) + fadeOut(animationSpec = tween(140))
+                                animationSpec = tween(280),
+                                targetOffsetX = { fullWidth -> -direction * fullWidth / 4 }
+                            ) + fadeOut(animationSpec = tween(200))
                         )
                 },
                 label = "tabTransition"
@@ -196,7 +194,10 @@ fun AppNavGraph() {
                     }
 
                     Screen.Chart -> {
-                        ChartScreen(viewModel = chartVM)
+                        ChartScreen(
+                            viewModel = chartVM,
+                            onWrapped = { showWrapped = true }
+                        )
                     }
 
                     Screen.Settings -> {
@@ -205,21 +206,8 @@ fun AppNavGraph() {
                 }
             }
 
-            // ── 扫码覆盖层：低位上浮进入，返回时轻推向下 ──
-            AnimatedVisibility(
-                visible = showScan,
-                enter = slideInVertically(
-                    initialOffsetY = { it / 10 },
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
-                ) + fadeIn(tween(180)),
-                exit = slideOutVertically(
-                    targetOffsetY = { it / 12 },
-                    animationSpec = tween(220)
-                ) + fadeOut(tween(160))
-            ) {
+            // ── 扫码覆盖层（预测性返回手势） ──
+            if (showScan) {
                 PredictiveBackHandler(enabled = showScan) {
                     showScan = false
                 }
@@ -230,6 +218,14 @@ fun AppNavGraph() {
                     },
                     onDismiss = { showScan = false }
                 )
+            }
+
+            // ── 年度报告覆盖层 ──
+            if (showWrapped) {
+                PredictiveBackHandler(enabled = showWrapped) {
+                    showWrapped = false
+                }
+                WrappedScreen(onDismiss = { showWrapped = false })
             }
         }
     }

@@ -49,7 +49,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,12 +94,12 @@ import java.time.YearMonth
 
 @Composable
 fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel()) {
-    val rules by viewModel.billingRulesFlow.collectAsStateWithLifecycle(initialValue = BillingRules())
-    val deepSeekApiKey by viewModel.deepSeekApiKeyFlow.collectAsStateWithLifecycle(initialValue = "")
-    val isDark by viewModel.isDarkThemeFlow.collectAsStateWithLifecycle(initialValue = true)
-    val followSystem by viewModel.followSystemThemeFlow.collectAsStateWithLifecycle(initialValue = false)
-    val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsStateWithLifecycle(initialValue = false)
-    val themeDistEnabled by viewModel.themeDistEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
+    val rules by viewModel.billingRulesFlow.collectAsState(initial = BillingRules())
+    val deepSeekApiKey by viewModel.deepSeekApiKeyFlow.collectAsState(initial = "")
+    val isDark by viewModel.isDarkThemeFlow.collectAsState(initial = true)
+    val followSystem by viewModel.followSystemThemeFlow.collectAsState(initial = false)
+    val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsState(initial = false)
+    val themeDistEnabled by viewModel.themeDistEnabledFlow.collectAsState(initial = true)
 
     var showClearDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -487,6 +487,27 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                             toast(context, "账单已复制到剪贴板")
                         } else {
                             toast(context, "该月数据不足，至少需要 2 条电表读数")
+                        }
+                    }
+                }
+            )
+            ShareActionButton(
+                icon = Icons.Default.FileDownload,
+                label = "图片",
+                desc = "导出分享图片",
+                color = SuccessGreen,
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    scope.launch {
+                        try {
+                            val uri = viewModel.generateReportImage(context, selectedMonth)
+                            if (uri != null) {
+                                com.example.energyflow.data.ShareUtils.shareImage(context, uri)
+                            } else {
+                                toast(context, "该月数据不足，至少需要 2 条电表读数")
+                            }
+                        } catch (e: Exception) {
+                            toast(context, "导出失败: ${e.message}")
                         }
                     }
                 }
