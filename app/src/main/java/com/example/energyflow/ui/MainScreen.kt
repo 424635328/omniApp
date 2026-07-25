@@ -63,7 +63,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -137,24 +137,24 @@ fun MainScreen(
     viewModel: MainViewModel = hiltViewModel(),
     onScan: (() -> Unit)? = null
 ) {
-    val records by viewModel.allRecords.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
-    val anomalyWarnings by viewModel.anomalyWarnings.collectAsState()
-    val showAnomalyDialog by viewModel.showAnomalyDialog.collectAsState()
-    val peakValleyExpanded by viewModel.peakValleyExpanded.collectAsState()
-    val tierProgress by viewModel.tierProgress.collectAsState()
-    val commonTags by viewModel.commonTags.collectAsState()
-    val insight by viewModel.insight.collectAsState()
+    val records by viewModel.allRecords.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val anomalyWarnings by viewModel.anomalyWarnings.collectAsStateWithLifecycle()
+    val showAnomalyDialog by viewModel.showAnomalyDialog.collectAsStateWithLifecycle()
+    val peakValleyExpanded by viewModel.peakValleyExpanded.collectAsStateWithLifecycle()
+    val tierProgress by viewModel.tierProgress.collectAsStateWithLifecycle()
+    val commonTags by viewModel.commonTags.collectAsStateWithLifecycle()
+    val insight by viewModel.insight.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
-    val isPastFirstPage by remember {
+    val isPastFirstPage by remember(listState) {
         derivedStateOf { listState.firstVisibleItemIndex > 2 }
     }
 
-    // ── 顶栏折叠状态：快速滚过 30dp 后压缩顶栏 ──
-    val isCollapsed by remember {
+    // ── 顶栏折叠状态：快速滚过 30px 后压缩顶栏 ──
+    val isCollapsed by remember(listState) {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 30
         }
@@ -174,39 +174,32 @@ fun MainScreen(
             RecordFilter.GAS -> records.filter { it.isGasRecorded }
             RecordFilter.WITH_NOTES -> records.filter { !it.note.isNullOrBlank() }
         }
-        var result = if (filterStartDate != null || filterEndDate != null) {
+        val dateFiltered = if (filterStartDate != null || filterEndDate != null) {
             typeFiltered.filter { record ->
                 val date = record.timestamp.toLocalDate()
                 (filterStartDate == null || !date.isBefore(filterStartDate)) &&
                 (filterEndDate == null || !date.isAfter(filterEndDate))
             }
         } else typeFiltered
-        // ── 智能去重：隐藏连续重复读数的记录（始终开启） ──
-        // 稳定排序确保同时间戳的重复记录相邻（最新在前）
-        val stableSorted = result.sortedWith(
-            compareByDescending<MeterRecord> { it.timestamp }.thenByDescending { it.id })
-        result = stableSorted.filterIndexed { index, record ->
-            val prev = stableSorted.getOrNull(index - 1) ?: return@filterIndexed true
-            if (record.timestamp != prev.timestamp) return@filterIndexed true  // 不同时间不比较
-            val hasAnyReading = record.isElectricRecorded || record.isWaterRecorded || record.isGasRecorded
-            if (!hasAnyReading) return@filterIndexed true
-            val eps = 0.1
-            // 双方都null=相同，单方null=不同，都有值=容差比较
+
+        // DAO 已按 timestamp DESC、id DESC 返回数据；保留原顺序，避免每次筛选再排序。
+        dateFiltered.filterIndexed { index, record ->
+            val prev = dateFiltered.getOrNull(index - 1) ?: return@filterIndexed true
+            if (record.timestamp != prev.timestamp) return@filterIndexed true
+            if (!record.isElectricRecorded && !record.isWaterRecorded && !record.isGasRecorded) {
+                return@filterIndexed true
+            }
             fun same(d1: Double?, d2: Double?): Boolean = when {
                 d1 == null && d2 == null -> true
                 d1 == null || d2 == null -> false
-                else -> kotlin.math.abs(d1 - d2) < eps
+                else -> kotlin.math.abs(d1 - d2) < 0.1
             }
-            // 峰谷也参与比较：否则同时间戳下"峰谷记录"与"纯总电记录"
-            // 总读数相近时会被误判为重复，导致峰谷电不显示
-            val elecSame = same(record.electricTotal, prev.electricTotal)
-            val peakSame = same(record.electricPeak, prev.electricPeak)
-            val valleySame = same(record.electricValley, prev.electricValley)
-            val waterSame = same(record.waterTotal, prev.waterTotal)
-            val gasSame = same(record.gasTotal, prev.gasTotal)
-            !(elecSame && peakSame && valleySame && waterSame && gasSame)
+            !(same(record.electricTotal, prev.electricTotal) &&
+                same(record.electricPeak, prev.electricPeak) &&
+                same(record.electricValley, prev.electricValley) &&
+                same(record.waterTotal, prev.waterTotal) &&
+                same(record.gasTotal, prev.gasTotal))
         }
-        result
     }
 
     // 滚动到底部附近时加载更多
@@ -222,12 +215,12 @@ fun MainScreen(
     }
 
     var showAddSheet by remember { mutableStateOf(false) }
-    val pendingOcrData by viewModel.pendingOcrData.collectAsState()
+    val pendingOcrData by viewModel.pendingOcrData.collectAsStateWithLifecycle()
     LaunchedEffect(pendingOcrData) { if (pendingOcrData != null) showAddSheet = true }
     var showBatchImport by remember { mutableStateOf(false) }
     var pendingBatchImport by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<com.example.energyflow.data.MeterRecord?>(null) }
-    val filterCounts by viewModel.filterCounts.collectAsState()
+    val filterCounts by viewModel.filterCounts.collectAsStateWithLifecycle()
 
     // ── 返回键拦截：有底部表单打开时 → 关闭表单而不是退出应用 ──
     androidx.activity.compose.BackHandler(enabled = editingRecord != null) {

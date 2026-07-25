@@ -52,8 +52,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -115,12 +115,6 @@ fun TimelineItem(
             stiffness = Spring.StiffnessHigh
         ),
         label = "pressScale"
-    )
-
-    val pressElevation by animateFloatAsState(
-        targetValue = if (isPressed) 1f else 3f,
-        animationSpec = tween(120),
-        label = "pressElevation"
     )
 
     val borderAlpha by animateFloatAsState(
@@ -238,35 +232,30 @@ fun TimelineItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .scale(pressScale)
-                .shadow(
-                    elevation = pressElevation.dp,
-                    shape = RoundedCornerShape(16.dp),
-                    ambientColor = ElectricColor.copy(alpha = if (isPressed || showActions) 0.15f else 0.05f),
-                    spotColor = ElectricColor.copy(alpha = if (isPressed || showActions) 0.15f else 0.05f)
-                )
-                .drawBehind {
-                    // 左侧类型标识色条（电=橙/水=蓝/气=紫，一眼识别）
-                    val accentWidth = 3.dp.toPx()
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            listOf(cardGlowColor.copy(alpha = 0.6f), cardGlowColor.copy(alpha = 0.15f))
-                        ),
-                        topLeft = Offset.Zero,
-                        size = Size(accentWidth, size.height),
-                        cornerRadius = CornerRadius(16.dp.toPx())
+                .drawWithCache {
+                    val radius = CornerRadius(16.dp.toPx())
+                    val accentBrush = Brush.verticalGradient(
+                        listOf(cardGlowColor.copy(alpha = 0.6f), cardGlowColor.copy(alpha = 0.15f))
                     )
-                }
-                .drawBehind {
-                    drawRoundRect(
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                cardGlowColor.copy(alpha = if (isPressed) 0.30f else 0.12f),
-                                cardGlowColor.copy(alpha = 0.03f)
-                            )
-                        ),
-                        style = Stroke(width = 1.5f),
-                        cornerRadius = CornerRadius(16.dp.toPx())
+                    val borderBrush = Brush.horizontalGradient(
+                        listOf(
+                            cardGlowColor.copy(alpha = if (isPressed) 0.30f else 0.12f),
+                            cardGlowColor.copy(alpha = 0.03f)
+                        )
                     )
+                    onDrawBehind {
+                        drawRoundRect(
+                            brush = accentBrush,
+                            topLeft = Offset.Zero,
+                            size = Size(3.dp.toPx(), size.height),
+                            cornerRadius = radius
+                        )
+                        drawRoundRect(
+                            brush = borderBrush,
+                            style = Stroke(width = 1.5f),
+                            cornerRadius = radius
+                        )
+                    }
                 },
             colors = CardDefaults.cardColors(containerColor = DarkCard),
             shape = RoundedCornerShape(16.dp)

@@ -2,6 +2,7 @@ package com.example.energyflow.ui.navigation
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -9,7 +10,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,7 +49,7 @@ import com.example.energyflow.ui.settings.BillingSettingsViewModel
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.ElectricColor
-import com.example.energyflow.ui.theme.MonoFontFamily
+import com.example.energyflow.ui.theme.AppFontFamily
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
 
@@ -125,7 +128,7 @@ fun AppNavGraph() {
                         label = {
                             Text(
                                 text = screen.title,
-                                fontFamily = MonoFontFamily
+                                fontFamily = AppFontFamily
                             )
                         },
                         selected = selected,
@@ -163,14 +166,17 @@ fun AppNavGraph() {
                         else -> 1
                     }
                     (slideInHorizontally(
-                        animationSpec = tween(280),
-                        initialOffsetX = { fullWidth -> direction * fullWidth / 4 }
-                    ) + fadeIn(animationSpec = tween(200)))
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        initialOffsetX = { fullWidth -> direction * fullWidth / 5 }
+                    ) + fadeIn(animationSpec = tween(180, delayMillis = 40)))
                         .togetherWith(
                             slideOutHorizontally(
-                                animationSpec = tween(280),
-                                targetOffsetX = { fullWidth -> -direction * fullWidth / 4 }
-                            ) + fadeOut(animationSpec = tween(200))
+                                animationSpec = tween(240),
+                                targetOffsetX = { fullWidth -> -direction * fullWidth / 12 }
+                            ) + fadeOut(animationSpec = tween(140))
                         )
                 },
                 label = "tabTransition"
@@ -199,8 +205,21 @@ fun AppNavGraph() {
                 }
             }
 
-            // ── 扫码覆盖层（预测性返回手势） ──
-            if (showScan) {
+            // ── 扫码覆盖层：低位上浮进入，返回时轻推向下 ──
+            AnimatedVisibility(
+                visible = showScan,
+                enter = slideInVertically(
+                    initialOffsetY = { it / 10 },
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                ) + fadeIn(tween(180)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it / 12 },
+                    animationSpec = tween(220)
+                ) + fadeOut(tween(160))
+            ) {
                 PredictiveBackHandler(enabled = showScan) {
                     showScan = false
                 }

@@ -23,28 +23,28 @@ interface MeterRecordDao {
     suspend fun delete(record: MeterRecord)
 
     // 查询所有记录，按时间倒序
-    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC")
+    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC, id DESC")
     fun getAllRecords(): Flow<List<MeterRecord>>
 
     // 按时间范围查询
-    @Query("SELECT * FROM meter_records WHERE timestamp BETWEEN :startTime AND :endTime ORDER BY timestamp DESC")
+    @Query("SELECT * FROM meter_records WHERE timestamp BETWEEN :startTime AND :endTime ORDER BY timestamp DESC, id DESC")
     fun getRecordsByTimeRange(startTime: LocalDateTime, endTime: LocalDateTime): Flow<List<MeterRecord>>
 
     // 查询最新的记录
-    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC, id DESC LIMIT 1")
     suspend fun getLatestRecord(): MeterRecord?
 
     // 查询上一条记录（用于计算差值）
-    @Query("SELECT * FROM meter_records WHERE timestamp < :currentTime ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM meter_records WHERE timestamp < :currentTime ORDER BY timestamp DESC, id DESC LIMIT 1")
     suspend fun getPreviousRecord(currentTime: LocalDateTime): MeterRecord?
 
     // 按类型查询记录
     // 分页加载（首屏只取最近200条）
-    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC LIMIT :limit")
+    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC, id DESC LIMIT :limit")
     fun getRecordsLimited(limit: Int = 200): Flow<List<MeterRecord>>
 
     // 加载更多（滚动底部时调用）
-    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC LIMIT :limit OFFSET :offset")
+    @Query("SELECT * FROM meter_records ORDER BY timestamp DESC, id DESC LIMIT :limit OFFSET :offset")
     suspend fun loadMoreRecords(limit: Int = 50, offset: Int): List<MeterRecord>
 
     // 按类型计数
@@ -82,10 +82,10 @@ interface MeterRecordDao {
     suspend fun deleteAll()
 
     // 查询最新的电表记录
-    @Query("SELECT * FROM meter_records WHERE isElectricRecorded = 1 AND electricTotal IS NOT NULL ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM meter_records WHERE isElectricRecorded = 1 AND electricTotal IS NOT NULL ORDER BY timestamp DESC, id DESC LIMIT 1")
     suspend fun getLatestElectricRecord(): MeterRecord?
 
     // 查询最新的水表记录
-    @Query("SELECT * FROM meter_records WHERE isWaterRecorded = 1 AND waterTotal IS NOT NULL ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM meter_records WHERE isWaterRecorded = 1 AND waterTotal IS NOT NULL ORDER BY timestamp DESC, id DESC LIMIT 1")
     suspend fun getLatestWaterRecord(): MeterRecord?
 }

@@ -28,8 +28,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -228,7 +231,8 @@ private fun CameraPreviewSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 32.dp), // 适配状态栏
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp), // 适配状态栏
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -249,7 +253,8 @@ private fun CameraPreviewSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp),
+                .navigationBarsPadding()
+                .padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             AnimatedVisibility(visible = errorMessage != null, enter = fadeIn(), exit = fadeOut()) {
@@ -360,7 +365,11 @@ private fun ScanResultView(
     val errors = parseResults.filterIsInstance<ParseResult.Error>()
 
     Column(
-        modifier = Modifier.fillMaxSize().background(DarkBackground).padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkBackground)
+            .imePadding()
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {

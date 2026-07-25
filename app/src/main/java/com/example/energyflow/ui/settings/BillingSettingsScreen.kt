@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.ContentCopy
@@ -35,7 +34,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
@@ -51,7 +49,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,7 +64,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,7 +76,6 @@ import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
 import com.example.energyflow.ui.theme.ErrorNeon
-import com.example.energyflow.ui.theme.GasColor
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.NeonYellow
@@ -98,15 +94,12 @@ import java.time.YearMonth
 
 @Composable
 fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel()) {
-    val rules by viewModel.billingRulesFlow.collectAsState(initial = BillingRules())
-    val deepSeekApiKey by viewModel.deepSeekApiKeyFlow.collectAsState(initial = "")
-    val isDark by viewModel.isDarkThemeFlow.collectAsState(initial = true)
-    val followSystem by viewModel.followSystemThemeFlow.collectAsState(initial = false)
-    val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsState(initial = false)
-    val themeDistEnabled by viewModel.themeDistEnabledFlow.collectAsState(initial = true)
-    val carbonElectricFactor by viewModel.carbonElectricFactorFlow.collectAsState(initial = 0.583)
-    val carbonGasFactor by viewModel.carbonGasFactorFlow.collectAsState(initial = 2.02)
-    val carbonTreeKgPerYear by viewModel.carbonTreeKgPerYearFlow.collectAsState(initial = 20.0)
+    val rules by viewModel.billingRulesFlow.collectAsStateWithLifecycle(initialValue = BillingRules())
+    val deepSeekApiKey by viewModel.deepSeekApiKeyFlow.collectAsStateWithLifecycle(initialValue = "")
+    val isDark by viewModel.isDarkThemeFlow.collectAsStateWithLifecycle(initialValue = true)
+    val followSystem by viewModel.followSystemThemeFlow.collectAsStateWithLifecycle(initialValue = false)
+    val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsStateWithLifecycle(initialValue = false)
+    val themeDistEnabled by viewModel.themeDistEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
 
     var showClearDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -576,99 +569,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         Spacer(Modifier.height(8.dp))
         PreferenceSwitch("每日主题（ThemeDist）", themeDistEnabled, viewModel::setThemeDistEnabled)
 
-        // ═══════════════════════════════════════════════
-        // 碳足迹因子
-        // ═══════════════════════════════════════════════
-        Spacer(Modifier.height(28.dp))
-        SectionHeader(Icons.Default.WaterDrop, "🌿 碳足迹", SuccessGreen)
-        Spacer(Modifier.height(4.dp))
-        SectionHint("调整 CO₂ 排放因子和碳汇参数，用于图表页面的碳足迹计算")
-        Spacer(Modifier.height(12.dp))
-        CarbonFactorRow(
-            label = "电排放因子",
-            value = carbonElectricFactor,
-            unit = "kg/kWh",
-            onDecrement = { viewModel.updateCarbonElectricFactor((carbonElectricFactor - 0.01).coerceAtLeast(0.0)) },
-            onIncrement = { viewModel.updateCarbonElectricFactor(carbonElectricFactor + 0.01) },
-            color = ElectricColor
-        )
-        Spacer(Modifier.height(8.dp))
-        CarbonFactorRow(
-            label = "气排放因子",
-            value = carbonGasFactor,
-            unit = "kg/m³",
-            onDecrement = { viewModel.updateCarbonGasFactor((carbonGasFactor - 0.01).coerceAtLeast(0.0)) },
-            onIncrement = { viewModel.updateCarbonGasFactor(carbonGasFactor + 0.01) },
-            color = GasColor
-        )
-        Spacer(Modifier.height(8.dp))
-        CarbonFactorRow(
-            label = "树木吸收率",
-            value = carbonTreeKgPerYear,
-            unit = "kg/年",
-            onDecrement = { viewModel.updateCarbonTreeKgPerYear((carbonTreeKgPerYear - 0.5).coerceAtLeast(1.0)) },
-            onIncrement = { viewModel.updateCarbonTreeKgPerYear(carbonTreeKgPerYear + 0.5) },
-            color = SuccessGreen
-        )
-
         Spacer(Modifier.height(24.dp))
-    }
-}
-
-@Composable
-private fun CarbonFactorRow(
-    label: String,
-    value: Double,
-    unit: String,
-    onDecrement: () -> Unit,
-    onIncrement: () -> Unit,
-    color: Color
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(DarkCard)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            label,
-            color = TextSecondary,
-            fontFamily = MonoFontFamily,
-            fontSize = 13.sp,
-            modifier = Modifier.width(90.dp)
-        )
-        Spacer(Modifier.weight(1f))
-        IconButton(onClick = onDecrement, modifier = Modifier.size(36.dp)) {
-            Icon(
-                Icons.Default.Remove, "减少",
-                tint = color, modifier = Modifier.size(20.dp)
-            )
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(90.dp)) {
-            Text(
-                String.format("%.3f", value),
-                color = TextPrimary,
-                fontFamily = MonoFontFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                unit,
-                color = TextTertiary,
-                fontFamily = MonoFontFamily,
-                fontSize = 10.sp,
-                textAlign = TextAlign.Center
-            )
-        }
-        IconButton(onClick = onIncrement, modifier = Modifier.size(36.dp)) {
-            Icon(
-                Icons.Default.Add, "增加",
-                tint = color, modifier = Modifier.size(20.dp)
-            )
-        }
     }
 }
 

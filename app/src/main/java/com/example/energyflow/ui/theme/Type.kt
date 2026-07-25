@@ -6,14 +6,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// 等宽字体家族
+// 文本使用平台无衬线字体保证中文可读性；数字读数继续使用等宽字体。
+val AppFontFamily = FontFamily.SansSerif
 val MonoFontFamily = FontFamily.Monospace
 
-// 自定义字体样式
 val EnergyFlowTypography = Typography(
-    // 大标题
     headlineLarge = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 32.sp,
         lineHeight = 40.sp,
@@ -21,7 +20,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 中标题
     headlineMedium = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 24.sp,
         lineHeight = 32.sp,
@@ -29,7 +28,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 小标题
     headlineSmall = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
         lineHeight = 28.sp,
@@ -37,7 +36,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 标题
     titleLarge = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 18.sp,
         lineHeight = 24.sp,
@@ -45,7 +44,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 中标题
     titleMedium = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 16.sp,
         lineHeight = 22.sp,
@@ -53,7 +52,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 小标题
     titleSmall = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
@@ -61,7 +60,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 正文
     bodyLarge = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
@@ -69,7 +68,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 中正文
     bodyMedium = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
@@ -77,7 +76,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 小正文
     bodySmall = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 16.sp,
@@ -85,7 +84,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 标签
     labelLarge = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
@@ -93,7 +92,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 中标签
     labelMedium = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
@@ -101,7 +100,7 @@ val EnergyFlowTypography = Typography(
     ),
     // 小标签
     labelSmall = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 10.sp,
         lineHeight = 14.sp,

@@ -2,13 +2,8 @@ package com.example.energyflow.ui.chart
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import android.graphics.Picture
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -19,10 +14,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -62,6 +57,8 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+private val DateLabelFormatter = DateTimeFormatter.ofPattern("MM/dd")
+
 /**
  * 自绘折线图 — 支持双指缩放、惯性滑动 (Fling)、
  *                         数据点选中 Tooltip、天气叠加、无障碍语义。
@@ -87,6 +84,8 @@ fun ConsumptionLineChart(
 
     val animateProgress = remember { Animatable(0f) }
     val flingScope = rememberCoroutineScope()
+    val currentOnSelectedIndexChange by rememberUpdatedState(onSelectedIndexChange)
+    val currentSelectedIndex by rememberUpdatedState(selectedIndex)
 
     // 数据变化时重播动画
     LaunchedEffect(consumptions, showCost) {
@@ -105,12 +104,13 @@ fun ConsumptionLineChart(
     var scale by remember(consumptions) { mutableFloatStateOf(1f) }
     var panX by remember(consumptions) { mutableFloatStateOf(0f) }
 
-    // ── 双缓冲：Picture 录制静态背景层（只在数据变化时重录） ──
-    var bgVersion by remember(consumptions) { mutableIntStateOf(0) }
-    val bgPicture = remember { mutableStateOf<Picture?>(null) }
-
-    // ── 无障碍描述 ──
-    val semDesc = buildA11yDescription(consumptions, showCost, unitLabel)
+    // ── 无障碍描述与日期标签：仅在数据/显示模式变化时计算 ──
+    val semDesc = remember(consumptions, showCost, unitLabel) {
+        buildA11yDescription(consumptions, showCost, unitLabel)
+    }
+    val dateLabels = remember(consumptions) {
+        consumptions.map { it.date.format(DateLabelFormatter) }
+    }
 
     // ── 缓存的 Paint 对象 ──
     val density = LocalDensity.current
@@ -204,7 +204,9 @@ fun ConsumptionLineChart(
                             chartWidth / (consumptions.size - 1) else chartWidth
                         val index = ((offset.x - paddingLeft) / xStep).roundToInt()
                             .coerceIn(0, consumptions.size - 1)
-                        onSelectedIndexChange(if (selectedIndex == index) -1 else index)
+                        currentOnSelectedIndexChange(
+                            if (currentSelectedIndex == index) -1 else index
+                        )
                     }
                 }
                 .pointerInput(consumptions) {
@@ -239,7 +241,7 @@ fun ConsumptionLineChart(
                                 if (initialSpan > 0f) {
                                     val newScale = (scale * span / initialSpan).coerceIn(1f, 4f)
                                     scale = newScale
-                                    onSelectedIndexChange(-1)
+                                    currentOnSelectedIndexChange(-1)
                                 }
                                 initialSpan = span
                                 changes.forEach { it.consume() }
@@ -273,7 +275,7 @@ fun ConsumptionLineChart(
                                     val maxPan = if (scale > 1f)
                                         (size.width * (scale - 1f) * 0.5f) else 0f
                                     panX = (panX + delta.x).coerceIn(-maxPan, maxPan)
-                                    onSelectedIndexChange(-1)
+                                    currentOnSelectedIndexChange(-1)
                                 }
                                 false -> { /* 垂直滑动 → 传递父容器 */ }
                                 null -> { change.consume() }
@@ -316,45 +318,22 @@ fun ConsumptionLineChart(
             val progress = animateProgress.value
             val visibleCount = (pointCount * progress).toInt().coerceIn(1, pointCount)
 
-            // ═════════════════════════════════════════
-            // 双缓冲：将静态背景层（网格 + Y 轴标签）录制成 Picture
-            // 仅在 bgVersion 变化时重新录制
-            // ═════════════════════════════════════════
-            val bgPic = bgPicture.value
-            if (bgPic == null || bgVersion == 0) {
-                val picture = Picture()
-                val recordingCanvas = picture.beginRecording(canvasWidth.toInt(), canvasHeight.toInt())
-                recordingCanvas.save()
-                recordingCanvas.translate(transformOffsetX, 0f)
-                recordingCanvas.scale(scale, 1f, canvasWidth / 2f, 0f)
-
-                drawGridLinesOnCanvas(
-                    canvas = recordingCanvas,
-                    paddingLeft = paddingLeft,
-                    paddingTop = paddingTop,
-                    chartWidth = chartWidth,
-                    chartHeight = chartHeight,
-                    maxValue = maxValue,
-                    showCost = showCost,
-                    gridColor = gridColor,
-                    dashEffect = dashEffect,
-                    gridTextPaint = gridTextPaint
-                )
-
-                recordingCanvas.restore()
-                picture.endRecording()
-                bgPicture.value = picture
-
-                val next = bgVersion + 1
-                bgVersion = if (next > 1000) 1 else next
-            }
-
-            // ═════════════════════════════════════════
-            // 绘制静态背景层（从 Picture 回放）
-            // ═════════════════════════════════════════
-            bgPicture.value?.let { pic ->
-                drawContext.canvas.nativeCanvas.drawPicture(pic)
-            }
+            // ── 网格与 Y 轴标签：直接绘制，始终跟随当前尺寸和缩放状态 ──
+            drawContext.canvas.nativeCanvas.save()
+            drawContext.canvas.nativeCanvas.translate(transformOffsetX, 0f)
+            drawContext.canvas.nativeCanvas.scale(scale, 1f, canvasWidth / 2f, 0f)
+            drawGridLines(
+                paddingLeft = paddingLeft,
+                paddingTop = paddingTop,
+                chartWidth = chartWidth,
+                chartHeight = chartHeight,
+                maxValue = maxValue,
+                showCost = showCost,
+                gridColor = gridColor,
+                dashEffect = dashEffect,
+                gridTextPaint = gridTextPaint
+            )
+            drawContext.canvas.nativeCanvas.restore()
 
             // ═════════════════════════════════════════
             // 动态层：应用缩放 + 平移（只对动态层做变换）
@@ -522,7 +501,7 @@ fun ConsumptionLineChart(
             consumptions.forEachIndexed { index, consumption ->
                 if (index % dateStep == 0 || index == pointCount - 1) {
                     drawContext.canvas.nativeCanvas.drawText(
-                        consumption.date.format(DateTimeFormatter.ofPattern("MM/dd")),
+                        dateLabels[index],
                         paddingLeft + index * xStep,
                         paddingTop + chartHeight + 22f,
                         dateTextPaint
@@ -760,37 +739,3 @@ private fun DrawScope.drawTooltip(
 }
 
 private fun formatInt(value: Double): String = "%.0f".format(value)
-
-// ════════════════════════════════════════════════════════════════
-// 双缓冲：Android Canvas 版本网格绘制（用于 Picture 录制）
-// ════════════════════════════════════════════════════════════════
-
-private fun drawGridLinesOnCanvas(
-    canvas: android.graphics.Canvas,
-    paddingLeft: Float,
-    paddingTop: Float,
-    chartWidth: Float,
-    chartHeight: Float,
-    maxValue: Double,
-    showCost: Boolean,
-    gridColor: Color,
-    dashEffect: PathEffect,
-    gridTextPaint: android.graphics.Paint
-) {
-    val lineCount = 4
-    val gridPaint = android.graphics.Paint().apply {
-        color = gridColor.copy(alpha = 0.4f).toArgb()
-        strokeWidth = 1f
-        pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f)
-        style = android.graphics.Paint.Style.STROKE
-        isAntiAlias = true
-    }
-
-    for (i in 0..lineCount) {
-        val y = paddingTop + chartHeight * i / lineCount
-        canvas.drawLine(paddingLeft, y, paddingLeft + chartWidth, y, gridPaint)
-        val gridValue = maxValue * (lineCount - i) / lineCount
-        val label = if (showCost) "¥${formatInt(gridValue)}" else formatInt(gridValue)
-        canvas.drawText(label, paddingLeft - 10f, y + 4f, gridTextPaint)
-    }
-}

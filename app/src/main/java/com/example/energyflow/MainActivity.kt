@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,9 +58,9 @@ class MainActivity : ComponentActivity() {
         handleDeepLink(intent)
 
         setContent {
-            val savedDarkTheme by userPreferences.isDarkTheme.collectAsState(initial = true)
-            val followSystemTheme by userPreferences.followSystemTheme.collectAsState(initial = false)
-            val themeDistEnabled by userPreferences.themeDistEnabled.collectAsState(initial = true)
+            val savedDarkTheme by userPreferences.isDarkTheme.collectAsStateWithLifecycle(initialValue = true)
+            val followSystemTheme by userPreferences.followSystemTheme.collectAsStateWithLifecycle(initialValue = false)
+            val themeDistEnabled by userPreferences.themeDistEnabled.collectAsStateWithLifecycle(initialValue = true)
             val darkTheme = if (followSystemTheme) isSystemInDarkTheme() else savedDarkTheme
 
             var themeColors by remember { mutableStateOf<ThemeDistColors?>(null) }
@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
             }
 
             var showSplash by remember { mutableStateOf(true) }
-            val isOnboardingComplete by userPreferences.isOnboardingComplete.collectAsState(initial = true)
+            val isOnboardingComplete by userPreferences.isOnboardingComplete.collectAsStateWithLifecycle(initialValue = true)
             var onboardingDismissed by remember { mutableStateOf(false) }
 
             LaunchedEffect(onboardingDismissed) {
