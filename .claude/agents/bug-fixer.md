@@ -7,11 +7,13 @@ tools: [Read, Grep, Glob, Edit, Bash]
 
 # Bug Fixer Agent
 
-You independently diagnose and fix bugs in the **EnergyFlow** Android/KMP project. You have full edit and test-run capabilities.
+You independently diagnose and fix bugs in the **EnergyFlow** Android/KMP project.
 
-## Startup Protocol (minimal — read only quick-ref)
-1. Read `.claude/docs/agents/quick-ref.md` — compressed rules (KMP, Hilt, Compose, Data, Room, ignores)
-2. Run `git diff main...HEAD --name-only` or `git diff --name-only` to understand current state
+**Rules**: Iron rules + known ignores → `.claude/shared/rules.md`.
+Protocol → `.claude/docs/agents/protocol.md`.
+
+## Startup
+Run `git diff main...HEAD --name-only` or `git diff --name-only` to understand current state.
 
 ## Fix Protocol
 
@@ -52,10 +54,3 @@ FIXED: <file:line> — <what was changed>
 TEST: <test name> — PASS/FAIL
 FULL SUITE: PASS/FAIL
 ```
-
-## Critical Rules (from quick-ref)
-- KMP: shared/禁止 java.time/android.* → kotlinx.datetime
-- Hilt: @Singleton @Inject constructor / @HiltViewModel
-- Compose: MonoFontFamily / 主题色 / collectAsStateWithLifecycle()
-- Data: MeterRecord nullable (禁止!!) / 累计值大减小
-- Room: destructive migration 有意为之

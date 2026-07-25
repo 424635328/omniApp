@@ -32,6 +32,7 @@
 - [新手引导](#新手引导)
 - [每日主题分布](#每日主题分布)
 - [构建与运行](#构建与运行)
+- [Claude Code Agent 系统](#-claude-code-agent-系统)
 - [测试](#测试)
 - [性能优化](#性能优化)
 - [依赖清单](#依赖清单)
@@ -671,6 +672,47 @@ ThemeDist 每天自动切换渐变色主题：
 ### DeepSeek AI
 
 在设置页填入 DeepSeek API Key（[platform.deepseek.com](https://platform.deepseek.com)），分析页即可使用 AI 分析。
+
+---
+
+## 🤖 Claude Code Agent 系统
+
+本项目集成了完整的 `.claude/` Agent 知识库，支持 AI 辅助开发：
+
+### 架构
+
+```
+CLAUDE.md (每条对话自动加载) → 决策树路由
+    ↓
+Skills (13个) — 按需加载或 /name 调用
+    ↓             触发条件 + 文档索引 + 检查清单 + 验证
+Agents (5个) — Workflow 调用的专业子 Agent
+    ↓
+Workflows (7个) — 多 Agent 并行编排
+```
+
+### 常用命令
+
+```bash
+/energyflow-acknowledge    # 理解代码库
+/energyflow-new-feature    # 加新功能
+/energyflow-diagnose       # 诊断 Bug
+/energyflow-test           # 运行/调试测试
+/energyflow-quick-scan     # 提交前快速扫描
+/energyflow-commit         # 规范化提交
+```
+
+### 多 Agent 编排
+
+```
+workflow:full-review           # 4 维度并行审查（code+arch+analytics+ui）
+workflow:feature-development   # 端到端功能开发（理解→设计→实现→验证）
+workflow:bug-fix               # 系统化 Bug 修复（复现→诊断→修复→验证）
+workflow:multi-fix             # 批量并行修 Bug
+workflow:multi-feature         # 批量并行加功能
+```
+
+> 完整文档 → [`.claude/README.md`](.claude/README.md) | 维护指南 → [`.claude/CONTRIBUTING.md`](.claude/CONTRIBUTING.md)
 
 ---
 

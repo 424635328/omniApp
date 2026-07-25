@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,7 +51,6 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,6 +75,7 @@ import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
 import com.example.energyflow.ui.theme.ElectricColor
+import com.example.energyflow.ui.theme.ElectricGradient
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
 import com.example.energyflow.ui.theme.ErrorNeon
@@ -101,8 +103,11 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
     val followSystem by viewModel.followSystemThemeFlow.collectAsStateWithLifecycle(initialValue = false)
     val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsStateWithLifecycle(initialValue = false)
     val themeDistEnabled by viewModel.themeDistEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
+    val reportExporting by viewModel.reportExporting.collectAsStateWithLifecycle()
 
     var showClearDialog by remember { mutableStateOf(false) }
+    var showPreview by remember { mutableStateOf(false) }
+    var previewText by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
@@ -386,130 +391,224 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         SectionHeader(Icons.Default.Cloud, "📋 账单分享", NeonYellow)
         Spacer(Modifier.height(12.dp))
 
-        // ── 月份选择器 ──
+        // ── 月份选择器（渐变背景） ──
         var selectedMonth by remember { mutableStateOf(YearMonth.now()) }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(brush = ElectricGradient)
+                .padding(4.dp)
         ) {
-            IconButton(onClick = { selectedMonth = selectedMonth.minusMonths(1) }) {
-                Icon(Icons.Default.ChevronLeft, "上月", tint = TextSecondary, modifier = Modifier.size(28.dp))
-            }
-            Box(
+            Row(
                 modifier = Modifier
-                    .width(160.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(DarkCard)
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(DarkBackground.copy(alpha = 0.88f)),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    "${selectedMonth.year}年${selectedMonth.monthValue}月",
-                    color = TextPrimary,
-                    fontFamily = MonoFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
-            }
-            IconButton(onClick = {
-                val now = YearMonth.now()
-                if (selectedMonth.isBefore(now)) selectedMonth = selectedMonth.plusMonths(1)
-            }) {
-                Icon(
-                    Icons.Default.ChevronRight, "下月", tint = if (selectedMonth.isBefore(YearMonth.now())) TextSecondary else TextTertiary,
-                    modifier = Modifier.size(28.dp)
-                )
+                IconButton(onClick = { selectedMonth = selectedMonth.minusMonths(1) }) {
+                    Icon(Icons.Default.ChevronLeft, "上月", tint = ElectricColor, modifier = Modifier.size(32.dp))
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "${selectedMonth.year}年",
+                        color = TextSecondary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        "${selectedMonth.monthValue}月",
+                        color = TextPrimary,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 24.sp
+                    )
+                }
+                IconButton(onClick = {
+                    val now = YearMonth.now()
+                    if (selectedMonth.isBefore(now)) selectedMonth = selectedMonth.plusMonths(1)
+                }) {
+                    Icon(
+                        Icons.Default.ChevronRight, "下月",
+                        tint = if (selectedMonth.isBefore(YearMonth.now())) ElectricColor else TextTertiary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
         }
         Spacer(Modifier.height(4.dp))
         SectionHint("选择月份后，使用下方按钮分享该月账单")
 
-        // ── 分享操作按钮组 ──
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ShareActionButton(
-                icon = Icons.Default.Share,
-                label = "文字",
-                desc = "纯文本分享",
-                color = ElectricColor,
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    scope.launch {
-                        val report = viewModel.generateShareReport(selectedMonth)
-                        if (report != null) {
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, report)
-                            }
-                            context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
-                        } else {
-                            toast(context, "该月数据不足，至少需要 2 条电表读数")
-                        }
-                    }
-                }
-            )
-            ShareActionButton(
-                icon = Icons.Default.Cloud,
-                label = "HTML",
-                desc = "精美格式",
-                color = NeonYellow,
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    scope.launch {
-                        val html = viewModel.generateShareHtml(selectedMonth)
-                        if (html != null) {
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/html"
-                                putExtra(Intent.EXTRA_TEXT, html)
-                                putExtra(Intent.EXTRA_HTML_TEXT, html)
-                            }
-                            context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
-                        } else {
-                            toast(context, "该月数据不足，至少需要 2 条电表读数")
-                        }
-                    }
-                }
-            )
-            ShareActionButton(
-                icon = Icons.Default.ContentCopy,
-                label = "复制",
-                desc = "复制文字到剪贴板",
-                color = WaterColor,
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    scope.launch {
-                        val report = viewModel.generateShareReport(selectedMonth)
-                        if (report != null) {
-                            clipboardManager.setText(AnnotatedString(report))
-                            toast(context, "账单已复制到剪贴板")
-                        } else {
-                            toast(context, "该月数据不足，至少需要 2 条电表读数")
-                        }
-                    }
-                }
-            )
-            ShareActionButton(
-                icon = Icons.Default.FileDownload,
-                label = "图片",
-                desc = "导出分享图片",
-                color = SuccessGreen,
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    scope.launch {
-                        try {
-                            val uri = viewModel.generateReportImage(context, selectedMonth)
-                            if (uri != null) {
-                                com.example.energyflow.data.ShareUtils.shareImage(context, uri)
+        // ── 加载指示器 ──
+        if (reportExporting) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = ElectricColor,
+                    strokeWidth = 2.dp
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("正在生成报告...", color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 13.sp)
+            }
+        }
+
+        // ── 分享操作按钮组（2x2 网格） ──
+        Spacer(Modifier.height(10.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ShareActionButton(
+                    icon = Icons.Default.Share,
+                    label = "文字分享",
+                    desc = "纯文本，通用兼容",
+                    color = ElectricColor,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        scope.launch {
+                            val report = viewModel.generateShareReport(selectedMonth)
+                            if (report != null) {
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, report)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
                             } else {
                                 toast(context, "该月数据不足，至少需要 2 条电表读数")
                             }
-                        } catch (e: Exception) {
-                            toast(context, "导出失败: ${e.message}")
                         }
+                    }
+                )
+                ShareActionButton(
+                    icon = Icons.Default.Cloud,
+                    label = "HTML 分享",
+                    desc = "精美格式，适合笔记",
+                    color = NeonYellow,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        scope.launch {
+                            val html = viewModel.generateShareHtml(selectedMonth)
+                            if (html != null) {
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/html"
+                                    putExtra(Intent.EXTRA_TEXT, html)
+                                    putExtra(Intent.EXTRA_HTML_TEXT, html)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
+                            } else {
+                                toast(context, "该月数据不足，至少需要 2 条电表读数")
+                            }
+                        }
+                    }
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ShareActionButton(
+                    icon = Icons.Default.ContentCopy,
+                    label = "复制文字",
+                    desc = "一键复制到剪贴板",
+                    color = WaterColor,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        scope.launch {
+                            val report = viewModel.generateShareReport(selectedMonth)
+                            if (report != null) {
+                                clipboardManager.setText(AnnotatedString(report))
+                                toast(context, "账单已复制到剪贴板")
+                            } else {
+                                toast(context, "该月数据不足，至少需要 2 条电表读数")
+                            }
+                        }
+                    }
+                )
+                ShareActionButton(
+                    icon = Icons.Default.FileDownload,
+                    label = "导出图片",
+                    desc = "精美卡片，适合发布",
+                    color = SuccessGreen,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        scope.launch {
+                            try {
+                                val uri = viewModel.generateReportImage(context, selectedMonth)
+                                if (uri != null) {
+                                    com.example.energyflow.data.ShareUtils.shareImage(context, uri)
+                                } else {
+                                    toast(context, "该月数据不足，至少需要 2 条电表读数")
+                                }
+                            } catch (e: Exception) {
+                                toast(context, "导出失败: ${e.message}")
+                            }
+                        }
+                    }
+                )
+            }
+        }
+
+        // ── 预览按钮 ──
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = {
+                scope.launch {
+                    previewText = viewModel.generateShareReport(selectedMonth)
+                    showPreview = true
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = DarkCard,
+                contentColor = TextSecondary
+            ),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Text("👁 预览账单", fontFamily = MonoFontFamily, fontSize = 13.sp)
+        }
+
+        // ── 账单预览弹窗 ──
+        if (showPreview && previewText != null) {
+            AlertDialog(
+                onDismissRequest = { showPreview = false },
+                containerColor = DarkCard,
+                titleContentColor = TextPrimary,
+                textContentColor = TextSecondary,
+                title = {
+                    Text(
+                        "📋 账单预览 — ${selectedMonth.year}年${selectedMonth.monthValue}月",
+                        color = ElectricColor,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 400.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(
+                            previewText ?: "",
+                            color = TextPrimary,
+                            fontFamily = MonoFontFamily,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPreview = false }) {
+                        Text("关闭", color = TextSecondary, fontFamily = MonoFontFamily)
                     }
                 }
             )
@@ -621,15 +720,21 @@ private fun ShareActionButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(56.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = DarkCard, contentColor = color),
-        shape = RoundedCornerShape(10.dp)
+        modifier = modifier.height(64.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = DarkCard,
+            contentColor = color
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.height(2.dp))
-            Text(label, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = color)
-            Text(desc, fontFamily = MonoFontFamily, fontSize = 8.sp, color = TextSecondary)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(label, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = color)
+            Text(desc, fontFamily = MonoFontFamily, fontSize = 9.sp, color = TextSecondary)
         }
     }
 }

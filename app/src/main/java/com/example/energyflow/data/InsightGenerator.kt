@@ -50,7 +50,7 @@ object InsightGenerator {
         val thisMonth = records.filter { YearMonth.from(it.timestamp) == now }
         if (thisMonth.size < 2) return null
 
-        val kwh = (thisMonth.last().electricTotal!! - thisMonth.first().electricTotal!!).coerceAtLeast(0.0)
+        val kwh = ((thisMonth.last().electricTotal ?: 0.0) - (thisMonth.first().electricTotal ?: 0.0)).coerceAtLeast(0.0)
         val threshold80 = rules.electricTier2Limit * 0.8
 
         return if (kwh > threshold80) {
@@ -87,14 +87,14 @@ object InsightGenerator {
 
         if (recentRecords.size < 2 || earlierRecords.size < 2) return null
 
-        val recentKwh = recentRecords.last().electricTotal!! - recentRecords.first().electricTotal!!
+        val recentKwh = (recentRecords.last().electricTotal ?: 0.0) - (recentRecords.first().electricTotal ?: 0.0)
         val recentDays = ChronoUnit.DAYS.between(
             recentRecords.first().timestamp.toLocalDate(),
             recentRecords.last().timestamp.toLocalDate()
         ).coerceAtLeast(1)
         val recentDaily = recentKwh / recentDays
 
-        val earlierKwh = earlierRecords.last().electricTotal!! - earlierRecords.first().electricTotal!!
+        val earlierKwh = (earlierRecords.last().electricTotal ?: 0.0) - (earlierRecords.first().electricTotal ?: 0.0)
         val earlierDays = ChronoUnit.DAYS.between(
             earlierRecords.first().timestamp.toLocalDate(),
             earlierRecords.last().timestamp.toLocalDate()
@@ -124,8 +124,8 @@ object InsightGenerator {
 
         if (recent.size < 2) return null
 
-        val totalPeak = recent.last().electricPeak!! - recent.first().electricPeak!!
-        val totalValley = recent.last().electricValley!! - recent.first().electricValley!!
+        val totalPeak = (recent.last().electricPeak ?: 0.0) - (recent.first().electricPeak ?: 0.0)
+        val totalValley = (recent.last().electricValley ?: 0.0) - (recent.first().electricValley ?: 0.0)
         val total = totalPeak + totalValley
 
         if (total <= 0) return null

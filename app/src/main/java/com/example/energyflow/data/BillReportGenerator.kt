@@ -51,11 +51,12 @@ object BillReportGenerator {
     // ════════════════════════════════════════════
 
     fun generateTextReport(data: ReportData, comparison: ComparisonData? = null): String = buildString {
-        val sep = "══════════════════════════════════════"
-        val sepThin = "─".repeat(38)
+        val sepThick = "═".repeat(42)
+        val sepThin = "─".repeat(42)
+        val sepDot = "·".repeat(42)
 
         fun costPct(cost: Double): String =
-            if (data.totalCost > 0) "(${"%.0f".format(cost / data.totalCost * 100)}%)" else ""
+            if (data.totalCost > 0) "%.0f%%".format(cost / data.totalCost * 100) else ""
 
         fun changeArrow(delta: Double): String = when {
             delta > 0.01 -> "↑"
@@ -63,63 +64,91 @@ object BillReportGenerator {
             else -> "→"
         }
 
-        // ── Header ──
-        appendLine(sep)
-        appendLine("   ⚡ 能耗手记 · 月度账单")
-        appendLine("   ${data.periodStart.monthValue}月${data.periodStart.dayOfMonth}日 — ${data.periodEnd.monthValue}月${data.periodEnd.dayOfMonth}日  (${data.periodDays}天)")
-        appendLine(sep)
+        // ── Prominent total at the very top ──
+        appendLine("  💰 本月总费用: ¥${"%.2f".format(data.totalCost)}")
         appendLine()
 
-        // ── 费用总览 ──
-        appendLine("  💰 费用总览")
-        appendLine(sepThin)
-        appendLine("    电费      ${"%-9s".format("¥${"%.2f".format(data.electricCost)}")}  ${costPct(data.electricCost)}")
-        appendLine("    水费      ${"%-9s".format("¥${"%.2f".format(data.waterCost)}")}  ${costPct(data.waterCost)}")
-        if (data.gasM3 > 0) {
-            appendLine("    燃气费    ${"%-9s".format("¥${"%.2f".format(data.gasCost)}")}  ${costPct(data.gasCost)}")
-        }
-        appendLine("    ${"合计".padEnd(6)} ${"¥${"%.2f".format(data.totalCost)}".padStart(9)}")
+        // ── Header (box-drawing) ──
+        appendLine("╔$sepThick╗")
+        appendLine("║  ⚡ 能耗手记 · 月度账单".padEnd(48) + "║")
+        appendLine("║  ${data.periodStart.monthValue}月${data.periodStart.dayOfMonth}日 — ${data.periodEnd.monthValue}月${data.periodEnd.dayOfMonth}日  (${data.periodDays}天)".padEnd(48) + "║")
+        appendLine("╚$sepThick╝")
+        appendLine()
+
+        // ── KPI Total ──
+        appendLine("  ★ 本月总费用: ¥${"%.2f".format(data.totalCost)}")
+        appendLine("    日均费用:    ¥${"%.2f".format(data.dailyAvgCost)}")
 
         // ── 环比对比 ──
         if (comparison != null) {
-            appendLine(sepThin)
             val arrow = changeArrow(comparison.totalCostChange)
             val absPct = if (comparison.prevTotalCost > 0)
                 "%.1f%%".format(kotlin.math.abs(comparison.totalCostChange / comparison.prevTotalCost * 100)) else ""
-            appendLine("    较上月   $arrow ${"%.2f".format(kotlin.math.abs(comparison.totalCostChange))}  ($absPct)")
+            val prevAvg = if (comparison.prevDays > 0) comparison.prevTotalCost / comparison.prevDays else 0.0
+            appendLine("    较上月  $arrow ¥${"%.2f".format(kotlin.math.abs(comparison.totalCostChange))} ($absPct)")
+            appendLine("    上月日均 ¥${"%.2f".format(prevAvg)}")
         }
+        appendLine()
+
+        // ── 费用明细 (better aligned table) ──
+        appendLine("  📊 费用明细")
+        appendLine("  $sepThin")
+        fun costRow(label: String, cost: Double): String {
+            return "  %-7s ¥%10s  (%s)".format(label, "%.2f".format(cost), costPct(cost))
+        }
+        appendLine(costRow("电费", data.electricCost))
+        appendLine(costRow("水费", data.waterCost))
+        if (data.gasM3 > 0) {
+            appendLine(costRow("燃气费", data.gasCost))
+        }
+        appendLine("  $sepThin")
+        appendLine("  %-7s ¥%10s".format("合计", "%.2f".format(data.totalCost)))
         appendLine()
 
         // ── 用电 ──
         appendLine("  📊 用电明细")
         appendLine(sepThin)
-        appendLine("    总用电    ${"%.1f".format(data.electricKwh)} kWh".padEnd(26) + "日均 ${"%.1f".format(data.dailyAvgKwh)} kWh")
+        appendLine("  %-8s %10s".format("总用电", "%.1f kWh".format(data.electricKwh)))
+        appendLine("  %-8s %10s".format("日均用电", "%.1f kWh".format(data.dailyAvgKwh)))
         if (data.peakKwh > 0 || data.valleyKwh > 0) {
             val totalPv = data.peakKwh + data.valleyKwh
             val peakPct = if (totalPv > 0) data.peakKwh / totalPv * 100 else 0.0
             val valleyPct = if (totalPv > 0) data.valleyKwh / totalPv * 100 else 0.0
-            val barLen = 16
+            val barLen = 20
             val peakBars = (peakPct / 100 * barLen).toInt().coerceIn(0, barLen)
             val valleyBars = (valleyPct / 100 * barLen).toInt().coerceIn(0, barLen)
-            appendLine("    峰电 ${"%.1f".format(data.peakKwh)} ${"█".repeat(peakBars)}${"░".repeat((barLen - peakBars).coerceAtLeast(0))} ${"%.0f%%".format(peakPct)}")
-            appendLine("    谷电 ${"%.1f".format(data.valleyKwh)} ${"█".repeat(valleyBars)}${"░".repeat((barLen - valleyBars).coerceAtLeast(0))} ${"%.0f%%".format(valleyPct)}")
-            // 环比
+            appendLine("  峰电 %-6s %s%s %s".format(
+                "%.1f".format(data.peakKwh),
+                "█".repeat(peakBars), "░".repeat((barLen - peakBars).coerceAtLeast(0)),
+                "%.0f%%".format(peakPct)
+            ))
+            appendLine("  谷电 %-6s %s%s %s".format(
+                "%.1f".format(data.valleyKwh),
+                "█".repeat(valleyBars), "░".repeat((barLen - valleyBars).coerceAtLeast(0)),
+                "%.0f%%".format(valleyPct)
+            ))
             if (comparison != null) {
                 val kwhArrow = changeArrow(comparison.kwhChange)
-                appendLine("    较上月   $kwhArrow ${"%.1f".format(kotlin.math.abs(comparison.kwhChange))} kWh")
+                appendLine("  较上月   $kwhArrow ${"%.1f".format(kotlin.math.abs(comparison.kwhChange))} kWh")
             }
         } else {
-            appendLine("    单价     ¥${"%.4f".format(data.flatPrice)}/kWh")
+            appendLine("  %-8s ¥%.4f/kWh".format("单价", data.flatPrice))
         }
-        appendLine("    阶梯     ${data.tierLevel}")
+        appendLine("  %-8s %s".format("阶梯", data.tierLevel))
         appendLine()
 
         // ── 用水 ──
         appendLine("  💧 用水明细")
         appendLine(sepThin)
-        appendLine("    总用水    ${"%.1f".format(data.waterTons)} 吨")
+        val waterDaily = if (data.periodDays > 0) data.waterTons / data.periodDays else 0.0
+        appendLine("  %-8s %10s".format("总用水", "%.1f 吨".format(data.waterTons)))
+        appendLine("  %-8s %10s".format("日均用水", "%.2f 吨".format(waterDaily)))
         if (data.waterTierInfo.isNotBlank()) {
-            appendLine("    阶梯     ${data.waterTierInfo}")
+            appendLine("  %-8s %s".format("阶梯", data.waterTierInfo))
+        }
+        if (comparison != null) {
+            val wArrow = changeArrow(comparison.waterChange)
+            appendLine("  较上月   $wArrow ${"%.1f".format(kotlin.math.abs(comparison.waterChange))} 吨")
         }
         appendLine()
 
@@ -127,22 +156,31 @@ object BillReportGenerator {
         if (data.gasM3 > 0) {
             appendLine("  🔥 燃气明细")
             appendLine(sepThin)
-            appendLine("    总用气    ${"%.1f".format(data.gasM3)} m³")
+            val gasDaily = if (data.periodDays > 0) data.gasM3 / data.periodDays else 0.0
+            appendLine("  %-8s %10s".format("总用气", "%.1f m³".format(data.gasM3)))
+            appendLine("  %-8s %10s".format("日均用气", "%.2f m³".format(gasDaily)))
             appendLine()
         }
+
+        // ── 碳足迹 ──
+        val co2Kg = data.electricKwh * 0.785
+        val treeEquiv = co2Kg / 20.0
+        appendLine("  🌳 碳排放")
+        appendLine(sepThin)
+        appendLine("  %-8s %.1f kg CO₂ ≈ %.0f 棵树/天".format("碳排放", co2Kg, treeEquiv))
+        appendLine()
 
         // ── 统计 ──
         appendLine("  📈 统计")
         appendLine(sepThin)
-        appendLine("    记录数    ${data.recordCount} 条")
-        appendLine("    日均费用  ¥${"%.2f".format(data.dailyAvgCost)}")
+        appendLine("  %-8s %d 条".format("记录数", data.recordCount))
         if (data.topNotes.isNotEmpty()) {
-            appendLine("    标签      ${data.topNotes.joinToString(" · ")}")
+            appendLine("  %-8s %s".format("标签", data.topNotes.joinToString(" · ")))
         }
         appendLine()
-        appendLine(sep)
-        appendLine("    Energy Flow · 你的能耗小助手")
-        appendLine("    （通过 App 设置页分享）")
+        appendLine(sepDot)
+        appendLine("  Energy Flow · 你的能耗小助手")
+        appendLine("  💚 感谢你为节能减排做出的贡献！")
     }
 
     // ════════════════════════════════════════════
@@ -150,19 +188,20 @@ object BillReportGenerator {
     // ════════════════════════════════════════════
 
     fun generateHtmlReport(data: ReportData, comparison: ComparisonData? = null): String = buildString {
-        val accent = "#00FFC4"
-        val electricColor = "#00FFC4"
+        val electricAccent = "#0098FF"
+        val electricEnd = "#0058DD"
         val peakColor = "#FF8800"
-        val valleyColor = "#4488FF"
-        val waterColor = "#00E5FF"
-        val gasColor = "#FF9100"
-        val bgDark = "#0D0F12"
-        val cardBg = "#1F242F"
+        val valleyColor = "#8866DD"
+        val waterAccent = "#00C8A0"
+        val gasAccent = "#FF7B3D"
+        val bgDark = "#0A0C14"
+        val cardBg = "#1A1E30"
         val textPrimary = "#E2E8F0"
         val textSecondary = "#94A3B8"
         val textTertiary = "#64748B"
-        val red = "#FF3366"
-        val green = "#00E676"
+        val red = "#FF3B5C"
+        val green = "#00D68F"
+        val accent = electricAccent
 
         fun fmt(v: Double) = "%.2f".format(v)
         fun fmt1(v: Double) = "%.1f".format(v)
@@ -183,114 +222,115 @@ object BillReportGenerator {
         appendLine("""<title>能耗手记 · 月度账单</title>""")
         appendLine("""<style>""")
         appendLine("""*{margin:0;padding:0;box-sizing:border-box}""")
-        appendLine("""body{background:$bgDark;color:$textPrimary;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;padding:16px;line-height:1.6;-webkit-font-smoothing:antialiased}""")
-        appendLine("""h1{font-size:22px;font-weight:700;margin-bottom:4px}""")
-        appendLine("""h2{font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px}""")
-        appendLine(""".sub{color:$textSecondary;font-size:13px;margin-bottom:20px}""")
-        appendLine(""".card{background:$cardBg;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.06)}""")
-        appendLine(""".row{display:flex;justify-content:space-between;align-items:center;padding:8px 0}""")
-        appendLine(""".row+.row{border-top:1px solid rgba(255,255,255,0.05)}""")
-        appendLine(""".label{color:$textSecondary;font-size:14px}""")
+        appendLine("""body{background:radial-gradient(ellipse at 50% 0%,#121830 0%,$bgDark 70%);color:$textPrimary;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;padding:16px;line-height:1.6;-webkit-font-smoothing:antialiased;max-width:600px;margin:0 auto}""")
+        appendLine(""".hero{text-align:center;padding:24px 16px;background:linear-gradient(135deg,$electricAccent 0%,$electricEnd 100%);border-radius:16px;margin-bottom:14px;color:#fff;box-shadow:0 4px 20px rgba(0,152,255,0.25)}""")
+        appendLine(""".hero-icon{font-size:40px;margin-bottom:6px}""")
+        appendLine(""".hero-title{font-size:20px;font-weight:700;margin-bottom:2px}""")
+        appendLine(""".hero-sub{font-size:12px;opacity:0.85;margin-bottom:12px}""")
+        appendLine(""".hero-total{font-size:40px;font-weight:800;letter-spacing:-1px}""")
+        appendLine(""".hero-daily{font-size:14px;opacity:0.8;margin-top:4px}""")
+        appendLine("""h2{font-size:14px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px}""")
+        appendLine(""".h2-dot{display:inline-block;width:10px;height:10px;border-radius:3px;flex-shrink:0}""")
+        appendLine(""".card{background:$cardBg;border-radius:14px;padding:16px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.05);box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:transform .15s ease,box-shadow .15s ease}""")
+        appendLine(""".card:hover{transform:scale(1.01);box-shadow:0 4px 16px rgba(0,0,0,0.35)}""")
+        appendLine(""".card-sep{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent);margin:16px 0}""")
+        appendLine(""".row{display:flex;justify-content:space-between;align-items:center;padding:6px 0}""")
+        appendLine(""".row+.row{border-top:1px solid rgba(255,255,255,0.04)}""")
+        appendLine(""".label{color:$textSecondary;font-size:13px}""")
         appendLine(""".value{font-size:14px;font-weight:600}""")
-        appendLine(""".total-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0 0}""")
-        appendLine(""".total-label{font-size:15px;font-weight:700}""")
-        appendLine(""".total-value{font-size:22px;font-weight:700;color:$accent}""")
+        appendLine(""".dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;flex-shrink:0}""")
         appendLine(""".badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}""")
-        appendLine(""".bar-bg{height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;margin:4px 0 8px}""")
-        appendLine(""".bar-fill{height:100%;border-radius:4px;transition:width .3s}""")
-        appendLine(""".pv-row{display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0}""")
-        appendLine(""".pv-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}""")
-        appendLine(""".pv-bar{flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden}""")
-        appendLine(""".pv-fill{height:100%;border-radius:3px}""")
-        appendLine(""".pv-val{min-width:60px;text-align:right;font-size:12px;color:$textSecondary}""")
-        appendLine(""".tag{display:inline-block;padding:1px 8px;border-radius:8px;background:rgba(0,255,196,0.1);color:$accent;font-size:11px;margin:2px 3px}""")
-        appendLine(""".footer{text-align:center;color:$textTertiary;font-size:11px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06)}""")
-        appendLine(""".comparison{background:rgba(0,255,196,0.05);border-radius:8px;padding:12px;margin-top:12px;border:1px solid rgba(0,255,196,0.12)}""")
-        appendLine(""".comp-title{font-size:12px;color:$textSecondary;margin-bottom:8px}""")
-        appendLine(""".comp-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0}""")
+        appendLine(""".stacked-bar{display:flex;height:28px;border-radius:8px;overflow:hidden;margin:8px 0}""")
+        appendLine(""".seg-peak{height:100%;transition:width .3s;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;background:linear-gradient(90deg,$peakColor,#FFAA33)}""")
+        appendLine(""".seg-valley{height:100%;transition:width .3s;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;background:linear-gradient(90deg,#7755CC,$valleyColor)}""")
+        appendLine(""".legend{display:flex;gap:16px;font-size:12px;color:$textSecondary;margin-top:6px}""")
+        appendLine(""".legend-item{display:flex;align-items:center;gap:4px}""")
+        appendLine(""".comparison-box{background:rgba(0,152,255,0.06);border-radius:10px;padding:10px 14px;margin-top:12px;border:1px solid rgba(0,152,255,0.1)}""")
+        appendLine(""".comp-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0}""")
+        appendLine(""".tag{display:inline-block;padding:2px 8px;border-radius:8px;background:rgba(0,152,255,0.1);color:$accent;font-size:11px;margin:2px 3px}""")
+        appendLine(""".footer{text-align:center;color:$textTertiary;font-size:11px;margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.05)}""")
         appendLine("""</style></head><body>""")
 
-        // ── Header ──
-        appendLine("""<div style="text-align:center;padding:8px 0 16px">""")
-        appendLine("""<div style="font-size:32px;margin-bottom:4px">⚡</div>""")
-        appendLine("""<h1>能耗手记</h1>""")
-        appendLine("""<div class="sub">${data.periodStart.monthValue}月${data.periodStart.dayOfMonth}日 — ${data.periodEnd.monthValue}月${data.periodEnd.dayOfMonth}日 · ${data.periodDays}天</div>""")
-        appendLine("""</div>""")
-
-        // ── 总费用 ──
-        appendLine("""<div class="card">""")
-        appendLine("""<div class="total-row"><span class="total-label">本月总费用</span><span class="total-value">¥${fmt(data.totalCost)}</span></div>""")
+        // ── Hero Section ──
+        appendLine("""<div class="hero">""")
+        appendLine("""<div class="hero-icon">⚡</div>""")
+        appendLine("""<div class="hero-title">能耗手记 · 月度账单</div>""")
+        appendLine("""<div class="hero-sub">${data.periodStart.monthValue}月${data.periodStart.dayOfMonth}日 — ${data.periodEnd.monthValue}月${data.periodEnd.dayOfMonth}日 · ${data.periodDays}天</div>""")
+        appendLine("""<div class="hero-total">¥${fmt(data.totalCost)}</div>""")
+        appendLine("""<div class="hero-daily">日均 ¥${fmt(data.dailyAvgCost)}""")
         if (comparison != null) {
-            appendLine("""<div class="comp-row" style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.05);padding-top:8px">""")
-            appendLine("""<span class="label">上月</span><span style="font-size:13px;color:$textSecondary">¥${fmt(comparison.prevTotalCost)}</span>""")
-            appendLine("""<span>${changeBadge(comparison.totalCostChange)}</span>""")
-            appendLine("""</div>""")
+            val arrow = if (comparison.totalCostChange > 0.01) "↑" else if (comparison.totalCostChange < -0.01) "↓" else "→"
+            append(""" · 较上月 $arrow ¥${fmt(kotlin.math.abs(comparison.totalCostChange))}""")
         }
+        appendLine("""</div>""")
         appendLine("""</div>""")
 
         // ── 费用明细 ──
         appendLine("""<div class="card">""")
-        appendLine("""<h2>💰 费用明细</h2>""")
-        appendLine("""<div class="row"><span class="label"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:$electricColor;margin-right:8px"></span>电费</span><span class="value" style="color:$electricColor">¥${fmt(data.electricCost)}</span></div>""")
-        appendLine("""<div class="row"><span class="label"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:$waterColor;margin-right:8px"></span>水费</span><span class="value" style="color:$waterColor">¥${fmt(data.waterCost)}</span></div>""")
+        appendLine("""<h2><span class="h2-dot" style="background:$electricAccent"></span>💰 费用明细</h2>""")
+        appendLine("""<div class="row"><span class="label"><span class="dot" style="background:$electricAccent"></span>电费</span><span class="value" style="color:$electricAccent">¥${fmt(data.electricCost)}</span></div>""")
+        appendLine("""<div class="row"><span class="label"><span class="dot" style="background:$waterAccent"></span>水费</span><span class="value" style="color:$waterAccent">¥${fmt(data.waterCost)}</span></div>""")
         if (data.gasM3 > 0) {
-            appendLine("""<div class="row"><span class="label"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:$gasColor;margin-right:8px"></span>燃气费</span><span class="value" style="color:$gasColor">¥${fmt(data.gasCost)}</span></div>""")
+            appendLine("""<div class="row"><span class="label"><span class="dot" style="background:$gasAccent"></span>燃气费</span><span class="value" style="color:$gasAccent">¥${fmt(data.gasCost)}</span></div>""")
         }
         appendLine("""</div>""")
 
         // ── 用电 ──
         appendLine("""<div class="card">""")
-        appendLine("""<h2>📊 用电明细</h2>""")
+        appendLine("""<h2><span class="h2-dot" style="background:$electricAccent"></span>📊 用电明细</h2>""")
         appendLine("""<div class="row"><span class="label">总用电</span><span class="value">${fmt1(data.electricKwh)} kWh</span></div>""")
         appendLine("""<div class="row"><span class="label">日均用电</span><span class="value">${fmt1(data.dailyAvgKwh)} kWh</span></div>""")
         if (data.peakKwh > 0 || data.valleyKwh > 0) {
             val totalPv = data.peakKwh + data.valleyKwh
-            val peakPct = if (totalPv > 0) data.peakKwh / totalPv * 100 else 0.0
-            val valleyPct = if (totalPv > 0) data.valleyKwh / totalPv * 100 else 0.0
-            appendLine("""<div style="margin-top:8px">""")
-            appendLine("""<div class="pv-row"><span class="pv-dot" style="background:$peakColor"></span><span style="flex:1;font-size:12px">峰电</span><span style="font-size:12px;color:$peakColor">${fmt1(data.peakKwh)} kWh</span></div>""")
-            appendLine("""<div class="pv-bar"><div class="pv-fill" style="width:${"%.0f".format(peakPct)}%;background:$peakColor"></div></div>""")
-            appendLine("""<div class="pv-row"><span class="pv-dot" style="background:$valleyColor"></span><span style="flex:1;font-size:12px">谷电</span><span style="font-size:12px;color:$valleyColor">${fmt1(data.valleyKwh)} kWh</span></div>""")
-            appendLine("""<div class="pv-bar"><div class="pv-fill" style="width:${"%.0f".format(valleyPct)}%;background:$valleyColor"></div></div>""")
-            if (comparison != null) {
-                appendLine("""<div class="pv-row" style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.05);padding-top:6px">""")
-                appendLine("""<span style="font-size:12px;color:$textSecondary">较上月</span><span>${changeBadge(comparison.kwhChange)}</span>""")
-                appendLine("""</div>""")
-            }
+            val peakPct = if (totalPv > 0) (data.peakKwh / totalPv * 100).toInt() else 0
+            val valleyPct = if (totalPv > 0) (data.valleyKwh / totalPv * 100).toInt() else 0
+            appendLine("""<div class="card-sep"></div>""")
+            appendLine("""<div style="font-size:13px;color:$textSecondary;margin-bottom:4px">峰谷分布</div>""")
+            appendLine("""<div class="stacked-bar">""")
+            if (peakPct > 0) appendLine("""<div class="seg-peak" style="width:${peakPct}%">${peakPct}%</div>""")
+            if (valleyPct > 0) appendLine("""<div class="seg-valley" style="width:${valleyPct}%">${valleyPct}%</div>""")
             appendLine("""</div>""")
+            appendLine("""<div class="legend">""")
+            appendLine("""<span class="legend-item"><span class="dot" style="background:$peakColor"></span>峰电 ${fmt1(data.peakKwh)} kWh</span>""")
+            appendLine("""<span class="legend-item"><span class="dot" style="background:$valleyColor"></span>谷电 ${fmt1(data.valleyKwh)} kWh</span>""")
+            appendLine("""</div>""")
+            if (comparison != null) {
+                appendLine("""<div class="comparison-box"><div class="comp-row"><span>较上月用电</span><span>${changeBadge(comparison.kwhChange)}</span></div></div>""")
+            }
         } else {
             appendLine("""<div class="row"><span class="label">单价</span><span class="value">¥${"%.4f".format(data.flatPrice)}/kWh</span></div>""")
         }
-        appendLine("""<div class="row"><span class="label">阶梯</span><span class="badge" style="background:rgba(0,255,196,0.12);color:$accent">${data.tierLevel}</span></div>""")
+        appendLine("""<div class="row" style="margin-top:4px"><span class="label">阶梯</span><span class="badge" style="background:rgba(0,152,255,0.12);color:$accent">${data.tierLevel}</span></div>""")
         appendLine("""</div>""")
 
         // ── 用水 ──
         appendLine("""<div class="card">""")
-        appendLine("""<h2>💧 用水明细</h2>""")
-        appendLine("""<div class="row"><span class="label">总用水</span><span class="value" style="color:$waterColor">${fmt1(data.waterTons)} 吨</span></div>""")
+        appendLine("""<h2><span class="h2-dot" style="background:$waterAccent"></span>💧 用水明细</h2>""")
+        appendLine("""<div class="row"><span class="label">总用水</span><span class="value" style="color:$waterAccent">${fmt1(data.waterTons)} 吨</span></div>""")
+        val waterDaily = if (data.periodDays > 0) data.waterTons / data.periodDays else 0.0
+        appendLine("""<div class="row"><span class="label">日均用水</span><span class="value">${fmt1(waterDaily)} 吨</span></div>""")
         if (data.waterTierInfo.isNotBlank()) {
             appendLine("""<div class="row"><span class="label">阶梯</span><span class="value" style="font-size:12px;color:$textSecondary">${data.waterTierInfo}</span></div>""")
         }
         if (comparison != null) {
-            val waterArrow = if (comparison.waterChange > 0.01) "↑" else if (comparison.waterChange < -0.01) "↓" else "→"
-            val waterColorStr = if (comparison.waterChange > 0.01) red else if (comparison.waterChange < -0.01) green else textSecondary
-            appendLine("""<div class="row"><span class="label">较上月</span><span style="color:$waterColorStr;font-size:13px">$waterArrow ${fmt1(kotlin.math.abs(comparison.waterChange))} 吨</span></div>""")
+            appendLine("""<div class="comparison-box"><div class="comp-row"><span>较上月用水</span><span>${changeBadge(comparison.waterChange)}</span></div></div>""")
         }
         appendLine("""</div>""")
 
         // ── 燃气（如果有） ──
         if (data.gasM3 > 0) {
             appendLine("""<div class="card">""")
-            appendLine("""<h2>🔥 燃气明细</h2>""")
-            appendLine("""<div class="row"><span class="label">总用气</span><span class="value" style="color:$gasColor">${fmt1(data.gasM3)} m³</span></div>""")
+            appendLine("""<h2><span class="h2-dot" style="background:$gasAccent"></span>🔥 燃气明细</h2>""")
+            appendLine("""<div class="row"><span class="label">总用气</span><span class="value" style="color:$gasAccent">${fmt1(data.gasM3)} m³</span></div>""")
+            val gasDaily = if (data.periodDays > 0) data.gasM3 / data.periodDays else 0.0
+            appendLine("""<div class="row"><span class="label">日均用气</span><span class="value">${fmt1(gasDaily)} m³</span></div>""")
             appendLine("""</div>""")
         }
 
         // ── 统计 ──
         appendLine("""<div class="card">""")
-        appendLine("""<h2>📈 统计</h2>""")
+        appendLine("""<h2><span class="h2-dot" style="background:$textTertiary"></span>📈 统计</h2>""")
         appendLine("""<div class="row"><span class="label">记录数</span><span class="value">${data.recordCount} 条</span></div>""")
-        appendLine("""<div class="row"><span class="label">日均费用</span><span class="value">¥${fmt(data.dailyAvgCost)}</span></div>""")
         if (data.topNotes.isNotEmpty()) {
             val tagsHtml = data.topNotes.joinToString("") { "<span class=\"tag\">$it</span>" }
             appendLine("""<div class="row"><span class="label">标签</span><span>$tagsHtml</span></div>""")
@@ -300,6 +340,7 @@ object BillReportGenerator {
         // ── Footer ──
         appendLine("""<div class="footer">""")
         appendLine("""Energy Flow · 你的能耗小助手""")
+        appendLine("""💚 感谢你为节能减排做出的贡献！""")
         appendLine("""</div>""")
 
         appendLine("""</body></html>""")
@@ -326,25 +367,25 @@ object BillReportGenerator {
 
         val first = elecMonth.first()
         val last = elecMonth.last()
-        val kwh = (last.electricTotal!! - first.electricTotal!!).coerceAtLeast(0.0)
+        val kwh = ((last.electricTotal ?: 0.0) - (first.electricTotal ?: 0.0)).coerceAtLeast(0.0)
         val days = ChronoUnit.DAYS.between(first.timestamp.toLocalDate(), last.timestamp.toLocalDate()).coerceAtLeast(1)
 
         val peakKwh = if (last.electricPeak != null && first.electricPeak != null)
-            (last.electricPeak!! - first.electricPeak!!).coerceAtLeast(0.0).coerceAtMost(kwh) else 0.0
+            ((last.electricPeak ?: 0.0) - (first.electricPeak ?: 0.0)).coerceAtLeast(0.0).coerceAtMost(kwh) else 0.0
         val valleyKwh = if (last.electricValley != null && first.electricValley != null)
-            (last.electricValley!! - first.electricValley!!).coerceAtLeast(0.0).coerceAtMost(kwh - peakKwh) else 0.0
+            ((last.electricValley ?: 0.0) - (first.electricValley ?: 0.0)).coerceAtLeast(0.0).coerceAtMost(kwh - peakKwh) else 0.0
 
         val waterMonth = waterRecords.filter {
             it.waterTotal != null && YearMonth.from(it.timestamp) == targetMonth
         }.sortedBy { it.timestamp }
         val waterTons = if (waterMonth.size >= 2)
-            (waterMonth.last().waterTotal!! - waterMonth.first().waterTotal!!).coerceAtLeast(0.0) else 0.0
+            ((waterMonth.last().waterTotal ?: 0.0) - (waterMonth.first().waterTotal ?: 0.0)).coerceAtLeast(0.0) else 0.0
 
         val gasMonth = gasRecords.filter {
             it.isGasRecorded && it.gasTotal != null && YearMonth.from(it.timestamp) == targetMonth
         }.sortedBy { it.timestamp }
         val gasM3 = if (gasMonth.size >= 2)
-            (gasMonth.last().gasTotal!! - gasMonth.first().gasTotal!!).coerceAtLeast(0.0) else 0.0
+            ((gasMonth.last().gasTotal ?: 0.0) - (gasMonth.first().gasTotal ?: 0.0)).coerceAtLeast(0.0) else 0.0
 
         val bill = costEngine.calculateBill(kwh, peakKwh, valleyKwh, waterTons)
 

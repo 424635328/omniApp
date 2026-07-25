@@ -7,6 +7,11 @@ description: Bug 诊断引导——系统化排查、定位和修复问题
 
 **用途**: 修 bug / 排查 / 报错 / 不工作时使用。
 
+> **什么时候用这个 Skill vs Workflow?**
+> - 简单 bug（单层、已知原因）→ 继续用本 skill 手动排查
+> - 复杂 bug（跨 ≥3 层）→ 用 `workflow:bug-fix`（4 层并行诊断 + 自动修复）
+> - 批量修 N 个 bug → 用 `workflow:multi-fix`（N 个 Agent 并行诊断→修复）
+
 ## 第零步：先排除已知陷阱
 
 **在深入排查前，先检查 gotchas.md 中最常见的坑：**

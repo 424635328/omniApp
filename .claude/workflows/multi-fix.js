@@ -9,6 +9,17 @@ export const meta = {
   ]
 }
 
+// Shared prompt blocks — canonical source: .claude/shared/rules.md
+const RULES = `CRITICAL RULES:
+1. KMP: shared/src/commonMain/ MUST NOT import java.time, java.util.*, or android.*
+2. Compose: ALL colors → theme colors (ElectricColor, etc.) — NO Color(0xFF...)
+3. Font: MonoFontFamily everywhere
+4. State: collectAsStateWithLifecycle(), not collectAsState()
+5. Hilt: @Singleton class X @Inject constructor(deps)
+6. Data: MeterRecord fields nullable → ?: 0.0, never !!
+7. Minimal: no abstractions for single use
+8. Surgical: don't modify unrelated adjacent code`
+
 phase('Parse')
 
 // Accept bugs as array or semicolon-separated string
@@ -38,7 +49,6 @@ if (bugs.length === 1) {
 
   phase('Diagnose')
 
-  // Parallel multi-layer diagnosis for a single complex bug
   const LAYERS = [
     { key: 'data', prompt: `Diagnose data-layer root cause for: "${bug.description}"
 Read relevant files in app/src/main/java/com/example/energyflow/data/.
@@ -53,8 +63,7 @@ Check: Hilt modules, @Inject/@Provides, build cache issues, Gradle configuration
 
   const layerDiags = await parallel(
     LAYERS.map(l => () => agent(
-      `Read .claude/docs/agents/quick-ref.md first.
-${l.prompt}
+      `${l.prompt}
 Output: root cause hypothesis with file:line reference, or "NOT IN THIS LAYER" if the bug isn't here.`,
       { label: `diag:${l.key}`, phase: 'Diagnose' }
     ))
@@ -63,7 +72,6 @@ Output: root cause hypothesis with file:line reference, or "NOT IN THIS LAYER" i
   const relevantDiags = layerDiags.filter(Boolean).filter(d => !d.includes('NOT IN THIS LAYER'))
   log(`Layer diagnosis: ${relevantDiags.length}/${LAYERS.length} layers have relevant findings`)
 
-  // Synthesize diagnoses
   const diagnosis = await agent(
     `Synthesize these parallel layer diagnoses into ONE root cause analysis:
 ${relevantDiags.map((d, i) => `## Layer ${i + 1}\n${d}`).join('\n\n')}
@@ -80,17 +88,12 @@ Output:
   phase('Fix')
 
   const fix = await agent(
-    `Read .claude/docs/agents/quick-ref.md.
-Apply the MINIMAL fix for this diagnosed bug:
+    `Apply the MINIMAL fix for this diagnosed bug:
 
 DIAGNOSIS:
 ${diagnosis}
 
-RULES:
-- Fix ONLY the bug, nothing else. Don't refactor adjacent code.
-- Match existing code style exactly.
-- After fixing, run: ./gradlew :app:compileDebugKotlin
-- Then run any related tests.
+${RULES}
 
 After fixing, output:
 - FIXED: file:line — what was changed
@@ -102,7 +105,6 @@ After fixing, output:
 
   phase('Synthesize')
 
-  // Full verification
   const verify = await agent(
     `Run final verification:
 1. ./gradlew :app:compileDebugKotlin
@@ -128,17 +130,12 @@ Report: PASS/FAIL for each.`,
 
 phase('Diagnose')
 
-// Stage 1: Diagnose each bug (runs in parallel across bugs)
-// Stage 2: Fix each diagnosed bug (pipeline — bug A fixes while bug B diagnoses)
-// Stage 3: Verify each fixed bug
-
 const results = await pipeline(
   bugs,
   // Stage 1: Diagnose
   async (bug) => {
     const diag = await agent(
-      `Read .claude/docs/agents/quick-ref.md.
-Diagnose this bug: "${bug.description}"
+      `Diagnose this bug: "${bug.description}"
 
 Check ALL layers:
 1. Data layer: null safety, cumulative readings, Room/DataStore
@@ -155,28 +152,25 @@ Output:
     return { bug, diagnosis: diag }
   },
 
-  // Stage 2: Fix (each bug fixes independently as soon as diagnosed)
+  // Stage 2: Fix
   async (result) => {
     if (!result || !result.diagnosis) return null
     const fix = await agent(
-      `Read .claude/docs/agents/quick-ref.md.
-Apply the MINIMAL fix for this diagnosed bug:
+      `Apply the MINIMAL fix for this diagnosed bug:
 
 BUG: ${result.bug.description}
 DIAGNOSIS: ${result.diagnosis}
 
-RULES:
-- Fix ONLY this bug, nothing else
-- Match existing code style exactly
-- After fixing, run: ./gradlew :app:compileDebugKotlin
+${RULES}
 
+After fixing, run: ./gradlew :app:compileDebugKotlin
 Output: FIXED: file:line — what was changed, and COMPILE: PASS/FAIL`,
       { label: `fix-bug-${result.bug.id}`, phase: 'Fix', agentType: 'bug-fixer' }
     )
     return { ...result, fix }
   },
 
-  // Stage 3: Quick verify (compile + related test)
+  // Stage 3: Quick verify
   async (result) => {
     if (!result || !result.fix) return null
     const testVerify = await agent(
@@ -192,7 +186,6 @@ Report: PASS/FAIL`,
 
 phase('Synthesize')
 
-// Final full test suite (run once for all fixes)
 const validResults = results.filter(Boolean)
 const fixResults = validResults.filter(r => r.fix && !(r.fix.toLowerCase().includes('fail')))
 
@@ -213,10 +206,9 @@ const allPassed = fullTest && !fullTest.toLowerCase().includes('fail')
 log(fullTest?.substring(0, 400) || 'full test complete')
 log(allPassed ? '✅ All fixes verified!' : '⚠️ Some tests failed — review output above.')
 
-// Boundary scan
 const boundaryScan = await agent(
   `Run quick boundary checks on fixed code:
-1. grep -rn "java\.time\|android\." shared/src/commonMain/ --include="*.kt"  → should be 0
+1. grep -rn "java\\.time\\|android\\." shared/src/commonMain/ --include="*.kt" → should be 0
 2. grep -rn "Color(0x" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "Color.kt" → check for new hardcoded colors
 3. grep -rn "collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v ChartScreen → check for state collection issues
 4. grep -rn "!!" app/src/main/java/com/example/energyflow/ --include="*.kt" → check for new non-null assertions

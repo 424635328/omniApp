@@ -9,15 +9,31 @@ export const meta = {
   ]
 }
 
+// Shared prompt blocks — canonical source: .claude/shared/rules.md
+const RULES = `CRITICAL RULES:
+1. KMP: shared/src/commonMain/ MUST NOT import java.time, java.util.*, or android.*
+2. Compose: ALL colors → theme colors (ElectricColor, etc.) — NO Color(0xFF...)
+3. Font: MonoFontFamily everywhere
+4. State: collectAsStateWithLifecycle(), not collectAsState()
+5. Hilt: @Singleton class X @Inject constructor(deps)
+6. Data: MeterRecord fields nullable → ?: 0.0, never !!
+7. Minimal: no abstractions for single use
+8. Surgical: don't modify unrelated adjacent code`
+
+const VERIFY = `./gradlew :app:compileDebugKotlin
+./gradlew :shared:compileDebugKotlinAndroid (if shared changed)
+./gradlew :app:testDebugUnitTest
+grep -rn "java\\.time\\|java\\.util\\|android\\." shared/src/commonMain/ --include="*.kt" → must be 0
+grep -rn "Color(0x" app/src/.../ui/ --include="*.kt" | grep -v "Color.kt"
+grep -rn "collectAsState()" app/src/.../ui/ --include="*.kt" | grep -v ChartScreen
+grep -rn "!!" <changed files>`
+
 const bug = args?.bug || args?.description || 'the reported bug'
 
 phase('Reproduce')
 
-// Step 1: Write a failing test that reproduces the bug
 const repro = await agent(
-  `Read .claude/docs/agents/quick-ref.md (compressed rules: KMP, Hilt, Compose, Data, Room, ignores).
-
-Then, for this bug: "${bug}"
+  `Write a FAILING test that reproduces this bug: "${bug}"
 
 Read the relevant source files and existing tests. Write a FAILING test that reproduces the bug.
 
@@ -36,7 +52,7 @@ log(repro?.substring(0, 300) || 'reproduction test written')
 
 phase('Diagnose')
 
-// Step 2: Parallel multi-layer root cause analysis (NEW — 4 layers diagnosed simultaneously)
+// Parallel multi-layer root cause analysis
 const LAYERS = [
   {
     key: 'data',
@@ -77,8 +93,7 @@ Check:
 
 const layerDiags = await parallel(
   LAYERS.map(l => () => agent(
-    `Read .claude/docs/agents/quick-ref.md first.
-${l.prompt}
+    `${l.prompt}
 Output: root cause hypothesis with file:line reference, or "NOT IN THIS LAYER" if the bug isn't here.`,
     { label: `diag:${l.key}`, phase: 'Diagnose' }
   ))
@@ -106,21 +121,17 @@ log(diagnosis?.substring(0, 500) || 'diagnosis complete')
 
 phase('Fix')
 
-// Step 3: Apply minimal fix
 const fix = await agent(
-  `Read .claude/docs/agents/quick-ref.md.
-Apply the MINIMAL fix for this diagnosed bug:
+  `Apply the MINIMAL fix for this diagnosed bug:
 
 DIAGNOSIS:
 ${diagnosis}
 
-RULES:
-- MINIMUM change — fix only the bug, nothing else
-- Don't refactor adjacent code, don't add features or "improvements"
-- Match existing code style exactly
-- After the fix, run: ./gradlew :app:compileDebugKotlin
-- Then run the reproduction test: ./gradlew :app:testDebugUnitTest --tests "<test name>"
-  Expected: PASS (bug is fixed)
+${RULES}
+
+After the fix, run: ./gradlew :app:compileDebugKotlin
+Then run the reproduction test: ./gradlew :app:testDebugUnitTest --tests "<test name>"
+Expected: PASS (bug is fixed)
 
 If the test still fails, re-examine the diagnosis.`,
   { label: 'apply-fix', agentType: 'bug-fixer' }
@@ -130,14 +141,13 @@ log(fix?.substring(0, 300) || 'fix applied')
 
 phase('Verify')
 
-// Step 4: Full verification
 const verify = await agent(
   `Verify the bug fix:
 
 1. Compile: ./gradlew :app:compileDebugKotlin
 2. Shared (if changed): ./gradlew :shared:compileDebugKotlinAndroid
 3. Full test suite: ./gradlew :app:testDebugUnitTest
-4. KMP boundary: grep -rn "java\.time\|android\." shared/src/commonMain/ --include="*.kt" → should be 0
+4. KMP boundary: grep -rn "java\\.time\\|android\\." shared/src/commonMain/ --include="*.kt" → should be 0
 5. Color check: grep -rn "Color(0x" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "Color.kt"
 6. State check: grep -rn "collectAsState()" <new ui files> | grep -v ChartScreen
 7. Null safety: grep -rn "!!" <changed files>

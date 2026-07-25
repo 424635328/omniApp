@@ -37,7 +37,7 @@ grep -rn "\.collectAsState()" app/src/main/java/com/example/energyflow/ui/ --inc
 ### 4. 字体
 ```bash
 # 检查新代码是否使用了默认字体
-grep -rn "fontFamily\s*=" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "MonoFontFamily\|fontFamily\|FontFamily"
+rg -n 'fontFamily\s*=' app/src/main/java/com/example/energyflow/ui/ | rg -v 'fontFamily\s*=\s*MonoFontFamily'
 ```
 - ✅ 所有 `fontFamily` 都应该是 `MonoFontFamily` 或不需要显式设置
 

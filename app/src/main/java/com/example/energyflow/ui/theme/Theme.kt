@@ -27,7 +27,7 @@ import kotlin.math.abs
  * ## 颜色策略（优先级由高到低）
  * 1. ThemeDist 服务器返回的每日主题色（`dynamicColors != null`）
  * 2. Material You 壁纸动态色（Android 12+，ThemeDist 关闭时）
- * 3. 默认霓虹暗色色板（fallback）
+ * 3. 默认 Obsidian/Pearl 色板（fallback）
  */
 @Composable
 fun EnergyFlowTheme(
@@ -88,7 +88,6 @@ fun EnergyFlowTheme(
         waterColor = shiftHue(primary, 80f)
     } else {
         // ── 策略 3：默认色板（fallback） ──
-        // 使用 Color.kt 统一基础色，层次分明、中性干净
         primary = ElectricStart
         secondary = StaticPeakColor
         accent = if (darkTheme) SurfaceVariant else ElectricEnd
@@ -103,25 +102,6 @@ fun EnergyFlowTheme(
         waterColor = WaterStart
     }
 
-    // ── 写入 ThemeState ──
-    ThemeState.colors = ThemeState.colors.copy(
-        isDark = darkTheme,
-        electricColor = primary,
-        electricPeakColor = peakColor,
-        electricValleyColor = valleyColor,
-        waterColor = waterColor,
-        gasColor = GasStart,
-        darkBackground = bg,
-        darkSurface = surface,
-        darkCard = card,
-        lightBackground = if (!darkTheme) bg else LightBackground,
-        lightSurface = if (!darkTheme) surface else LightSurface,
-        lightCard = if (!darkTheme) card else LightCard,
-        textPrimary = textPrimary,
-        textSecondary = textSecondary,
-        textTertiary = textTertiary
-    )
-
     // ── 根据主色亮度确定 onPrimary 用黑还是白 ──
     fun isLight(color: Color): Boolean {
         val luminance = 0.299f * color.red + 0.587f * color.green + 0.114f * color.blue
@@ -134,13 +114,66 @@ fun EnergyFlowTheme(
     val surfaceVariantTinted = lerp(card, primary, 0.04f)
     val outlineColor = lerp(card, textTertiary, 0.35f)
 
-    // ── Material3 colorScheme（完整配置，确保所有 M3 组件配色一致） ──
+    // ── M3 表面色调系统 — 从活跃 surface 推导 6 个层级 ──
+    val surfaceDim: Color
+    val surfaceBright: Color
+    val surfaceContainerLowest: Color
+    val surfaceContainer: Color
+    val surfaceContainerHigh: Color
+    val surfaceContainerHighest: Color
+    if (darkTheme) {
+        surfaceDim = lerp(surface, Color.Black, 0.25f)
+        surfaceBright = lerp(surface, Color.White, 0.08f)
+        surfaceContainerLowest = lerp(surface, Color.Black, 0.14f)
+        surfaceContainer = lerp(surface, Color.White, 0.04f)
+        surfaceContainerHigh = lerp(surface, Color.White, 0.10f)
+        surfaceContainerHighest = lerp(surface, Color.White, 0.16f)
+    } else {
+        surfaceDim = lerp(surface, Color.Black, 0.06f)
+        surfaceBright = lerp(surface, Color.White, 0.04f)
+        surfaceContainerLowest = lerp(surface, Color.White, 0.02f)
+        surfaceContainer = lerp(surface, Color.Black, 0.02f)
+        surfaceContainerHigh = lerp(surface, Color.Black, 0.06f)
+        surfaceContainerHighest = lerp(surface, Color.Black, 0.10f)
+    }
+
+    // ── 反转面 & 遮罩 ──
+    val inverseSurface = if (darkTheme) Color(0xFFE2E8F0) else Color(0xFF1A1E30)
+    val inverseOnSurface = if (darkTheme) Color(0xFF1A1E30) else Color(0xFFE2E8F0)
+    val inversePrimary = lerp(primary, Color.White, 0.50f)
+    val scrim = Color.Black.copy(alpha = 0.50f)
+
+    // ── 写入 ThemeState ──
+    ThemeState.colors = ThemeState.colors.copy(
+        isDark = darkTheme,
+        electricColor = primary,
+        electricPeakColor = peakColor,
+        electricValleyColor = valleyColor,
+        waterColor = waterColor,
+        gasColor = GasStart,
+        darkBackground = bg,
+        darkSurface = surface,
+        darkCard = card,
+        darkSurfaceBright = surfaceBright,
+        darkSurfaceContainer = surfaceContainer,
+        lightBackground = if (!darkTheme) bg else LightBackground,
+        lightSurface = if (!darkTheme) surface else LightSurface,
+        lightCard = if (!darkTheme) card else LightCard,
+        lightSurfaceBright = if (!darkTheme) surfaceBright else SurfaceBrightLight,
+        lightSurfaceContainer = if (!darkTheme) surfaceContainer else SurfaceContainerLight,
+        textPrimary = textPrimary,
+        textSecondary = textSecondary,
+        textTertiary = textTertiary
+    )
+
+    // ── Material3 colorScheme（完整 M3 表面色调 + 反转 + 遮罩） ──
     val colorScheme = if (darkTheme) {
         darkColorScheme(
             primary = primary,
             onPrimary = onPrimaryColor,
             primaryContainer = primary.copy(alpha = 0.15f),
             onPrimaryContainer = primary,
+            inversePrimary = inversePrimary,
             secondary = peakColor,
             onSecondary = onSecondaryColor,
             secondaryContainer = peakColor.copy(alpha = 0.15f),
@@ -153,8 +186,17 @@ fun EnergyFlowTheme(
             onSurface = textPrimary,
             surfaceVariant = surfaceVariantTinted,
             onSurfaceVariant = textSecondary,
+            surfaceDim = surfaceDim,
+            surfaceBright = surfaceBright,
+            surfaceContainerLowest = surfaceContainerLowest,
+            surfaceContainer = surfaceContainer,
+            surfaceContainerHigh = surfaceContainerHigh,
+            surfaceContainerHighest = surfaceContainerHighest,
+            inverseSurface = inverseSurface,
+            inverseOnSurface = inverseOnSurface,
             outline = outlineColor,
             outlineVariant = outlineColor.copy(alpha = 0.4f),
+            scrim = scrim,
             error = ErrorNeon,
             onError = Color.Black
         )
@@ -164,6 +206,7 @@ fun EnergyFlowTheme(
             onPrimary = onPrimaryColor,
             primaryContainer = primary.copy(alpha = 0.12f),
             onPrimaryContainer = primary,
+            inversePrimary = inversePrimary,
             secondary = peakColor,
             onSecondary = onSecondaryColor,
             secondaryContainer = peakColor.copy(alpha = 0.12f),
@@ -176,8 +219,17 @@ fun EnergyFlowTheme(
             onSurface = textPrimary,
             surfaceVariant = card,
             onSurfaceVariant = textSecondary,
+            surfaceDim = surfaceDim,
+            surfaceBright = surfaceBright,
+            surfaceContainerLowest = surfaceContainerLowest,
+            surfaceContainer = surfaceContainer,
+            surfaceContainerHigh = surfaceContainerHigh,
+            surfaceContainerHighest = surfaceContainerHighest,
+            inverseSurface = inverseSurface,
+            inverseOnSurface = inverseOnSurface,
             outline = textTertiary.copy(alpha = 0.6f),
             outlineVariant = textTertiary.copy(alpha = 0.3f),
+            scrim = scrim,
             error = ErrorNeon,
             onError = Color.Black
         )
@@ -192,6 +244,8 @@ fun EnergyFlowTheme(
         LocalAppBackground provides bg,
         LocalAppSurface provides surface,
         LocalAppCard provides card,
+        LocalAppSurfaceBright provides surfaceBright,
+        LocalAppSurfaceContainer provides surfaceContainer,
         LocalAppTextPrimary provides textPrimary,
         LocalAppTextSecondary provides textSecondary,
         LocalAppTextTertiary provides textTertiary,

@@ -185,7 +185,13 @@ fun AddRecordSheet(
             p != null && v != null -> Triple(p, v, t ?: (p + v))
             p != null && t != null -> Triple(p, (t - p).coerceAtLeast(0.0), t)
             v != null && t != null -> Triple((t - v).coerceAtLeast(0.0), v, t)
-            else -> Triple(p, v, t)
+            else -> {
+                val derived = when {
+                    p != null && v != null -> p + v
+                    else -> t
+                }
+                Triple(p, v, derived)
+            }
         }
     }
 

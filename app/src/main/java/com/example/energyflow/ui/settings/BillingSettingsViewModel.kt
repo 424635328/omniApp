@@ -110,7 +110,7 @@ class BillingSettingsViewModel @Inject constructor(
 
             val first = monthRecords.first()
             val last = monthRecords.last()
-            val totalKwh = (last.electricTotal!! - first.electricTotal!!).coerceAtLeast(0.0)
+            val totalKwh = ((last.electricTotal ?: 0.0) - (first.electricTotal ?: 0.0)).coerceAtLeast(0.0)
 
             val firstPeak = first.electricPeak ?: 0.0
             val firstValley = first.electricValley ?: 0.0
@@ -271,7 +271,7 @@ class BillingSettingsViewModel @Inject constructor(
         val sortedDates = grouped.keys.sorted()
 
         for (date in sortedDates) {
-            val dailyRecords = grouped[date]!!
+            val dailyRecords = grouped[date] ?: return@forEach
             val latest = dailyRecords.maxBy { it.timestamp }
 
             sb.appendLine("${date.monthValue}.${date.dayOfMonth}")

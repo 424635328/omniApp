@@ -64,11 +64,17 @@ import com.example.energyflow.data.ShareUtils
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.ElectricColor
+import com.example.energyflow.ui.theme.ElectricPeakColor
+import com.example.energyflow.ui.theme.ElectricValleyColor
+import com.example.energyflow.ui.theme.ErrorNeon
+import com.example.energyflow.ui.theme.GasColor
 import com.example.energyflow.ui.theme.MonoFontFamily
+import com.example.energyflow.ui.theme.OutlineDark
 import com.example.energyflow.ui.theme.SuccessGreen
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.theme.TextTertiary
+import com.example.energyflow.ui.theme.WarningNeon
 import kotlinx.coroutines.launch
 import java.time.YearMonth
 
@@ -320,7 +326,7 @@ private fun HeroPage(state: WrappedState) {
                 "${"%.1f".format(state.totalCo2Kg)}",
                 fontFamily = MonoFontFamily,
                 fontSize = 28.sp,
-                color = Color(0xFF00E676),
+                color = SuccessGreen,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.width(6.dp))
@@ -386,7 +392,7 @@ private fun CarbonTreePage(state: WrappedState) {
 
                 // Trunk
                 drawRect(
-                    color = Color(0xFF8B4513),
+                    color = GasColor,
                     topLeft = Offset(centerX - trunkWidth / 2, groundY - trunkHeight),
                     size = androidx.compose.ui.geometry.Size(trunkWidth, trunkHeight)
                 )
@@ -479,14 +485,14 @@ private fun PeakValleyPage(state: WrappedState) {
                 .fillMaxWidth()
                 .height(40.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF30364B))
+                .background(OutlineDark)
         ) {
             if (peakRatio > 0.01f) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(peakRatio)
                         .fillMaxHeight()
-                        .background(Color(0xFFFF8800))
+                        .background(ElectricPeakColor)
                         .padding(start = 12.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
@@ -514,9 +520,9 @@ private fun PeakValleyPage(state: WrappedState) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            LegendItem(Color(0xFFFF8800), "峰", "${"%.1f".format(state.peakKwh)} kWh", "${(peakRatio * 100).toInt()}%")
-            LegendItem(Color(0xFF30364B), "平", "${"%.1f".format(state.flatKwh)} kWh", "${(flatRatio * 100).toInt()}%")
-            LegendItem(Color(0xFF8866DD), "谷", "${"%.1f".format(state.valleyKwh)} kWh", "${(valleyRatio * 100).toInt()}%")
+            LegendItem(ElectricPeakColor, "峰", "${"%.1f".format(state.peakKwh)} kWh", "${(peakRatio * 100).toInt()}%")
+            LegendItem(OutlineDark, "平", "${"%.1f".format(state.flatKwh)} kWh", "${(flatRatio * 100).toInt()}%")
+            LegendItem(ElectricValleyColor, "谷", "${"%.1f".format(state.valleyKwh)} kWh", "${(valleyRatio * 100).toInt()}%")
         }
     }
 }
@@ -556,10 +562,10 @@ private fun BadgesPage(state: WrappedState) {
                             .clip(CircleShape)
                             .background(
                                 when (index) {
-                                    0 -> Color(0xFFFFD700).copy(alpha = 0.2f)
+                                    0 -> WarningNeon.copy(alpha = 0.2f)
                                     1 -> SuccessGreen.copy(alpha = 0.2f)
                                     2 -> ElectricColor.copy(alpha = 0.2f)
-                                    else -> Color(0xFFFF6B9D).copy(alpha = 0.2f)
+                                    else -> GasColor.copy(alpha = 0.2f)
                                 }
                             ),
                         contentAlignment = Alignment.Center
@@ -634,7 +640,7 @@ private fun SavingsTipsPage(state: WrappedState) {
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(
-                        if (isUp) Color(0xFFFF3366).copy(alpha = 0.1f)
+                        if (isUp) ErrorNeon.copy(alpha = 0.1f)
                         else SuccessGreen.copy(alpha = 0.1f)
                     )
                     .padding(16.dp)
@@ -644,7 +650,7 @@ private fun SavingsTipsPage(state: WrappedState) {
                         if (isUp) "较上月 ↑" else "较上月 ↓",
                         fontFamily = MonoFontFamily,
                         fontSize = 16.sp,
-                        color = if (isUp) Color(0xFFFF3366) else SuccessGreen,
+                        color = if (isUp) ErrorNeon else SuccessGreen,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -718,13 +724,13 @@ private fun SharePage(
                 .height(56.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = ElectricColor,
-                contentColor = Color(0xFF0C0E14)
+                contentColor = DarkBackground
             ),
             shape = RoundedCornerShape(14.dp)
         ) {
             if (exporting == 1) {
                 CircularProgressIndicator(
-                    color = Color(0xFF0C0E14),
+                    color = DarkBackground,
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp
                 )

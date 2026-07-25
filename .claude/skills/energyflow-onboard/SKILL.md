@@ -60,7 +60,7 @@ EnergyFlow 是一个**家庭能耗记录 Android App**（Kotlin + Compose + Hilt
 # 1. 建分支
 git checkout -b fix/simple-thing
 
-# 2. 改代码（读 CLUDE.md + 对应 skill）
+# 2. 改代码（读 CLAUDE.md + 对应 skill）
 
 # 3. 验证
 ./gradlew :app:compileDebugKotlin

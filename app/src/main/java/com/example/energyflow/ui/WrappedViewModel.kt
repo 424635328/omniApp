@@ -78,7 +78,7 @@ class WrappedViewModel @Inject constructor(
 
                 val first = monthRecords.first()
                 val last = monthRecords.last()
-                val totalKwh = (last.electricTotal!! - first.electricTotal!!).coerceAtLeast(0.0)
+                val totalKwh = ((last.electricTotal ?: 0.0) - (first.electricTotal ?: 0.0)).coerceAtLeast(0.0)
 
                 val firstPeak = first.electricPeak ?: 0.0
                 val firstValley = first.electricValley ?: 0.0
@@ -107,7 +107,7 @@ class WrappedViewModel @Inject constructor(
                 if (prevMonthRecords.size >= 2) {
                     val prevFirst = prevMonthRecords.first()
                     val prevLast = prevMonthRecords.last()
-                    val prevKwh = (prevLast.electricTotal!! - prevFirst.electricTotal!!).coerceAtLeast(0.0)
+                    val prevKwh = ((prevLast.electricTotal ?: 0.0) - (prevFirst.electricTotal ?: 0.0)).coerceAtLeast(0.0)
                     previousPeriodKwh = prevKwh
                     val prevBill = costEngine.calculateBill(prevKwh)
                     previousPeriodCost = prevBill.totalCost

@@ -172,7 +172,7 @@ class MainViewModel @Inject constructor(
         }.sortedBy { it.timestamp }
 
         val currentKwh = if (thisMonth.size >= 2) {
-            thisMonth.last().electricTotal!! - thisMonth.first().electricTotal!!
+            (thisMonth.last().electricTotal ?: 0.0) - (thisMonth.first().electricTotal ?: 0.0)
         } else 0.0
 
         // 上月同口径
@@ -182,7 +182,7 @@ class MainViewModel @Inject constructor(
         }.sortedBy { it.timestamp }
 
         val prevKwh = if (lastMonth.size >= 2) {
-            lastMonth.last().electricTotal!! - lastMonth.first().electricTotal!!
+            (lastMonth.last().electricTotal ?: 0.0) - (lastMonth.first().electricTotal ?: 0.0)
         } else null
 
         val momChange = if (prevKwh != null && prevKwh > 0) {

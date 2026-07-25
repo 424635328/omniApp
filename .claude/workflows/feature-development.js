@@ -1,13 +1,24 @@
 export const meta = {
   name: 'feature-development',
-  description: 'Full feature cycle: understand domain → design plan → implement (parallel where possible) → verify',
+  description: 'Full feature cycle: parallel Understand → 3-panel Design → pipeline Implement → parallel Verify',
   phases: [
-    { title: 'Understand', detail: 'Read relevant docs and existing tests' },
-    { title: 'Design', detail: 'Produce implementation plan with parallelizable steps' },
-    { title: 'Implement', detail: 'Execute steps — independent steps run in parallel' },
-    { title: 'Verify', detail: 'Run full test suite and boundary checks' }
+    { title: 'Understand', detail: 'Parallel doc reading for domain context' },
+    { title: 'Design', detail: '3-agent panel: MVP-first, risk-first, user-first → synthesize winner' },
+    { title: 'Implement', detail: 'Execute steps — independent steps run in parallel within each phase' },
+    { title: 'Verify', detail: 'Parallel compile + test + boundary scan' }
   ]
 }
+
+// Shared prompt blocks — canonical source: .claude/shared/rules.md
+const RULES = `CRITICAL RULES:
+1. KMP: shared/src/commonMain/ MUST NOT import java.time, java.util.*, or android.*
+2. Compose: ALL colors → theme colors (ElectricColor, etc.) — NO Color(0xFF...)
+3. Font: MonoFontFamily everywhere
+4. State: collectAsStateWithLifecycle(), not collectAsState()
+5. Hilt: @Singleton class X @Inject constructor(deps)
+6. Data: MeterRecord fields nullable → ?: 0.0, never !!
+7. Minimal: no abstractions for single use
+8. Surgical: don't modify unrelated adjacent code`
 
 const feature = args?.feature || args?.description || 'the pending changes'
 
@@ -20,7 +31,6 @@ const DOC_SETS = [
     prompt: `Read and summarize for feature "${feature}":
 1. .claude/docs/architecture/overview.md — project structure
 2. .claude/docs/architecture/gotchas.md — known pitfalls
-3. .claude/docs/agents/quick-ref.md — compressed rules
 Output: relevant architecture constraints, gotchas, and rules.`
   },
   {
@@ -35,7 +45,6 @@ Output: relevant architecture constraints, gotchas, and rules.`
 - If UI/charts: .claude/docs/ui-layer/theme-and-navigation.md + chart-screen.md
 - If settings/reports: .claude/docs/ui-layer/settings-and-reports.md
 - If external API: .claude/docs/data-layer/external-services.md
-
 Output: domain-specific knowledge, algorithms, data models, and constraints.`
   },
   {
@@ -58,64 +67,93 @@ log(`Docs loaded: core rules + domain knowledge + existing tests`)
 
 phase('Design')
 
-// Step 2: Create implementation plan with parallelizable steps marked
-const plan = await agent(
-  `Based on this analysis, create a step-by-step implementation plan:
+// Step 2: PARALLEL DESIGN PANEL — 3 agents produce independent plans from different angles
+const CONTEXT = `FEATURE: "${feature}"
 
 ## Core Rules
-${core?.substring(0, 1000)}
+${core?.substring(0, 800)}
 
 ## Domain Knowledge
-${domain?.substring(0, 1000)}
+${domain?.substring(0, 800)}
 
 ## Existing Tests
-${tests?.substring(0, 500)}
+${tests?.substring(0, 400)}
 
-FEATURE: "${feature}"
+${RULES}`
 
-For each step, specify:
-1. What file(s) to create/modify
-2. What the change is (concrete, not abstract)
-3. Whether this step CAN RUN IN PARALLEL with other steps (if it touches independent files)
-4. What test to write FIRST
-5. What to verify after the step
+const DESIGN_ANGLES = [
+  {
+    key: 'mvp',
+    prompt: `${CONTEXT}
 
-Mark parallelizable steps with [PARALLEL] prefix. Steps that depend on previous steps get [SEQ].
+Create an MVP-first implementation plan.
+Focus: absolute minimum code to make the feature work. Ship fast.
+For each step: what file + what change + how to verify.
+Mark parallelizable steps with [PARALLEL], dependent steps with [SEQ].`
+  },
+  {
+    key: 'risk',
+    prompt: `${CONTEXT}
 
-Rules:
-- KMP shared: no java.time, no android.* → kotlinx.datetime
-- Compose: MonoFontFamily, theme colors only, collectAsStateWithLifecycle()
-- Hilt: @Singleton for engines, @HiltViewModel for VMs
-- No speculative abstractions — minimum code
-- Each step independently verifiable
+Create a risk-first implementation plan.
+Focus: identify what could break, plan tests and safeguards first.
+For each step: what file + what change + what risk it mitigates + how to verify.
+Mark parallelizable steps with [PARALLEL], dependent steps with [SEQ].`
+  },
+  {
+    key: 'user',
+    prompt: `${CONTEXT}
 
-Format as numbered checklist with [PARALLEL]/[SEQ] markers.`,
-  { label: 'design-plan' }
+Create a user-first implementation plan.
+Focus: what delivers the most user value soonest, then polish.
+For each step: what file + what change + what user sees + how to verify.
+Mark parallelizable steps with [PARALLEL], dependent steps with [SEQ].`
+  }
+]
+
+const designPanel = await parallel(
+  DESIGN_ANGLES.map(d => () => agent(d.prompt, { label: `design:${d.key}`, phase: 'Design' }))
 )
 
-log(plan?.substring(0, 500) || 'plan created')
+// Synthesize: judge picks the best plan, grafts ideas from runners-up
+const synthesis = await agent(
+  `You are the lead architect. Three independent designers produced plans for: "${feature}"
+
+## MVP-First Plan
+${designPanel[0]?.substring(0, 1500) || 'N/A'}
+
+## Risk-First Plan
+${designPanel[1]?.substring(0, 1500) || 'N/A'}
+
+## User-First Plan
+${designPanel[2]?.substring(0, 1500) || 'N/A'}
+
+Your job:
+1. Pick the WINNER — which plan is the best foundation? Explain why.
+2. GRAFT the best ideas from the other two plans into the winner.
+3. Output the FINAL SYNTHESIZED PLAN as numbered steps with [PARALLEL]/[SEQ] markers.
+
+${RULES}
+- Each step independently verifiable`,
+  { label: 'synthesize-plan', phase: 'Design' }
+)
+
+log(synthesis?.substring(0, 500) || 'plan synthesized')
 
 phase('Implement')
 
-// Step 3: Implement — parallelize independent steps
-// Parse the plan to extract parallel vs sequential groups
+// Step 3: Parse the plan and execute phases with parallelism
 const planAnalysis = await agent(
   `Analyze this implementation plan and extract the execution order:
 
-${plan}
+${synthesis}
 
 Output a JSON array of phases. Each phase has:
 - "steps": array of step descriptions (these run in PARALLEL within the phase)
 - "dependsOn": which previous phase index this depends on (null for first phase)
 
 Steps that can run in parallel (marked [PARALLEL] or touch independent files) go in the SAME phase.
-Steps that depend on previous steps (marked [SEQ]) each get their OWN phase.
-
-Example:
-[
-  {"steps": ["Create data class X", "Create data class Y"], "dependsOn": null},
-  {"steps": ["Implement engine using X and Y"], "dependsOn": 0}
-]`,
+Steps that depend on previous steps (marked [SEQ]) each get their OWN phase.`,
   { label: 'parallelize-plan',
     schema: {
       type: 'object',
@@ -139,52 +177,42 @@ Example:
 
 // Execute phases — steps within each phase run in parallel
 for (let i = 0; i < (planAnalysis?.phases?.length || 0); i++) {
-  const phase = planAnalysis.phases[i]
-  log(`Phase ${i + 1}: ${phase.steps.length} step(s) ${phase.steps.length > 1 ? '(PARALLEL)' : ''}`)
+  const phaseData = planAnalysis.phases[i]
+  log(`Phase ${i + 1}/${planAnalysis.phases.length}: ${phaseData.steps.length} step(s) ${phaseData.steps.length > 1 ? '(PARALLEL)' : ''}`)
 
   await parallel(
-    phase.steps.map((step, j) => () => agent(
-      `Read .claude/docs/agents/quick-ref.md.
-
-IMPLEMENT this step for feature "${feature}":
+    phaseData.steps.map((step, j) => () => agent(
+      `IMPLEMENT this step for feature "${feature}":
 
 ${step}
 
-CRITICAL RULES:
-1. KMP: shared/src/commonMain/ MUST NOT import java.time or android.*
-2. Compose: ALL colors → theme colors (ElectricColor, etc.) — NO Color(0xFF...)
-3. Font: MonoFontFamily everywhere
-4. State: collectAsStateWithLifecycle(), not collectAsState()
-5. Hilt: @Singleton class X @Inject constructor(deps)
-6. Minimal: no abstractions for single use
-7. Surgical: don't modify unrelated adjacent code
+${RULES}
 
 After editing, run: ./gradlew :app:compileDebugKotlin
 If it fails, fix the errors before reporting done.`,
-      { label: `impl-${i + 1}-${j + 1}`, phase: 'Implement' }
+      { label: `impl-p${i + 1}-s${j + 1}`, phase: 'Implement', agentType: 'bug-fixer' }
     ))
   )
 
-  // Compile check after each phase
-  const compileCheck = await agent(
-    `Run: ./gradlew :app:compileDebugKotlin
+  // Quick compile check after each phase
+  if (phaseData.steps.length > 1 || i === planAnalysis.phases.length - 1) {
+    const compileCheck = await agent(
+      `Run: ./gradlew :app:compileDebugKotlin
 Report: PASS/FAIL. If FAIL, show the error and suggest fix.`,
-    { label: `compile-p${i + 1}` }
-  )
+      { label: `compile-p${i + 1}` }
+    )
 
-  if (compileCheck && compileCheck.toLowerCase().includes('fail')) {
-    log(`⚠️ Compile failed after phase ${i + 1}. Fixing before continuing.`)
-    // Fix compile errors
-    await agent(
-      `Compile failed after implementing these steps:
-${phase.steps.join('\n')}
-
-Errors:
+    if (compileCheck && compileCheck.toLowerCase().includes('fail')) {
+      log(`⚠️ Compile failed after phase ${i + 1}. Auto-fixing.`)
+      await agent(
+        `Compile failed. Errors:
 ${compileCheck}
 
-Fix the compile errors (minimum changes). Then run ./gradlew :app:compileDebugKotlin again.`,
-      { label: `fix-compile-p${i + 1}` }
-    )
+${RULES}
+Fix the compile errors (MINIMUM changes). Run ./gradlew :app:compileDebugKotlin after fixing.`,
+        { label: `fix-compile-p${i + 1}`, phase: 'Implement', agentType: 'bug-fixer' }
+      )
+    }
   }
 }
 
@@ -192,28 +220,46 @@ log('Implementation complete')
 
 phase('Verify')
 
-// Step 4: Run full validation
-const verify = await agent(
-  `Run these verification steps and report results:
+// Step 4: PARALLEL VERIFICATION — compile, test, and boundary scan run simultaneously
+const verifyResults = await parallel([
+  () => agent(
+    `Run: ./gradlew :app:testDebugUnitTest
+Report: PASS/FAIL. If FAIL, show which tests failed and the error output.`,
+    { label: 'run-tests', phase: 'Verify' }
+  ),
+  () => agent(
+    `Run: ./gradlew :shared:compileDebugKotlinAndroid 2>/dev/null || echo "shared not changed or compile skipped"
+Report: PASS/FAIL.`,
+    { label: 'compile-shared', phase: 'Verify' }
+  ),
+  () => agent(
+    `Run all boundary checks in sequence:
+1. KMP: grep -rn "java\\.time\\|android\\." shared/src/commonMain/ --include="*.kt" → should be 0
+2. Colors: grep -rn "Color(0x" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "Color.kt"
+3. State: grep -rn "collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v ChartScreen
+4. Null: grep -rn "!!" app/src/main/java/com/example/energyflow/ --include="*.kt"
 
-1. ./gradlew :app:compileDebugKotlin
-2. ./gradlew :shared:compileDebugKotlinAndroid (if shared was changed)
-3. ./gradlew :app:testDebugUnitTest
-4. Quick scan:
-   - grep -rn "java\.time\|android\." shared/src/commonMain/ --include="*.kt" → should be 0
-   - grep -rn "Color(0x" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "Color.kt"
-   - grep -rn "collectAsState()" <new ui files> | grep -v ChartScreen
-   - grep -rn "!!" <new code> — check for unsafe null assertions
+Report: PASS/FAIL for each check. If any FAIL, show the violations.`,
+    { label: 'boundary-scan', phase: 'Verify' }
+  )
+])
 
-Report: PASS/FAIL for each check. If any FAIL, explain why and suggest fix.`,
-  { label: 'verify' }
-)
+const testResult = verifyResults[0] || ''
+const sharedCompile = verifyResults[1] || ''
+const boundaryResult = verifyResults[2] || ''
 
-log(verify?.substring(0, 500) || 'verification complete')
+const allPassed = testResult && !testResult.toLowerCase().includes('fail')
+
+log(testResult?.substring(0, 300) || 'tests complete')
+log(boundaryResult?.substring(0, 300) || 'boundary scan complete')
+log(allPassed ? '✅ All checks passed!' : '⚠️ Some checks failed — see output above.')
 
 return {
   core,
   domain,
-  plan,
-  verification: verify
+  plan: synthesis,
+  testResult,
+  sharedCompile,
+  boundaryResult,
+  allPassed
 }

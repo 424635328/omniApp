@@ -7,6 +7,11 @@ description: 功能实现引导——从需求分析到代码验证的完整流�
 
 **用途**: 加功能 / 改代码 / 实现需求时使用。
 
+> **什么时候用这个 Skill vs Workflow?**
+> - 简单功能（单文件、已知方案）→ 继续用本 skill 手动实现
+> - 复杂功能（≥3 文件 + 跨模块）→ 用 `workflow:feature-development`（3-Agent 面板设计 + 并行实现）
+> - 批量加 N 个功能 → 用 `workflow:multi-feature`（N 个 Agent 并行分析→实现）
+
 ## 第一步：领域分析
 
 ### 必读文档（按功能领域选择）

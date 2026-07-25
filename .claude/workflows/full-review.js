@@ -7,6 +7,22 @@ export const meta = {
   ]
 }
 
+// Shared prompt blocks — canonical source: .claude/shared/rules.md
+const RULES = `CRITICAL RULES:
+1. KMP: shared/src/commonMain/ MUST NOT import java.time, java.util.*, or android.*
+2. Compose: ALL colors → theme colors (ElectricColor, etc.) — NO Color(0xFF...)
+3. Font: MonoFontFamily everywhere
+4. State: collectAsStateWithLifecycle(), not collectAsState()
+5. Hilt: @Singleton class X @Inject constructor(deps)
+6. Data: MeterRecord fields nullable → ?: 0.0, never !!
+7. Minimal: no abstractions for single use
+8. Surgical: don't modify unrelated adjacent code
+KNOWN IGNORES (do not report):
+- ChartScreen.collectAsState() — legacy inconsistency
+- NeonYellow = #00A3FF — legacy naming (actually blue)
+- fallbackToDestructiveMigration() — intentional during development
+- SmartInputParser year assumption — known limitation`
+
 // Step 0: Get the changed files to scope the review
 const changedFiles = await agent(
   `Run: git diff main...HEAD --name-only
@@ -39,10 +55,6 @@ const allChanged = [
   ...(changedFiles?.di || [])
 ]
 
-const hasShared = (changedFiles?.shared || []).length > 0
-const hasData = (changedFiles?.data || []).length > 0
-const hasUI = (changedFiles?.ui || []).length > 0
-const hasDI = (changedFiles?.di || []).length > 0
 const totalChanged = allChanged.length
 
 log(`Scoped review to ${totalChanged} changed files (shared:${changedFiles?.shared?.length || 0} data:${changedFiles?.data?.length || 0} ui:${changedFiles?.ui?.length || 0} di:${changedFiles?.di?.length || 0})`)
@@ -53,7 +65,9 @@ if (totalChanged === 0) {
 }
 
 const scopeContext = `Changed files to review:
-${allChanged.map(f => `  - ${f}`).join('\n')}`
+${allChanged.map(f => `  - ${f}`).join('\n')}
+
+${RULES}`
 
 // Four review dimensions, each handled by a specialized agent
 const DIMENSIONS = [
@@ -62,11 +76,9 @@ const DIMENSIONS = [
     agentType: 'code-reviewer',
     prompt: `${scopeContext}
 
-Read .claude/docs/agents/quick-ref.md first.
-
 Review ONLY these changed files for:
 - Correctness bugs: null safety violations, edge cases, logic errors
-- Style violations: hardcoded hex colors (should use theme colors like ElectricColor), FontFamily != MonoFontFamily, collectAsState() instead of collectAsStateWithLifecycle()
+- Style violations: hardcoded hex colors, FontFamily != MonoFontFamily, collectAsState() vs collectAsStateWithLifecycle()
 - KMP boundary violations: java.time or android.* in shared/src/commonMain/
 - Room safety: destructive migration implications, null field handling
 Report every finding with file:line, severity (critical/warning/info), and a one-sentence description.`
@@ -81,7 +93,7 @@ Review the current diff for architectural issues:
 - DI pattern consistency (Hilt wrapper pattern, @Singleton vs @HiltViewModel)
 - Data flow correctness (does data flow through the right layers?)
 - New dependencies that could be avoided
-- Design decisions that contradict existing ADRs (an0301-tab-navigation, an0302-hilt-wrapper, an0303-adaptive-classifier)
+- Design decisions that contradict existing ADRs (adr-001-tab-navigation, adr-002-hilt-wrapper, adr-003-adaptive-classifier)
 Report each finding with file:line and concrete explanation.`
   },
   {

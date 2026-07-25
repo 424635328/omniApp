@@ -13,8 +13,7 @@ phase('Explore')
 // 4 parallel explorers, each reading a different subsystem
 const explorers = await parallel([
   () => agent(
-    `Read .claude/docs/agents/quick-ref.md first.
-Read these files and summarize the architecture layer:
+    `Read these files and summarize the architecture layer:
 - .claude/docs/architecture/overview.md
 - .claude/docs/architecture/adr-001-tab-navigation.md
 - .claude/docs/architecture/adr-002-hilt-wrapper-pattern.md
@@ -60,7 +59,6 @@ Output a structured summary of: test pyramid, test patterns, coverage gaps, know
 
 phase('Map')
 
-// Synthesize into one coherent map
 const projectMap = await agent(
   `Synthesize these 4 exploration summaries into ONE coherent project map:
 

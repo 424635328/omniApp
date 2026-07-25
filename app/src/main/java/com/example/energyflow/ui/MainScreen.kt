@@ -397,16 +397,11 @@ fun MainScreen(
                     val recordDeltas = remember(filteredRecords) {
                         filteredRecords.mapIndexed { index, record ->
                             val prev = filteredRecords.getOrNull(index + 1)
-                            val elecD = if (prev != null && record.electricTotal != null && prev.electricTotal != null)
-                                record.electricTotal!! - prev.electricTotal!! else null
-                            val peakD = if (prev != null && record.electricPeak != null && prev.electricPeak != null)
-                                record.electricPeak!! - prev.electricPeak!! else null
-                            val valleyD = if (prev != null && record.electricValley != null && prev.electricValley != null)
-                                record.electricValley!! - prev.electricValley!! else null
-                            val waterD = if (prev != null && record.waterTotal != null && prev.waterTotal != null)
-                                record.waterTotal!! - prev.waterTotal!! else null
-                            val gasD = if (prev != null && record.gasTotal != null && prev.gasTotal != null)
-                                record.gasTotal!! - prev.gasTotal!! else null
+                            val elecD = record.electricTotal?.let { rt -> prev?.electricTotal?.let { pt -> rt - pt } }
+                            val peakD = record.electricPeak?.let { rp -> prev?.electricPeak?.let { pp -> rp - pp } }
+                            val valleyD = record.electricValley?.let { rv -> prev?.electricValley?.let { pv -> rv - pv } }
+                            val waterD = record.waterTotal?.let { rw -> prev?.waterTotal?.let { pw -> rw - pw } }
+                            val gasD = record.gasTotal?.let { rg -> prev?.gasTotal?.let { pg -> rg - pg } }
                             RecordDeltas(elecD, peakD, valleyD, waterD, gasD)
                         }
                     }

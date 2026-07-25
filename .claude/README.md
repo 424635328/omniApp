@@ -1,123 +1,235 @@
 # .claude/ — Agent 知识库 & 自动化系统
 
-## 设计哲学
+> **Tested Claude Code configuration date**: 2026-07-25
+> **Skill format**: `.claude/skills/<name>/SKILL.md`
+> **Workflow format**: `.claude/workflows/<name>.js` (custom runtime)
+
+---
+
+## 架构全景
 
 ```
-用户消息
+CLAUDE.md (自动加载，每次对话)
+    │  常驻项目约束 + 铁律 + 构建命令 + 决策树路由
     ↓
-CLAUDE.md (自动加载) → "你的任务是 X → 读 .claude/skills/Y.md"
+ Skills                          ← 按需加载或 /name 直接调用
+    │  .claude/skills/<name>/SKILL.md  (13个)
+    │  触发条件 + 文档索引 + 检查清单 + 验证步骤
     ↓
-Skill 文件 → "读这些 doc，按这个清单做，这样验证"
+ Docs                             ← Skill 指令指向时按需读取
+    │  .claude/docs/  (18个)
+    │  架构细节 · 算法说明 · 数据模型 · 已知陷阱 · ADR
     ↓
-Docs (按需加载) → 深度参考：架构、算法、陷阱
+ Agents                           ← Workflow 调用的专业子 Agent
+    │  .claude/agents/  (5个)
+    │  独立上下文中的专业执行者（审查/修复/分析）
     ↓
-代码改动
+ Workflows                        ← 显式调用: workflow:<name>
+    │  .claude/workflows/  (7个)
+    │  多 Agent 编排: pipeline / parallel / phase
     ↓
-(可选) Workflow → 多 Agent 并行：审查/修复/实现/验证
+ Hooks                            ← 确定性规则自动执行
+       .claude/settings.json
+       PreToolUse: KMP 边界自动检查
+       Stop: 任务闭环提醒
 ```
 
-**三层加载 + 并行执行：**
+**五层协作：**
 
-| 层 | 何时加载 | 内容 |
-|----|---------|------|
-| **CLAUDE.md** | 每条对话自动加载 | 启动流程、铁律、构建命令、Skills 路由表 |
-| **Skills** | CLAUDE.md 路由后读取 | 可执行指令：触发条件 + 必读文档 + 检查清单 + 验证 |
-| **Docs** | Skill 指令指向时读取 | 深度参考资料：架构细节、算法说明、已知陷阱 |
+| 层 | 触发方式 | 角色 | 关键文件 |
+|----|---------|------|---------|
+| **CLAUDE.md** | 每次对话自动注入 | 常驻约束 + 路由总纲 | `CLAUDE.md` |
+| **Skills** | 决策树路由 · `/name` 调用 · 描述自动匹配 | 领域工作流：分步指令 | `.claude/skills/<name>/SKILL.md` |
+| **Docs** | Skill 指令指向时读取 | 深度知识：架构/算法/陷阱 | `.claude/docs/` |
+| **Agents** | Workflow 编排调度 | 专业执行：审查/修复/分析 | `.claude/agents/*.md` |
+| **Workflows** | `workflow:<name>` 显式调用 | 多 Agent 并行编排 | `.claude/workflows/*.js` |
 
-**并行优化：**
-- Agent 启动时只读 `quick-ref.md`（~40行），不再分别读 agent-protocol.md + gotchas.md（~200行）
-- 单 Bug 诊断：4 层并行分析（data/shared/ui/di 同时排查）
-- 多 Bug：N 个 Agent 同时诊断 → Pipeline 修复（Bug #1 修复时 Bug #2 还在诊断）
-- 多功能实现：独立步骤并行执行，依赖步骤串行
+**单一事实源**: `.claude/shared/rules.md` — 铁律 · 已知忽略 · 验证命令 · Prompt 模板。所有层引用它，不自行复制。
+
+---
 
 ## 目录结构
 
 ```
 .claude/
-├── settings.json                   # 项目级共享配置（hooks、权限）
+├── settings.json                   # 项目级共享配置（hooks、权限白名单）
 ├── settings.local.json             # 本地覆盖（不提交）
-├── README.md                       # 本文件
+├── README.md                       # 本文件 — 架构总览
+├── CONTRIBUTING.md                 # 维护指南 — 如何新增/修改组件
 │
-├── skills/                         # 行动手册（12个）— Agent 启动后按需读取
-│   ├── energyflow-acknowledge.md   # 代码库认知引导
-│   ├── energyflow-new-feature.md   # 功能实现引导
-│   ├── energyflow-diagnose.md      # Bug 诊断引导
-│   ├── energyflow-multi-task.md    # 🆕 并行多任务编排（批量修Bug/批量加功能）
-│   ├── energyflow-refactor.md      # 安全重构引导
-│   ├── energyflow-test.md          # 测试运行与调试
-│   ├── energyflow-commit.md        # Conventional Commits 规范
-│   ├── energyflow-quick-scan.md    # 提交前快速扫描
-│   ├── energyflow-onboard.md       # 新贡献者引导
-│   ├── energyflow-data-migration.md # 数据迁移引导
-│   ├── energyflow-build-debug.md   # 构建与调试
-│   └── energyflow-security.md      # 安全检查清单
+├── shared/                         # 共享资源（单一事实源）
+│   └── rules.md                    # 铁律(5) + 已知忽略(4) + 验证命令 + Prompt模板
 │
-├── agents/                         # 专业子 Agent（5个）— Workflow 调用
-│   ├── code-reviewer.md            # 代码正确性、风格、KMP 边界
-│   ├── architecture-reviewer.md    # 模块边界、DI、数据流
-│   ├── analytics-reviewer.md       # 算法/数学正确性
-│   ├── ui-reviewer.md              # Compose 性能、无障碍、设计一致性
-│   └── bug-fixer.md                # 🆕 独立修复 bug（有 Edit + Bash 能力）
+├── skills/                         # 行动手册（13个）— <name>/SKILL.md
+│   ├── energyflow-acknowledge/     # 代码库认知引导
+│   ├── energyflow-new-feature/     # 功能实现引导
+│   ├── energyflow-diagnose/        # Bug 诊断引导
+│   ├── energyflow-parallel/        # 并行多任务调度
+│   ├── energyflow-multi-task/      # ⚠️ Deprecated → energyflow-parallel
+│   ├── energyflow-refactor/        # 安全重构引导
+│   ├── energyflow-test/            # 测试运行与调试
+│   ├── energyflow-commit/          # Conventional Commits 规范
+│   ├── energyflow-quick-scan/      # 提交前快速扫描
+│   ├── energyflow-onboard/         # 新贡献者引导
+│   ├── energyflow-data-migration/  # 数据迁移引导
+│   ├── energyflow-build-debug/     # 构建与调试
+│   └── energyflow-security/        # 安全检查清单
 │
-├── docs/                           # 深度参考（19个）— 按需读取
-│   ├── agents/                     # Agent 协议 + 🆕 quick-ref 速查卡
-│   ├── architecture/               # 架构、构建、陷阱、ADR
-│   ├── data-layer/                 # 数据模型、解析、检测、计费、外部 API
-│   ├── analytics/                  # 预测、碳足迹、洞察
-│   ├── shared-kmp/                 # KMP 模块设计
-│   ├── ui-layer/                   # 主题、导航、图表、设置
-│   └── testing/                    # 测试策略、用例、流程、开发工作流
+├── agents/                         # 专业子 Agent（5个）
+│   ├── code-reviewer.md            # 代码审查（Read+Grep+Glob+Bash）— 只读
+│   ├── architecture-reviewer.md    # 架构审查（Read+Grep+Glob+Bash）— 只读
+│   ├── analytics-reviewer.md       # 算法/数学审查（Read+Grep+Glob+Bash）— 只读
+│   ├── ui-reviewer.md              # Compose UI 审查（Read+Grep+Glob+Bash）— 只读
+│   └── bug-fixer.md                # Bug 修复（+Edit）— 可修改代码
 │
-└── workflows/                      # 多 Agent 编排（6个）— 显式调用
-    ├── full-review.js              # 4 维度并行审查
-    ├── feature-development.js      # 理解→方案→实现(并行)→验证
-    ├── bug-fix.js                  # 复现→并行分层诊断→修复→验证
-    ├── multi-fix.js                # 🆕 批量并行修 Bug（N个Agent同时诊断+修复）
-    ├── test-then-commit.js         # 测试→自动提交
+├── docs/                           # 深度参考（18个）
+│   ├── agents/
+│   │   └── protocol.md             # 统一 Agent 协议
+│   ├── architecture/               # 架构概览 · 构建 · 陷阱 · ADR (6个)
+│   ├── data-layer/                 # 数据模型 · 解析 · 计费 · 外部 API (5个)
+│   ├── analytics/                  # 预测 · 碳足迹 · 洞察 (2个)
+│   ├── shared-kmp/                 # KMP 模块设计 (1个)
+│   ├── ui-layer/                   # 主题 · 导航 · 图表 · 设置 (3个)
+│   └── testing/                    # 测试策略 · 用例 · 流程 (4个)
+│
+└── workflows/                      # 多 Agent 编排（7个）
+    ├── full-review.js              # 4 维度并行审查（code+arch+analytics+ui）
+    ├── feature-development.js      # 理解→3面板设计→分阶段实现→并行验证
+    ├── bug-fix.js                  # 复现→4层并行诊断→修复→全量验证
+    ├── multi-fix.js                # 批量修 Bug（并行诊断→Pipeline修复→统一验证）
+    ├── multi-feature.js            # 批量加功能（并行分析→Pipeline实现→统一验证）
+    ├── test-then-commit.js         # 测试通过后自动提交
     └── onboarding.js               # 代码库引导漫游
 ```
 
-## 自动触发机制
+---
 
-`settings.json` 中配置了 `PreToolUse` hook：
-- 每次 Write / Edit 操作前，Agent 收到系统提醒确认已读对应 skill 文件
+## Skill 速查
 
-## 如何使用
+### 触发方式
 
-### 自动（通过 CLAUDE.md 路由）
-Agent 自动读 CLAUDE.md → 识别任务类型 → 读对应 skill → 按指令执行。
+Skills 支持三种触发方式，无需手动 `Read()`：
 
-### 手动调用 Skill
-```
-/energyflow-acknowledge     # 全面理解项目
-/energyflow-new-feature     # 引导式功能实现
-/energyflow-diagnose        # 系统化 Bug 诊断
-/energyflow-refactor        # 安全重构
-/energyflow-test            # 运行与调试测试
-/energyflow-commit          # 规范化提交
-/energyflow-quick-scan      # 提交前快速扫描
-/energyflow-onboard         # 新人引导
-/energyflow-data-migration  # 数据迁移
-/energyflow-build-debug     # 构建调试
-/energyflow-security        # 安全检查
-```
+| 方式 | 示例 | 说明 |
+|------|------|------|
+| **决策树路由** | Agent 读取 CLAUDE.md → 匹配任务类型 → 自动加载 | 对话中自动发生 |
+| **斜杠命令** | `/energyflow-diagnose` | 用户主动调用 |
+| **描述匹配** | 用户说"排查一下这个崩溃" → 自动匹配 diagnose | 自然语言触发 |
 
-### 多 Agent 编排
-```
-workflow:full-review           # 4 并联审查员
-workflow:feature-development   # 功能全流程（实现阶段并行）
-workflow:bug-fix               # Bug 修复全流程（并行分层诊断）
-workflow:multi-fix             # 🆕 批量并行修 Bug
-workflow:test-then-commit      # 测试 + 提交
-workflow:onboarding            # 项目引导
-```
+### 完整列表
+
+| Skill | 用途 | 触发场景 |
+|-------|------|---------|
+| `energyflow-acknowledge` | 代码库认知引导 | "理解代码" / "这是什么" / 不确定时 |
+| `energyflow-new-feature` | 功能实现引导 | "加功能" / "实现" / 单文件新功能 |
+| `energyflow-diagnose` | Bug 诊断引导 | "修bug" / "报错" / "不工作" |
+| `energyflow-parallel` | 并行多任务调度 | 混合任务（修bug+加功能+重构同时做） |
+| `energyflow-refactor` | 安全重构引导 | "重构" / "优化结构" |
+| `energyflow-test` | 测试运行与调试 | "跑测试" / "写测试" / 测试失败排查 |
+| `energyflow-commit` | 提交规范 | "提交" / "commit" / 写 PR |
+| `energyflow-quick-scan` | 提交前快速扫描 | "预检" / "扫描" / 提交前检查 |
+| `energyflow-onboard` | 新贡献者引导 | "新人" / "第一次" / "上手" |
+| `energyflow-data-migration` | 数据迁移引导 | "改数据库" / "迁移" / Schema 变更 |
+| `energyflow-build-debug` | 构建与调试 | "编译失败" / "Gradle报错" / Hilt 问题 |
+| `energyflow-security` | 安全检查 | "安全" / "API Key" / 隐私 |
+| ~~`energyflow-multi-task`~~ | ⚠️ 已废弃 → 用 `energyflow-parallel` | 禁用自动触发 |
+
+---
+
+## Workflow 速查
+
+| Workflow | 用途 | 适用场景 | Agent 数 |
+|----------|------|---------|:------:|
+| `full-review` | 4 维度并行审查 | 提交前全面审查 | 5 |
+| `feature-development` | 理解→设计→实现→验证 | ≥3 文件 + 跨模块新功能 | 8+ |
+| `bug-fix` | 复现→诊断→修复→验证 | ≥3 层复杂 Bug | 7 |
+| `multi-fix` | 批量并行修 Bug | N 个独立 Bug | N×3+ |
+| `multi-feature` | 批量并行加功能 | N 个独立功能 | N×3+ |
+| `test-then-commit` | 测试→自动提交 | 常规提交流程 | 2 |
+| `onboarding` | 代码库引导漫游 | 新人上手 | 4 |
+
+### Skill vs Workflow 决策
+
+| 场景 | 用 Skill | 升级到 Workflow |
+|------|---------|----------------|
+| Bug 修复 | `/energyflow-diagnose`（单层） | `workflow:bug-fix`（≥3层） |
+| 新功能 | `/energyflow-new-feature`（单文件） | `workflow:feature-development`（≥3文件+跨模块） |
+| 批量任务 | — | `workflow:multi-fix` / `workflow:multi-feature` |
+| 代码审查 | `/energyflow-quick-scan`（快速） | `workflow:full-review`（深度） |
+
+---
+
+## Agent 能力矩阵
+
+| Agent | 角色 | Tools | 可修改代码 |
+|-------|------|-------|:--------:|
+| `code-reviewer` | 代码正确性 · 风格 · KMP 边界 | Read, Grep, Glob, Bash | ❌ |
+| `architecture-reviewer` | 模块边界 · DI · 数据流 | Read, Grep, Glob, Bash | ❌ |
+| `analytics-reviewer` | 算法/数学正确性 | Read, Grep, Glob, Bash | ❌ |
+| `ui-reviewer` | Compose 性能 · 无障碍 · 设计一致性 | Read, Grep, Glob, Bash | ❌ |
+| `bug-fixer` | 独立诊断并修复 Bug | Read, Grep, Glob, Edit, Bash | ✅ |
+
+> 所有 Agent 引用 `.claude/shared/rules.md`（铁律）和 `.claude/docs/agents/protocol.md`（协议）。
+
+---
+
+## Hooks 系统
+
+在 `.claude/settings.json` 中配置，自动执行确定性检查：
+
+| Hook | 触发时机 | 行为 |
+|------|---------|------|
+| **PreToolUse (Edit)** | 每次 `Edit` 工具调用前 | 若目标在 `shared/src/commonMain/` → 扫描 `java.time` / `java.util.*` / `android.*` 违规 |
+| **Stop** | 每次对话结束 | 提醒检查：编译 + KMP 边界 + 颜色 + 字体 + 状态收集 |
+
+> **设计原则**: PreToolUse 只做单文件快速静态检查（<1秒）；全量构建和测试留给 Workflow 验证阶段或 CI。
+
+---
 
 ## 维护规则
 
-当添加功能或修改架构时：
-1. 更新对应 `.claude/docs/` 文档
-2. 如果是反直觉的坑 → 加到 `gotchas.md`
-3. 如果是重大设计决策 → 加 ADR
-4. 如果改了常用工作流 → 更新对应 skill 文件
-5. 如果有新测试场景 → 更新 `testing/test-cases.md`
-6. 如果新增了外部 API / 安全相关 → 更新 `energyflow-security.md`
+### 修改规则时
+**只需改 `.claude/shared/rules.md`**（铁律、已知忽略、验证命令、Prompt 模板的唯一来源）。
+Workflow 中的 `RULES` 块为静态副本 — 修改 `rules.md` 后需同步更新到 5 个代码修改型 workflow 的 `RULES` 常量。
+
+### 添加/修改组件时
+1. 改规则 → `shared/rules.md`
+2. 加 Skill → `.claude/skills/<name>/SKILL.md` + 更新 `CLAUDE.md` 决策树 + 更新本文件
+3. 加 Agent → `.claude/agents/<name>.md` + 更新本文件能力矩阵
+4. 加 Workflow → `.claude/workflows/<name>.js` + 更新本文件速查表
+5. 加 Doc → `.claude/docs/<category>/<name>.md` + 在对应 Skill 中添加引用
+6. 改架构 → 加 ADR 到 `.claude/docs/architecture/`
+7. 发现新坑 → 加到 `.claude/docs/architecture/gotchas.md`
+
+### 已知设计约束
+- **Skill 必须为目录结构**: `.claude/skills/<name>/SKILL.md`（平铺 `.md` 不会被注册）
+- **Workflow RULES 为静态副本**: JS 运行时不支持动态导入 `rules.md`，修改规则后需手动同步
+- **Agent model 合法值**: `sonnet` | `opus` | `haiku` | `fable` | `inherit`（小写合法）
+- **Reviewer Agent 不应有 Edit**: 只读审查，修复由 `bug-fixer` 或主 Agent 执行
+
+---
+
+## 快速开始
+
+```bash
+# 新人上手
+/energyflow-onboard
+
+# 理解代码
+/energyflow-acknowledge
+
+# 日常开发：加功能
+/energyflow-new-feature
+
+# 日常开发：修Bug
+/energyflow-diagnose
+
+# 提交前检查
+/energyflow-quick-scan
+./gradlew :app:compileDebugKotlin && ./gradlew :app:testDebugUnitTest
+
+# 大规模任务
+workflow:full-review              # 全面审查
+workflow:feature-development     # 端到端功能开发
+workflow:bug-fix                 # 系统化 Bug 修复
+```

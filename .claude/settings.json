@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && if echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"shared/src/commonMain\"; then grep -rn \"java\\.time\\|android\\.\" shared/src/commonMain/ --include=\"*.kt\" 2>/dev/null && echo \"[KMP] ❌ violation!\" || echo \"[KMP] ✅\"; fi; true"
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && if echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"shared/src/commonMain\"; then grep -rn \"java\\.time\\|java\\.util\\|android\\.\" shared/src/commonMain/ --include=\"*.kt\" 2>/dev/null && echo \"[KMP] ❌ violation!\" || echo \"[KMP] ✅\"; fi; true"
           }
         ]
       }
@@ -57,16 +57,24 @@
           "grep -rn",
           "grep -r",
           "git diff",
+          "git diff --stat",
+          "git diff --name-only",
           "git status",
           "git log",
           "git branch",
           "git stash",
+          "git stash pop",
           "git add ",
           "git commit ",
           "git remote ",
           "git fetch ",
           "git cherry-pick ",
-          "git checkout ",
+          "git checkout -b ",
+          "git checkout -- ",
+          "git switch ",
+          "git restore ",
+          "git reset ",
+          "git merge ",
           "java -version",
           "rm -f E:/GitHub/omniAPP/.git/index.lock",
           "export ANDROID_HOME="

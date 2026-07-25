@@ -217,8 +217,8 @@ class MeterRepository @Inject constructor(
             )
             if (span <= 1) continue
 
-            val prevTotal = prev.electricTotal!!
-            val currTotal = curr.electricTotal!!
+            val prevTotal = prev.electricTotal ?: continue
+            val currTotal = curr.electricTotal ?: continue
             val totalDelta = currTotal - prevTotal
             val dailyStep = totalDelta / span
 
@@ -245,8 +245,8 @@ class MeterRepository @Inject constructor(
             )
             if (span <= 1) continue
 
-            val prevTotal = prev.waterTotal!!
-            val currTotal = curr.waterTotal!!
+            val prevTotal = prev.waterTotal ?: continue
+            val currTotal = curr.waterTotal ?: continue
             val totalDelta = currTotal - prevTotal
             val dailyStep = totalDelta / span
 
