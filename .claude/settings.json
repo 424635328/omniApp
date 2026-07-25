@@ -2,42 +2,23 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo \"[Pre-Edit] ⚠️ 确认: 1)已读对应skill? 2)只改任务相关代码? 3)不改相邻代码?\""
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo \"[Pre-Bash] 💡 优先用 Grep/Glob/Read 等专用工具替代 Bash find/grep/cat\""
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
         "matcher": "Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && if echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"shared/src/commonMain\"; then echo \"[Post-Edit] 🔍 KMP边界检查...\"; grep -rn \"java\\.time\\|android\\.\" shared/src/commonMain/ --include=\"*.kt\" 2>/dev/null && echo \"❌ KMP violation found!\" || echo \"✅ KMP边界 OK\"; fi; true"
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && if echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"shared/src/commonMain\"; then grep -rn \"java\\.time\\|android\\.\" shared/src/commonMain/ --include=\"*.kt\" 2>/dev/null && echo \"[KMP] ❌ violation!\" || echo \"[KMP] ✅\"; fi; true"
           }
         ]
       }
     ],
+    "PostToolUse": [],
     "Stop": [
       {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "echo \"[Stop] 🏁 任务完成检查: 如果改了代码 → 编译+测试过了吗？如果改了shared → KMP边界检查了吗？如果有新UI → 颜色/字体/状态收集合规吗？\""
+            "command": "echo \"[Stop] 🏁 改代码→编译+测试过了吗？改了shared→KMP边界检查了吗？新UI→颜色/字体/状态合规吗？\""
           }
         ]
       }
@@ -63,6 +44,10 @@
           "./gradlew :app:compileDebugKotlin",
           "./gradlew :shared:compileDebugKotlinAndroid",
           "./gradlew :app:testDebugUnitTest",
+          "./gradlew :app:assembleDebug",
+          "./gradlew clean",
+          "./gradlew tasks",
+          "./gradlew :app:dependencies",
           "ls ",
           "find ",
           "echo ",
@@ -70,13 +55,21 @@
           "wc -l",
           "mkdir -p",
           "grep -rn",
+          "grep -r",
           "git diff",
           "git status",
           "git log",
           "git branch",
           "git stash",
+          "git add ",
+          "git commit ",
+          "git remote ",
+          "git fetch ",
+          "git cherry-pick ",
+          "git checkout ",
           "java -version",
-          "cat >"
+          "rm -f E:/GitHub/omniAPP/.git/index.lock",
+          "export ANDROID_HOME="
         ]
       }
     }

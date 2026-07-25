@@ -14,6 +14,7 @@
 ├── "帮我理解"/"这是什么"/"看看代码" → energyflow-acknowledge
 ├── "加功能"/"实现"/"添加"/"新增"     → energyflow-new-feature
 ├── "修bug"/"报错"/"不工作"/"崩溃"     → energyflow-diagnose
+├── "批量修"/"同时修"/"多bug"/"这几个"  → energyflow-multi-task
 ├── "重构"/"优化结构"/"拆分"           → energyflow-refactor
 ├── "跑测试"/"测试失败"/"写测试"       → energyflow-test
 ├── "提交"/"commit"/"PR"              → energyflow-commit
@@ -37,6 +38,7 @@
 | 提交前全面审查（4维度并联） | `workflow:full-review` |
 | 端到端功能开发（理解→方案→实现→验证） | `workflow:feature-development` |
 | 系统化 Bug 修复（复现→诊断→修复→回归） | `workflow:bug-fix` |
+| **批量并行修 Bug（N个Agent同时诊断+修复）** | `workflow:multi-fix` |
 | 测试通过后自动提交 | `workflow:test-then-commit` |
 | 代码库引导漫游 | `workflow:onboarding` |
 

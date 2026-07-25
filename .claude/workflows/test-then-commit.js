@@ -12,7 +12,8 @@ phase('Scan')
 
 // See what changed
 const diff = await agent(
-  `Run: git diff --stat and git diff --name-only
+  `Read .claude/docs/agents/quick-ref.md first.
+Run: git diff --stat and git diff --name-only
 
 Then categorize each changed file:
 - data layer: app/src/main/java/.../data/

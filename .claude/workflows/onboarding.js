@@ -13,7 +13,8 @@ phase('Explore')
 // 4 parallel explorers, each reading a different subsystem
 const explorers = await parallel([
   () => agent(
-    `Read these files and summarize the architecture layer:
+    `Read .claude/docs/agents/quick-ref.md first.
+Read these files and summarize the architecture layer:
 - .claude/docs/architecture/overview.md
 - .claude/docs/architecture/adr-001-tab-navigation.md
 - .claude/docs/architecture/adr-002-hilt-wrapper-pattern.md

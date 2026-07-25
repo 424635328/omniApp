@@ -1,9 +1,9 @@
 export const meta = {
   name: 'bug-fix',
-  description: 'Structured bug fix: reproduce → diagnose → fix → regression test → verify',
+  description: 'Structured bug fix: parallel layer diagnosis → root cause → fix → verify',
   phases: [
     { title: 'Reproduce', detail: 'Write failing regression test' },
-    { title: 'Diagnose', detail: 'Identify root cause across layers' },
+    { title: 'Diagnose', detail: 'Parallel multi-layer root cause analysis' },
     { title: 'Fix', detail: 'Apply minimal fix and confirm test passes' },
     { title: 'Verify', detail: 'Full suite + boundary checks' }
   ]
@@ -15,7 +15,7 @@ phase('Reproduce')
 
 // Step 1: Write a failing test that reproduces the bug
 const repro = await agent(
-  `Read .claude/docs/architecture/gotchas.md first (many bugs are known pitfalls).
+  `Read .claude/docs/agents/quick-ref.md (compressed rules: KMP, Hilt, Compose, Data, Room, ignores).
 
 Then, for this bug: "${bug}"
 
@@ -36,35 +36,70 @@ log(repro?.substring(0, 300) || 'reproduction test written')
 
 phase('Diagnose')
 
-// Step 2: Root cause analysis
+// Step 2: Parallel multi-layer root cause analysis (NEW — 4 layers diagnosed simultaneously)
+const LAYERS = [
+  {
+    key: 'data',
+    prompt: `Diagnose data-layer root cause for: "${bug}"
+Check app/src/main/java/com/example/energyflow/data/
+- Null handling: MeterRecord fields nullable → no !! assertions
+- Cumulative vs delta direction (current - previous, large minus small)
+- Room queries, DataStore reads
+- SmartInputParser year assumption, AdaptiveClassifier thresholds`
+  },
+  {
+    key: 'shared',
+    prompt: `Diagnose shared/KMP root cause for: "${bug}"
+Check shared/src/commonMain/
+- java.time or android.* violations (MUST use kotlinx.datetime)
+- Algorithm errors in CostEngineShared, PredictiveAnalyzerShared, AnomalyDetectorShared
+- Edge cases: zero values, null handling, boundary conditions`
+  },
+  {
+    key: 'ui',
+    prompt: `Diagnose UI-layer root cause for: "${bug}"
+Check app/src/main/java/com/example/energyflow/ui/
+- collectAsState() vs collectAsStateWithLifecycle()
+- Hardcoded hex colors (should use ElectricColor etc.)
+- Font: MonoFontFamily everywhere
+- State management, lifecycle issues, recomposition`
+  },
+  {
+    key: 'di',
+    prompt: `Diagnose DI/infra root cause for: "${bug}"
+Check:
+- Hilt modules and @Inject/@Provides setup
+- Build cache issues (ClassNotFoundException → --rerun-tasks)
+- Gradle configuration, dependency conflicts
+- Room schema version and destructive migration`
+  }
+]
+
+const layerDiags = await parallel(
+  LAYERS.map(l => () => agent(
+    `Read .claude/docs/agents/quick-ref.md first.
+${l.prompt}
+Output: root cause hypothesis with file:line reference, or "NOT IN THIS LAYER" if the bug isn't here.`,
+    { label: `diag:${l.key}`, phase: 'Diagnose' }
+  ))
+)
+
+const relevantDiags = layerDiags.filter(Boolean).filter(d => !d.includes('NOT IN THIS LAYER'))
+log(`Layer diagnosis: ${relevantDiags.length}/${LAYERS.length} layers relevant`)
+
+// Synthesize parallel diagnoses into one root cause
 const diagnosis = await agent(
-  `A failing test has been written for this bug: "${bug}"
+  `Synthesize these parallel layer diagnoses into ONE root cause analysis:
 
-Read .claude/docs/architecture/gotchas.md carefully.
-
-Now diagnose the root cause. Check each layer:
-
-1. Is it a KMP boundary issue? (java.time in shared?)
-2. Is it a data layer issue? (null handling, cumulative vs delta, Room query?)
-3. Is it a UI layer issue? (collectAsState vs collectAsStateWithLifecycle, hardcoded color?)
-4. Is it a DI issue? (Hilt cache poisoning, missing @Inject?)
-5. Is it an algorithm issue? (math error in CostEngine/PredictiveAnalyzer?)
-
-Common EnergyFlow-specific bugs:
-- Hilt build cache → ClassNotFoundException → rerun-tasks
-- Room destructive migration → data loss on schema change
-- Null vs Zero confusion → null means "not recorded", 0.0 means "recorded zero"
-- Cumulative readings → subtraction direction wrong (current - previous)
-- SmartInputParser year assumption → uses Year.now(), can't parse historical years
-- AdaptiveClassifier threshold drift → anomalous data skews thresholds
-- Peak/Valley pairing state machine → incomplete pairs saved independently
-- Forecast sentinel value → -1.0 marks projected points
+${relevantDiags.map((d, i) => `## Layer ${i + 1}\n${d}`).join('\n\n')}
 
 Output:
-1. Root cause (with file:line reference)
-2. Why the existing code behaves this way
-3. Which layer the fix should be in`,
-  { label: 'diagnose-root-cause' }
+1. PRIMARY ROOT CAUSE (file:line — what's actually wrong)
+2. Contributing factors (if any)
+3. Why the existing code behaves this way
+4. Which layer the fix should be in
+5. Specific fix approach`,
+  { label: 'synthesize-diagnosis', phase: 'Diagnose' }
 )
 
 log(diagnosis?.substring(0, 500) || 'diagnosis complete')
@@ -73,20 +108,22 @@ phase('Fix')
 
 // Step 3: Apply minimal fix
 const fix = await agent(
-  `Apply the minimal fix for this diagnosed bug:
+  `Read .claude/docs/agents/quick-ref.md.
+Apply the MINIMAL fix for this diagnosed bug:
 
+DIAGNOSIS:
 ${diagnosis}
 
-Rules:
+RULES:
 - MINIMUM change — fix only the bug, nothing else
-- Don't refactor adjacent code
-- Don't add features or "improvements"
+- Don't refactor adjacent code, don't add features or "improvements"
 - Match existing code style exactly
-- After the fix, run the reproduction test: ./gradlew :app:testDebugUnitTest --tests "<test name>"
+- After the fix, run: ./gradlew :app:compileDebugKotlin
+- Then run the reproduction test: ./gradlew :app:testDebugUnitTest --tests "<test name>"
   Expected: PASS (bug is fixed)
 
 If the test still fails, re-examine the diagnosis.`,
-  { label: 'apply-fix' }
+  { label: 'apply-fix', agentType: 'bug-fixer' }
 )
 
 log(fix?.substring(0, 300) || 'fix applied')
@@ -97,30 +134,23 @@ phase('Verify')
 const verify = await agent(
   `Verify the bug fix:
 
-1. Run the reproduction test:
-   ./gradlew :app:testDebugUnitTest --tests "<reproduction test>"
-   Expected: PASS
+1. Compile: ./gradlew :app:compileDebugKotlin
+2. Shared (if changed): ./gradlew :shared:compileDebugKotlinAndroid
+3. Full test suite: ./gradlew :app:testDebugUnitTest
+4. KMP boundary: grep -rn "java\.time\|android\." shared/src/commonMain/ --include="*.kt" → should be 0
+5. Color check: grep -rn "Color(0x" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "Color.kt"
+6. State check: grep -rn "collectAsState()" <new ui files> | grep -v ChartScreen
+7. Null safety: grep -rn "!!" <changed files>
 
-2. Run the full test suite:
-   ./gradlew :app:testDebugUnitTest
-   Expected: all existing tests still PASS
-
-3. Compile check:
-   ./gradlew :app:compileDebugKotlin
-   ./gradlew :shared:compileDebugKotlinAndroid (if shared changed)
-
-4. Boundary check — think about edge cases that could still fail:
-   - Null values?
-   - Zero values?
-   - Empty lists?
-   - Extreme values?
-   - Cross-month/cross-year boundaries?
+Boundary check — edge cases:
+- Null values? Zero values? Empty lists? Extreme values?
+- Cross-month / cross-year boundaries?
 
 Report: PASS/FAIL for each check. If all PASS, the fix is verified.`,
   { label: 'full-verify' }
 )
 
-log(verify)
+log(verify?.substring(0, 500) || 'verification complete')
 
 return {
   reproduction: repro,

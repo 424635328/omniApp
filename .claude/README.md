@@ -13,16 +13,22 @@ Docs (按需加载) → 深度参考：架构、算法、陷阱
     ↓
 代码改动
     ↓
-(可选) Workflow → 多 Agent 并行审查 / 全流程自动化
+(可选) Workflow → 多 Agent 并行：审查/修复/实现/验证
 ```
 
-**三层加载，按需取用：**
+**三层加载 + 并行执行：**
 
 | 层 | 何时加载 | 内容 |
 |----|---------|------|
 | **CLAUDE.md** | 每条对话自动加载 | 启动流程、铁律、构建命令、Skills 路由表 |
 | **Skills** | CLAUDE.md 路由后读取 | 可执行指令：触发条件 + 必读文档 + 检查清单 + 验证 |
 | **Docs** | Skill 指令指向时读取 | 深度参考资料：架构细节、算法说明、已知陷阱 |
+
+**并行优化：**
+- Agent 启动时只读 `quick-ref.md`（~40行），不再分别读 agent-protocol.md + gotchas.md（~200行）
+- 单 Bug 诊断：4 层并行分析（data/shared/ui/di 同时排查）
+- 多 Bug：N 个 Agent 同时诊断 → Pipeline 修复（Bug #1 修复时 Bug #2 还在诊断）
+- 多功能实现：独立步骤并行执行，依赖步骤串行
 
 ## 目录结构
 
@@ -32,10 +38,11 @@ Docs (按需加载) → 深度参考：架构、算法、陷阱
 ├── settings.local.json             # 本地覆盖（不提交）
 ├── README.md                       # 本文件
 │
-├── skills/                         # 行动手册（11个）— Agent 启动后按需读取
+├── skills/                         # 行动手册（12个）— Agent 启动后按需读取
 │   ├── energyflow-acknowledge.md   # 代码库认知引导
 │   ├── energyflow-new-feature.md   # 功能实现引导
 │   ├── energyflow-diagnose.md      # Bug 诊断引导
+│   ├── energyflow-multi-task.md    # 🆕 并行多任务编排（批量修Bug/批量加功能）
 │   ├── energyflow-refactor.md      # 安全重构引导
 │   ├── energyflow-test.md          # 测试运行与调试
 │   ├── energyflow-commit.md        # Conventional Commits 规范
@@ -45,13 +52,15 @@ Docs (按需加载) → 深度参考：架构、算法、陷阱
 │   ├── energyflow-build-debug.md   # 构建与调试
 │   └── energyflow-security.md      # 安全检查清单
 │
-├── agents/                         # 专业子 Agent（4个）— Workflow 调用
+├── agents/                         # 专业子 Agent（5个）— Workflow 调用
 │   ├── code-reviewer.md            # 代码正确性、风格、KMP 边界
 │   ├── architecture-reviewer.md    # 模块边界、DI、数据流
 │   ├── analytics-reviewer.md       # 算法/数学正确性
-│   └── ui-reviewer.md              # Compose 性能、无障碍、设计一致性
+│   ├── ui-reviewer.md              # Compose 性能、无障碍、设计一致性
+│   └── bug-fixer.md                # 🆕 独立修复 bug（有 Edit + Bash 能力）
 │
-├── docs/                           # 深度参考（18个）— 按需读取
+├── docs/                           # 深度参考（19个）— 按需读取
+│   ├── agents/                     # Agent 协议 + 🆕 quick-ref 速查卡
 │   ├── architecture/               # 架构、构建、陷阱、ADR
 │   ├── data-layer/                 # 数据模型、解析、检测、计费、外部 API
 │   ├── analytics/                  # 预测、碳足迹、洞察
@@ -59,10 +68,11 @@ Docs (按需加载) → 深度参考：架构、算法、陷阱
 │   ├── ui-layer/                   # 主题、导航、图表、设置
 │   └── testing/                    # 测试策略、用例、流程、开发工作流
 │
-└── workflows/                      # 多 Agent 编排（5个）— 显式调用
+└── workflows/                      # 多 Agent 编排（6个）— 显式调用
     ├── full-review.js              # 4 维度并行审查
-    ├── feature-development.js      # 理解→方案→实现→测试
-    ├── bug-fix.js                  # 复现→诊断→修复→验证
+    ├── feature-development.js      # 理解→方案→实现(并行)→验证
+    ├── bug-fix.js                  # 复现→并行分层诊断→修复→验证
+    ├── multi-fix.js                # 🆕 批量并行修 Bug（N个Agent同时诊断+修复）
     ├── test-then-commit.js         # 测试→自动提交
     └── onboarding.js               # 代码库引导漫游
 ```
@@ -95,17 +105,12 @@ Agent 自动读 CLAUDE.md → 识别任务类型 → 读对应 skill → 按指�
 ### 多 Agent 编排
 ```
 workflow:full-review           # 4 并联审查员
-workflow:feature-development   # 功能全流程
-workflow:bug-fix               # Bug 修复全流程
+workflow:feature-development   # 功能全流程（实现阶段并行）
+workflow:bug-fix               # Bug 修复全流程（并行分层诊断）
+workflow:multi-fix             # 🆕 批量并行修 Bug
 workflow:test-then-commit      # 测试 + 提交
 workflow:onboarding            # 项目引导
 ```
-
-- `workflow:full-review`        # 4 并联审查员
-- `workflow:feature-development # 功能全流程
-- `workflow:bug-fix`            # Bug 修复全流程
-- `workflow:test-then-commit`   # 测试 + 提交
-- `workflow:onboarding`         # 项目引导
 
 ## 维护规则
 

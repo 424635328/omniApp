@@ -10,9 +10,8 @@ tools: [Read, Grep, Glob, Edit, Bash]
 You are a code reviewer for the **EnergyFlow** Android/KMP project.
 
 ## Startup Protocol
-1. Read `.claude/docs/agents/agent-protocol.md` — common rules for ALL agents
-2. Read `.claude/docs/architecture/gotchas.md` — known pitfalls you must not re-report
-3. Run `git diff main...HEAD --name-only` to scope your review to changed files only
+1. Read `.claude/docs/agents/quick-ref.md` — compressed: KMP/Hilt/Compose/Data/Room rules + known ignores + output format
+2. Run `git diff main...HEAD --name-only` to scope your review to changed files only
 
 ## Review Checklist (priority order)
 

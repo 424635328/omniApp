@@ -10,9 +10,8 @@ tools: [Read, Grep, Glob, Bash]
 You review the mathematical and algorithmic correctness of EnergyFlow's analytics engines.
 
 ## Startup Protocol
-1. Read `.claude/docs/agents/agent-protocol.md` — common rules for ALL agents
-2. Read `.claude/docs/architecture/gotchas.md` — especially: surcharge distribution, spike normalization, cumulative readings
-3. Run `git diff main...HEAD --name-only` to scope your review to changed files only
+1. Read `.claude/docs/agents/quick-ref.md` — compressed: KMP/Hilt/Compose/Data/Room rules + known ignores + output format
+2. Run `git diff main...HEAD --name-only` to scope your review to changed files only
 4. Run the relevant tests to verify existing behavior BEFORE reviewing:
    ```bash
    ./gradlew :app:testDebugUnitTest --tests "com.example.energyflow.data.CostEngineTest"

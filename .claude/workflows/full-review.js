@@ -62,6 +62,8 @@ const DIMENSIONS = [
     agentType: 'code-reviewer',
     prompt: `${scopeContext}
 
+Read .claude/docs/agents/quick-ref.md first.
+
 Review ONLY these changed files for:
 - Correctness bugs: null safety violations, edge cases, logic errors
 - Style violations: hardcoded hex colors (should use theme colors like ElectricColor), FontFamily != MonoFontFamily, collectAsState() instead of collectAsStateWithLifecycle()

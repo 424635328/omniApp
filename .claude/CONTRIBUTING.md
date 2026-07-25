@@ -14,6 +14,8 @@ Docs (*.md)        → 按需读取（深度参考资料：架构/算法/数据�
 Agents (*.md)      → Workflow 调用（审查维度 + 检查清单 + 验证命令 + 忽略列表）
     ↓ 编排
 Workflows (*.js)   → 显式调用（多Agent pipeline/parallel 编排）
+
+优化：Agent 启动读 quick-ref.md (~40行) 替代 agent-protocol.md + gotchas.md (~200行)
 ```
 
 ## 数据流
@@ -107,6 +109,13 @@ Skill 文件创建后，需要在 CLAUDE.md 的决策树中添加路由条目。
 - 不能用 Node.js API / 文件系统 API
 - schema 必须是纯 JSON Schema literal（不能引用变量）
 - pipeline() vs parallel() 的选择规则见 Workflow 工具文档
+
+### 并行优化原则 🆕
+- **pipeline() 优先于 parallel()** — pipeline 无 barrier，Item A 修 bug 时 Item B 还在诊断
+- **独立任务并行** — 改不同文件的 bug/功能 → 并行 Agent 同时执行
+- **分层诊断并行** — 单 bug 的 data/shared/ui/di 四层同时排查
+- **Agent 启动用 quick-ref** — 不再分别读 agent-protocol.md + gotchas.md
+- **barrier 只用于真需要全体结果的场景** — 如去重、全量统计
 
 ### 文档路径引用
 - 所有路径都相对于项目根
