@@ -1,0 +1,23 @@
+环境与碳足迹计算 (Carbon Footprint)
+  将千瓦时（kWh）和立方米（m³）换算为碳排放量（kg CO₂）。
+  增加绿色勋章或树木养成动画（类似蚂蚁森林），赋予 App 环保的情感价值。；更智能的预测模型 (Prophet / ARIMA
+  替代简单的线性外推)
+  目前的预测基于“日均消耗外推”。
+  升级： 引入轻量级的时间序列预测算法。结合天气预报（Open-Meteo 未来 7 天气温），如果下周持续
+  38°C，系统应预测下周耗电量会非线性暴增，而不是线性增长；；向 Kotlin Multiplatform (KMP) 演进
+  你的业务逻辑（CostEngine, Parsers, DateUtils）大部分是纯 Kotlin。可以将其抽取为 KMP 模块。
+  直接收益： 轻松发布 iOS 版本，或者编译为 WebAssembly (Wasm) 提供网页端看板。
+  ；UI/UX 与极客体验升级
+  目前的 Compose 界面已经很好，可以加入更多前沿系统特性：
+  Android 15+ 预测性返回与边缘到边缘 (Edge-to-Edge)
+  确保完美适配系统手势，在图表和时间轴滑动时提供丝滑的阻尼感。
+  交互式桌面小组件 (Interactive Glance Widgets)
+  不仅是展示数据，在小部件上直接放一个“一键记电费”或“打卡”按钮，点击后弹出局部浮层（免全屏打开 App）。
+  App Shortcuts & 语音助手集成 (App Actions)
+  配置 shortcuts.xml，允许用户通过系统语音助手（如小爱同学、Google Assistant）直接说：“用能耗手记记录今天水表 800”。
+  3D 与数据可视化 (数据漫游)
+  月度账单不仅是文本分享。利用 Canvas 绘制一个类似 Spotify
+  Wrapped（年度听歌报告）的**“月度/年度能耗报告”**动画生成器，支持导出精美长图或短视频。
+  ；全面升级交互式桌面小组件 (Interactive Glance Widgets)
+  不仅是展示数据，在小部件上直接放一个“一键记电费”或“打卡”按钮，点击后弹出局部浮层（免全屏打开
+  App）。按计划实现，
