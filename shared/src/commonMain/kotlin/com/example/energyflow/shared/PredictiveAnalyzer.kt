@@ -20,8 +20,7 @@ object PredictiveAnalyzerShared {
     private const val ALPHA = 0.3
     private const val BETA = 0.1
     private const val HEAT_THRESHOLD = 35.0
-    private const val HEAT_MULTIPLIER = 1.3
-    private const val FORECAST_DAYS = 3
+    private const val FORECAST_DAYS = 7
     private const val WEEKEND_BOOST = 1.15
     private const val MIN_DES_POINTS = 5
 
@@ -149,17 +148,20 @@ object PredictiveAnalyzerShared {
         if (forecast.isEmpty()) return 1.0
 
         val forecastEnd = today.plus(FORECAST_DAYS - 1, DateTimeUnit.DAY)
-        val hotDays = forecast.filter { weather ->
-            weather.date >= today &&
-            weather.date <= forecastEnd &&
-            weather.tempMax >= HEAT_THRESHOLD
+        val inWindow = forecast.filter { it.date >= today && it.date <= forecastEnd }
+        if (inWindow.isEmpty()) return 1.0
+
+        var totalDelta = 0.0
+        for (day in inWindow) {
+            val multiplier = when {
+                day.tempMax >= 40.0 -> 1.5
+                day.tempMax >= 38.0 -> 1.35
+                day.tempMax >= HEAT_THRESHOLD -> 1.15
+                else -> 1.0
+            }
+            totalDelta += multiplier - 1.0
         }
-
-        if (hotDays.isEmpty()) return 1.0
-
-        val hotCount = hotDays.size
-        val ratio = hotCount.toDouble() / FORECAST_DAYS
-        return 1.0 + (HEAT_MULTIPLIER - 1.0) * ratio
+        return 1.0 + totalDelta / FORECAST_DAYS
     }
 
     private fun calculateWeekendFactor(

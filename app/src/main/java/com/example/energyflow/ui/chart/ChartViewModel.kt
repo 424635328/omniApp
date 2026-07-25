@@ -4,7 +4,9 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.energyflow.data.BillingRules
+import com.example.energyflow.data.CarbonFootprint
 import com.example.energyflow.data.CostEngine
+import com.example.energyflow.shared.CarbonResult
 import com.example.energyflow.shared.CostEngineShared
 import com.example.energyflow.data.DailyWeather
 import com.example.energyflow.data.EventImpact
@@ -42,7 +44,8 @@ class ChartViewModel @Inject constructor(
     private val eventImpactAnalyzer: EventImpactAnalyzer,
     private val weatherRepository: WeatherRepository,
     private val userPreferences: UserPreferences,
-    private val deepSeekRepository: com.example.energyflow.data.DeepSeekRepository
+    private val deepSeekRepository: com.example.energyflow.data.DeepSeekRepository,
+    private val carbonFootprint: CarbonFootprint
 ) : ViewModel() {
 
     // ── 电/水/气 表类型切换 ──
@@ -129,6 +132,10 @@ class ChartViewModel @Inject constructor(
     private val _gasChartData = MutableStateFlow<ChartData>(ChartData.Empty)
     val gasChartData: StateFlow<ChartData> = _gasChartData.asStateFlow()
 
+    // ── 碳足迹状态 ──
+    private val _carbonData = MutableStateFlow<CarbonResult?>(null)
+    val carbonData: StateFlow<CarbonResult?> = _carbonData.asStateFlow()
+
     // ── 缓存 billingRules ──
     private val billingRules: StateFlow<BillingRules> = userPreferences.billingRules
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BillingRules())
@@ -194,6 +201,8 @@ class ChartViewModel @Inject constructor(
         if (result is WeatherResult.Success) {
             _weatherData.value = result.data
             userPreferences.cacheWeatherForecast("cached", java.time.LocalDate.now().toString())
+            // 预报到达后重算预测（天气乘数可能改变）
+            recalculateForCurrentType()
         }
     }
 
@@ -210,7 +219,11 @@ class ChartViewModel @Inject constructor(
         recalculateForCurrentType()
     }
 
-    private fun updateChartData(records: List<MeterRecord>, estimatedCostPerKwh: Double = 0.0) {
+    private fun updateChartData(
+        records: List<MeterRecord>,
+        estimatedCostPerKwh: Double = 0.0,
+        forecastConsumptions: List<DailyConsumption> = emptyList()
+    ) {
         if (records.isEmpty()) {
             _chartData.value = ChartData.Empty
             return
@@ -251,7 +264,8 @@ class ChartViewModel @Inject constructor(
             records = inWindowRecords,
             dailyConsumptions = dailies,
             annotations = annotations,
-            timeRange = _timeRange.value
+            timeRange = _timeRange.value,
+            forecastConsumptions = forecastConsumptions
         )
     }
 
@@ -259,6 +273,7 @@ class ChartViewModel @Inject constructor(
         if (records.isEmpty()) {
             _chartData.value = ChartData.Empty
             _billResult.value = null
+            _carbonData.value = null
             _prediction.value = null
             _predictedBill.value = null
             _eventImpacts.value = emptyList()
@@ -330,8 +345,17 @@ class ChartViewModel @Inject constructor(
             _billResult.value = null
         }
 
+        // ── 碳足迹计算 ──
+        val totalKwhForCarbon = _billResult.value?.totalKwh ?: 0.0
+        _carbonData.value = carbonFootprint.calculate(totalKwhForCarbon, gasM3 = 0.0)
+
         // ── 月度预测（始终使用本月数据，与时间范围无关） ──
-        val pred = predictiveAnalyzer.predictMonth(electricRecords.value)
+        val forecast = _weatherData.value
+        val pred = predictiveAnalyzer.predictMonth(
+            records = electricRecords.value,
+            weatherForecast = forecast,
+            now = LocalDateTime.now()
+        )
         if (pred != null) {
             val totalInRange = _billResult.value?.totalKwh ?: 0.0
             val peakRatio = if (totalInRange > 0.0) (_billResult.value?.peakKwh ?: 0.0) / totalInRange else 0.0
@@ -383,7 +407,12 @@ class ChartViewModel @Inject constructor(
             (electricRecords.value + notesRecords.value).distinctBy { it.id }
         )
 
-        updateChartData(records, effectiveCostPerKwh)
+        // ── 预报消耗点（从明天到月底，供图表虚线投影） ──
+        val forecastPoints = if (pred != null && _timeRange.value == TimeRange.MONTH) {
+            computeForecastConsumptions(pred, _weatherData.value)
+        } else emptyList()
+
+        updateChartData(records, effectiveCostPerKwh, forecastConsumptions = forecastPoints)
 
         // 天气数据加载（仅在"月"或"周"时加载）
         if (_timeRange.value == TimeRange.WEEK || _timeRange.value == TimeRange.MONTH) {
@@ -456,10 +485,13 @@ class ChartViewModel @Inject constructor(
         }
 
         // 水表月度预测
-        _waterPrediction.value = predictWaterMonth(records)
+        _waterPrediction.value = predictWaterMonth(records, _weatherData.value)
     }
 
-    private fun predictWaterMonth(records: List<MeterRecord>): MonthPrediction? {
+    private fun predictWaterMonth(
+        records: List<MeterRecord>,
+        weatherForecast: List<DailyWeather> = emptyList()
+    ): MonthPrediction? {
         val today = LocalDate.now()
         val now = YearMonth.now()
         val thisMonth = records.filter {
@@ -477,9 +509,16 @@ class ChartViewModel @Inject constructor(
         val daysElapsed = ChronoUnit.DAYS.between(
             first.timestamp.toLocalDate(), last.timestamp.toLocalDate()
         ).coerceAtLeast(1)
-        val dailyRate = consumed / daysElapsed
+        var dailyRate = consumed / daysElapsed
         val totalMonthDays = now.lengthOfMonth()
         val daysRemaining = totalMonthDays - today.dayOfMonth
+
+        // 天气乘数：预报中有 7+ 天 > 35°C 时，用水量上浮 10%（灌溉/户外）
+        val hotDaysInForecast = weatherForecast.count { it.tempMax > 35.0 }
+        if (hotDaysInForecast >= 7) {
+            dailyRate *= 1.1
+        }
+
         val predictedRemaining = dailyRate * daysRemaining
         val predicted = consumed + predictedRemaining
 
@@ -853,6 +892,42 @@ class ChartViewModel @Inject constructor(
     }
 
     /**
+     * 生成预测透视点（从明天到月底），用于图表虚线预报线。
+     * 使用 MonthPrediction.dailyRateKwh（已包含天气乘数），
+     * estimatedCost = -1.0 标记为投影数据点。
+     */
+    private fun computeForecastConsumptions(
+        pred: MonthPrediction,
+        forecast: List<DailyWeather>
+    ): List<DailyConsumption> {
+        if (pred.daysRemaining <= 0) return emptyList()
+
+        val today = LocalDate.now()
+        val weatherByDate = forecast.associateBy { it.date }
+        val result = mutableListOf<DailyConsumption>()
+
+        for (i in 1..pred.daysRemaining) {
+            val date = today.plusDays(i.toLong())
+            val weather = weatherByDate[date]
+            // If we have per-day weather, amplify the daily rate further for hot days
+            val dayMultiplier = if (weather != null && weather.tempMax >= 35.0) {
+                1.0 + (weather.tempMax - 35.0) * 0.02 // ~10% boost per 5°C above 35
+            } else 1.0
+            val dailyVal = pred.dailyRateKwh * dayMultiplier
+            result.add(
+                DailyConsumption(
+                    date = date.atStartOfDay(),
+                    consumption = dailyVal,
+                    dailyConsumption = dailyVal,
+                    daysBetween = 0,
+                    estimatedCost = -1.0 // sentinel: projected point
+                )
+            )
+        }
+        return result
+    }
+
+    /**
      * 计算每日消耗，并对缺失日期进行线性插值。
      *
      * 当两次读数间隔 N 天时，将总消耗均摊到每一天，
@@ -933,7 +1008,8 @@ data class ChartData(
     val records: List<MeterRecord>,
     val dailyConsumptions: List<DailyConsumption>,
     val annotations: List<MeterRecord>,
-    val timeRange: TimeRange
+    val timeRange: TimeRange,
+    val forecastConsumptions: List<DailyConsumption> = emptyList()
 ) {
     companion object {
         val Empty = ChartData(emptyList(), emptyList(), emptyList(), TimeRange.MONTH)

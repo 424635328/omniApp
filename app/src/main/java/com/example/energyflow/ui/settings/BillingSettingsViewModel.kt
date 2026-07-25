@@ -31,6 +31,11 @@ class BillingSettingsViewModel @Inject constructor(
     val peakValleyExpandedFlow: Flow<Boolean> = userPreferences.peakValleyExpanded
     val themeDistEnabledFlow: Flow<Boolean> = userPreferences.themeDistEnabled
 
+    // ── 碳足迹因子 ──
+    val carbonElectricFactorFlow: Flow<Double> = userPreferences.carbonElectricFactor
+    val carbonGasFactorFlow: Flow<Double> = userPreferences.carbonGasFactor
+    val carbonTreeKgPerYearFlow: Flow<Double> = userPreferences.carbonTreeKgPerYear
+
     private var draft = BillingRules()
 
     init {
@@ -69,6 +74,17 @@ class BillingSettingsViewModel @Inject constructor(
     }
     fun setThemeDistEnabled(enabled: Boolean) = viewModelScope.launch {
         userPreferences.setThemeDistEnabled(enabled)
+    }
+
+    // ── 碳足迹因子更新（立即保存） ────────────────────────────
+    fun updateCarbonElectricFactor(value: Double) = viewModelScope.launch {
+        userPreferences.setCarbonElectricFactor(value)
+    }
+    fun updateCarbonGasFactor(value: Double) = viewModelScope.launch {
+        userPreferences.setCarbonGasFactor(value)
+    }
+    fun updateCarbonTreeKgPerYear(value: Double) = viewModelScope.launch {
+        userPreferences.setCarbonTreeKgPerYear(value)
     }
 
     // ── 数据管理 ────────────────────────────────────────────

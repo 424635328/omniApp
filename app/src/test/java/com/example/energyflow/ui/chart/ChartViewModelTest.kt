@@ -34,6 +34,7 @@ class ChartViewModelTest {
     private val weatherRepository = mockk<WeatherRepository>(relaxUnitFun = true)
     private val userPreferences = mockk<UserPreferences>(relaxUnitFun = true)
     private val deepSeekRepository = mockk<com.example.energyflow.data.DeepSeekRepository>(relaxUnitFun = true)
+    private val carbonFootprint = mockk<CarbonFootprint>(relaxUnitFun = true)
 
     private val aRecord = MeterRecord(
         timestamp = java.time.LocalDateTime.of(2026, 7, 10, 12, 0),
@@ -60,6 +61,7 @@ class ChartViewModelTest {
         coEvery { costEngine.calculateBill(any(), any(), any(), any()) } returns mockk()
         coEvery { predictiveAnalyzer.predictMonth(any(), any()) } returns null
         coEvery { eventImpactAnalyzer.analyzeWithRecords(any()) } returns emptyList()
+        coEvery { carbonFootprint.calculate(any(), any()) } returns mockk()
         coEvery { userPreferences.cacheWeatherForecast(any(), any()) } returns mockk()
         coEvery { weatherRepository.fetch7DayForecast(any(), any()) } returns WeatherResult.Error("mock")
         coEvery { weatherRepository.fetchHistorical(any(), any(), any(), any()) } returns
@@ -79,7 +81,8 @@ class ChartViewModelTest {
             eventImpactAnalyzer = eventImpactAnalyzer,
             weatherRepository = weatherRepository,
             userPreferences = userPreferences,
-            deepSeekRepository = deepSeekRepository
+            deepSeekRepository = deepSeekRepository,
+            carbonFootprint = carbonFootprint
         ).also { testDispatcher.scheduler.advanceUntilIdle() }
     }
 

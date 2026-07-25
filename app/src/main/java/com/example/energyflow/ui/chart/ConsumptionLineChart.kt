@@ -80,6 +80,7 @@ fun ConsumptionLineChart(
     weatherByDate: Map<LocalDate, DailyWeather> = emptyMap(),
     accentColor: Color = ElectricColor,
     unitLabel: String = "度",
+    forecastConsumptions: List<DailyConsumption> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     if (consumptions.isEmpty()) return
@@ -458,6 +459,47 @@ fun ConsumptionLineChart(
                     if (isSelected) Color.White else chartColor,
                     if (isSelected) 5f else 3f,
                     point
+                )
+            }
+
+            // ═════════════════════════════════════════
+            // 层 2c: 预报投影虚线（从最后一个实际数据点延伸到月底）
+            // ═════════════════════════════════════════
+            if (forecastConsumptions.isNotEmpty() && visibleCount >= 2) {
+                val lastActualPoint = points[visibleCount - 1]
+                val forecastPath = Path().apply {
+                    moveTo(lastActualPoint.x, lastActualPoint.y)
+                    var fx = lastActualPoint.x + xStep
+                    for (fc in forecastConsumptions) {
+                        val fv = if (showCost) fc.estimatedCost else fc.dailyConsumption
+                        val fy = paddingTop + chartHeight -
+                                ((fv - minValue) / valueRange * chartHeight).toFloat()
+                        lineTo(fx, fy)
+                        fx += xStep
+                    }
+                }
+                drawPath(
+                    forecastPath,
+                    color = chartColor.copy(alpha = 0.45f),
+                    style = Stroke(
+                        width = 2.5f,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                    )
+                )
+                // 预报起点的"预估"小标签
+                val forecastLabelPaint = android.graphics.Paint().apply {
+                    color = chartColor.copy(alpha = 0.6f).toArgb()
+                    textSize = with(density) { 9.sp.toPx() }
+                    isAntiAlias = true
+                    textAlign = android.graphics.Paint.Align.LEFT
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    "预估",
+                    lastActualPoint.x + xStep - 4f,
+                    lastActualPoint.y - 10f,
+                    forecastLabelPaint
                 )
             }
 

@@ -264,4 +264,94 @@ class PredictiveAnalyzerTest {
         // consumedSoFar: 日均×本月已过天数 = 3.448 × 15 = 51.72
         assertEquals(51.724, result.consumedSoFarKwh, 0.01)
     }
+
+    // ── 天气预报集成 ──
+
+    @Test
+    fun `empty weather forecast returns same as no forecast`() {
+        val records = listOf(
+            reading(now.minusDays(14), 100.0),
+            reading(now.minusDays(11), 107.0),
+            reading(now.minusDays(8), 115.0),
+            reading(now.minusDays(5), 122.0),
+            reading(now.minusDays(2), 128.0),
+            reading(now.minusDays(1), 130.0)
+        )
+        val resultNoWeather = analyzer.predictMonth(records, now = now)
+        val resultEmpty = analyzer.predictMonth(records, weatherForecast = emptyList(), now = now)
+        assertNotNull(resultNoWeather)
+        assertNotNull(resultEmpty)
+        assertEquals(resultNoWeather!!.dailyRateKwh, resultEmpty!!.dailyRateKwh, 0.001)
+        assertEquals(resultNoWeather.predictedTotalKwh, resultEmpty.predictedTotalKwh, 0.001)
+    }
+
+    @Test
+    fun `35 degree forecast applies heat multiplier via DES`() {
+        // 6 records to trigger DES path (>=5)
+        val records = listOf(
+            reading(now.minusDays(14), 100.0),
+            reading(now.minusDays(11), 107.0),
+            reading(now.minusDays(8), 115.0),
+            reading(now.minusDays(5), 122.0),
+            reading(now.minusDays(2), 128.0),
+            reading(now.minusDays(1), 130.0)
+        )
+        // 3 consecutive hot days starting today (July 15-17)
+        val hotForecast = listOf(
+            DailyWeather(date = java.time.LocalDate.of(2026, 7, 15), tempMax = 35.0, tempMin = 26.0),
+            DailyWeather(date = java.time.LocalDate.of(2026, 7, 16), tempMax = 36.0, tempMin = 27.0),
+            DailyWeather(date = java.time.LocalDate.of(2026, 7, 17), tempMax = 35.0, tempMin = 26.0)
+        )
+        val resultNoWeather = analyzer.predictMonth(records, now = now)
+        val resultHot = analyzer.predictMonth(records, weatherForecast = hotForecast, now = now)
+        assertNotNull(resultNoWeather)
+        assertNotNull(resultHot)
+
+        // Hot weather should increase the predicted total
+        assertTrue(
+            "Hot weather should increase predicted total: ${resultNoWeather!!.predictedTotalKwh} vs ${resultHot!!.predictedTotalKwh}",
+            resultHot.predictedTotalKwh > resultNoWeather.predictedTotalKwh
+        )
+        assertTrue(
+            "Hot weather should increase daily rate: ${resultNoWeather.dailyRateKwh} vs ${resultHot.dailyRateKwh}",
+            resultHot.dailyRateKwh > resultNoWeather.dailyRateKwh
+        )
+    }
+
+    @Test
+    fun `38 degree sustained causes nonlinear extreme heat spike`() {
+        // 6 records to trigger DES path
+        val records = listOf(
+            reading(now.minusDays(14), 100.0),
+            reading(now.minusDays(11), 107.0),
+            reading(now.minusDays(8), 115.0),
+            reading(now.minusDays(5), 122.0),
+            reading(now.minusDays(2), 128.0),
+            reading(now.minusDays(1), 130.0)
+        )
+        // 35°C forecast vs 38°C sustained forecast
+        val hot35 = listOf(
+            DailyWeather(date = java.time.LocalDate.of(2026, 7, 15), tempMax = 35.0, tempMin = 26.0),
+            DailyWeather(date = java.time.LocalDate.of(2026, 7, 16), tempMax = 35.0, tempMin = 27.0),
+            DailyWeather(date = java.time.LocalDate.of(2026, 7, 17), tempMax = 35.0, tempMin = 26.0)
+        )
+        val extreme38 = listOf(
+            DailyWeather(date = java.time.LocalDate.of(2026, 7, 15), tempMax = 38.0, tempMin = 28.0),
+            DailyWeather(date = java.time.LocalDate.of(2026, 7, 16), tempMax = 38.0, tempMin = 29.0),
+            DailyWeather(date = java.time.LocalDate.of(2026, 7, 17), tempMax = 38.0, tempMin = 28.0)
+        )
+        val result35 = analyzer.predictMonth(records, weatherForecast = hot35, now = now)
+        val result38 = analyzer.predictMonth(records, weatherForecast = extreme38, now = now)
+        assertNotNull(result35)
+        assertNotNull(result38)
+
+        // 38°C sustained should produce a nonlinear spike — significantly more than 35°C
+        // The ratio of 38°C predicted total to 35°C predicted total should be > 1.3/1.0
+        // due to the nonlinear (quadratic) extreme heat bonus
+        val ratio = result38!!.predictedTotalKwh / result35!!.predictedTotalKwh
+        assertTrue(
+            "38°C sustained should cause nonlinear spike (ratio=$ratio, expected > 1.25)",
+            ratio > 1.25
+        )
+    }
 }

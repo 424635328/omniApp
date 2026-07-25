@@ -69,6 +69,8 @@ import com.example.energyflow.data.WeatherInterpolator
 import com.example.energyflow.data.DailyWeather
 import com.example.energyflow.data.EventImpact
 import com.example.energyflow.data.MonthPrediction
+import com.example.energyflow.shared.CarbonResult
+import com.example.energyflow.shared.GreenBadge
 import com.example.energyflow.ui.theme.DarkBackground
 import com.example.energyflow.ui.theme.DarkCard
 import com.example.energyflow.ui.theme.DarkSurface
@@ -118,6 +120,7 @@ fun ChartScreen(
     val weatherData by viewModel.weatherData.collectAsState()
     val weatherLoading by viewModel.weatherLoading.collectAsState()
     val weatherError by viewModel.weatherError.collectAsState()
+    val carbonData by viewModel.carbonData.collectAsState()
     var showWeather by remember { mutableStateOf(false) }
     var selectedChartIndex by remember { mutableIntStateOf(-1) }
 
@@ -186,7 +189,7 @@ fun ChartScreen(
                                 predictionTracking, eventImpacts, aiAnalysis, aiLoading,
                                 weatherData, weatherLoading, weatherError, showWeather,
                                 { showWeather = it }, selectedChartIndex, { selectedChartIndex = it },
-                                viewModel
+                                viewModel, carbonData
                             )
                             ChartViewModel.MeterType.WATER -> WaterAnalysisSection(
                                 waterChartData, waterBillResult, waterPrediction, showCost
@@ -1993,7 +1996,8 @@ private fun ElectricAnalysisSection(
     onShowWeatherChange: (Boolean) -> Unit,
     selectedChartIndex: Int,
     onSelectedIndexChange: (Int) -> Unit,
-    viewModel: ChartViewModel
+    viewModel: ChartViewModel,
+    carbonData: CarbonResult? = null
 ) {
     // ═══ Hero KPIs ═══
     AnimatedVisibility(
@@ -2034,7 +2038,8 @@ private fun ElectricAnalysisSection(
                         showCost = showCost,
                         selectedIndex = selectedChartIndex,
                         onSelectedIndexChange = onSelectedIndexChange,
-                        weatherByDate = interpolatedWeather
+                        weatherByDate = interpolatedWeather,
+                        forecastConsumptions = chartData.forecastConsumptions
                     )
                     if (showWeather && weatherData.isNotEmpty()) {
                         val fullWeather = remember(consumptionDates, interpolatedWeather) {
@@ -2068,6 +2073,12 @@ private fun ElectricAnalysisSection(
         Spacer(modifier = Modifier.height(24.dp))
     }
 
+    // ═══ 碳足迹摘要 ═══
+    if (carbonData != null) {
+        CarbonSummaryCard(carbonData)
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+
     // ═══ 事件耗能分析 + AI ═══
     if (eventImpacts.isNotEmpty()) {
         EventImpactPanel(
@@ -2085,6 +2096,130 @@ private fun ElectricAnalysisSection(
     if (chartData.annotations.isNotEmpty()) {
         AnnotationsList(chartData.annotations)
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 碳足迹摘要卡片
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun CarbonSummaryCard(carbonResult: CarbonResult) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(DarkCard)
+            .border(1.dp, SuccessGreen.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
+            .padding(18.dp)
+    ) {
+        // ── 标题 ──
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(4.dp, 16.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(SuccessGreen)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "碳足迹",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontFamily = MonoFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text("🌿", fontSize = 16.sp)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── 关键指标行 ──
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // CO2 kg
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSurface)
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "${Formatters.formatDecimal1(carbonResult.totalKgCO2)}",
+                        color = SuccessGreen,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                    Text(
+                        "kg CO₂",
+                        color = TextTertiary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // 其中电排放
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSurface)
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "${Formatters.formatDecimal1(carbonResult.electricKgCO2)}",
+                        color = ElectricColor,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                    Text(
+                        "电排放 kg",
+                        color = TextTertiary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // Tree days
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSurface)
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "${carbonResult.treeDays}",
+                        color = SuccessGreen,
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                    Text(
+                        "等效树·天",
+                        color = TextTertiary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
     }
 }
 

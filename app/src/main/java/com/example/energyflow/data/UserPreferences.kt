@@ -62,6 +62,11 @@ class UserPreferences @Inject constructor(
         private val WEATHER_FORECAST_DATE = stringPreferencesKey("weather_forecast_date")
         private val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
         private val FILTER_DUPLICATES = booleanPreferencesKey("filter_duplicates")
+
+        // ── 碳足迹因子 ──
+        private val CARBON_ELECTRIC_FACTOR = doublePreferencesKey("carbon_electric_factor")
+        private val CARBON_GAS_FACTOR = doublePreferencesKey("carbon_gas_factor")
+        private val CARBON_TREE_KG_PER_YEAR = doublePreferencesKey("carbon_tree_kg_per_year")
     }
 
     val isOnboardingComplete: Flow<Boolean> = dataStore.data.map { it[ONBOARDING_COMPLETE] ?: false }
@@ -217,5 +222,23 @@ class UserPreferences @Inject constructor(
     suspend fun cacheWeatherForecast(json: String, date: String) = dataStore.edit {
         it[WEATHER_FORECAST_CACHE] = json
         it[WEATHER_FORECAST_DATE] = date
+    }
+
+    // ── 碳足迹因子 ───────────────────────────────────────────
+
+    val carbonElectricFactor: Flow<Double> = dataStore.data.map { it[CARBON_ELECTRIC_FACTOR] ?: 0.583 }
+    val carbonGasFactor: Flow<Double> = dataStore.data.map { it[CARBON_GAS_FACTOR] ?: 2.02 }
+    val carbonTreeKgPerYear: Flow<Double> = dataStore.data.map { it[CARBON_TREE_KG_PER_YEAR] ?: 20.0 }
+
+    suspend fun setCarbonElectricFactor(value: Double) = dataStore.edit {
+        it[CARBON_ELECTRIC_FACTOR] = value
+    }
+
+    suspend fun setCarbonGasFactor(value: Double) = dataStore.edit {
+        it[CARBON_GAS_FACTOR] = value
+    }
+
+    suspend fun setCarbonTreeKgPerYear(value: Double) = dataStore.edit {
+        it[CARBON_TREE_KG_PER_YEAR] = value
     }
 }
