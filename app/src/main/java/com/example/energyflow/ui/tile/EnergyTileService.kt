@@ -57,9 +57,11 @@ class EnergyTileService : TileService() {
                     it.electricTotal != null && YearMonth.from(it.timestamp) == now
                 }.sortedBy { it.timestamp }
 
-                val kwh = if (thisMonth.size >= 2)
-                    thisMonth.last().electricTotal!! - thisMonth.first().electricTotal!!
-                else 0.0
+                val kwh = if (thisMonth.size >= 2) {
+                    val last = thisMonth.last().electricTotal
+                    val first = thisMonth.first().electricTotal
+                    if (last != null && first != null) last - first else 0.0
+                } else 0.0
 
                 val bill = if (kwh > 0) costEngine.calculateSimple(kwh) else 0.0
 
@@ -70,7 +72,9 @@ class EnergyTileService : TileService() {
                 else "暂无数据"
                 tile.state = Tile.STATE_ACTIVE
                 tile.updateTile()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("EnergyTileService", "refreshTile failed", e)
+            }
         }
     }
 }

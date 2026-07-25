@@ -5,7 +5,7 @@ import java.time.Year
 
 class SmartInputParser {
     companion object {
-        private val currentYear = Year.now().value
+        private fun currentYear() = Year.now().value
 
         // 峰谷值待定范围（4000-9000，用于批量导入时的峰谷配对）
         private const val PENDING_PEAK_VALLEY_MIN = 4000.0
@@ -135,7 +135,7 @@ class SmartInputParser {
             return ContextParseResult.RecordWithDate(
                 month, day,
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, month, day, 12, 0),
+                    timestamp = LocalDateTime.of(currentYear(), month, day, 12, 0),
                     isElectric = true, electricTotal = electric,
                     isWater = true, waterTotal = water,
                     note = note
@@ -157,7 +157,7 @@ class SmartInputParser {
             return ContextParseResult.RecordWithDate(
                 month, day,
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, month, day, hour, minute),
+                    timestamp = LocalDateTime.of(currentYear(), month, day, hour, minute),
                     isElectric = false, isWater = false, note = note
                 )
             )
@@ -178,7 +178,7 @@ class SmartInputParser {
             return ContextParseResult.RecordWithDate(
                 month, day,
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, month, day, hour, minute),
+                    timestamp = LocalDateTime.of(currentYear(), month, day, hour, minute),
                     isElectric = false, electricTotal = null,
                     isWater = false, waterTotal = null,
                     note = note
@@ -207,7 +207,7 @@ class SmartInputParser {
             return ContextParseResult.RecordWithDate(
                 month, day,
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, month, day, hour, minute),
+                    timestamp = LocalDateTime.of(currentYear(), month, day, hour, minute),
                     isElectric = false, electricTotal = null,
                     isWater = false, waterTotal = null,
                     note = note
@@ -233,7 +233,7 @@ class SmartInputParser {
 
             return ContextParseResult.Record(
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
+                    timestamp = LocalDateTime.of(currentYear(), currentMonth, currentDay, hour, minute),
                     isElectric = electric != null || peak != null || valley != null,
                     electricTotal = electric,
                     electricPeak = peak,
@@ -261,7 +261,7 @@ class SmartInputParser {
             val (electric, water) = if (value1 > value2) value1 to value2 else value2 to value1
             return ContextParseResult.Record(
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
+                    timestamp = LocalDateTime.of(currentYear(), currentMonth, currentDay, hour, minute),
                     isElectric = true, electricTotal = electric,
                     isWater = true, waterTotal = water,
                     note = note
@@ -300,7 +300,7 @@ class SmartInputParser {
             if (!isValidTime(hour, minute)) return ContextParseResult.Error("时间无效: $line")
             return ContextParseResult.Record(
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
+                    timestamp = LocalDateTime.of(currentYear(), currentMonth, currentDay, hour, minute),
                     isElectric = false, electricTotal = null,
                     isWater = false, waterTotal = null,
                     note = note
@@ -318,7 +318,7 @@ class SmartInputParser {
             val note = match.groupValues[4].trim().ifEmpty { null }
             return ContextParseResult.Record(
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
+                    timestamp = LocalDateTime.of(currentYear(), currentMonth, currentDay, hour, minute),
                     isElectric = false, electricTotal = null,
                     isWater = true, waterTotal = value,
                     note = note
@@ -336,7 +336,7 @@ class SmartInputParser {
             val note = match.groupValues[4].trim().ifEmpty { null }
             return ContextParseResult.Record(
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, hour, minute),
+                    timestamp = LocalDateTime.of(currentYear(), currentMonth, currentDay, hour, minute),
                     isElectric = false, electricTotal = null,
                     isWater = false,
                     isGas = true, gasTotal = value,
@@ -351,7 +351,7 @@ class SmartInputParser {
             if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
             return ContextParseResult.Record(
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, 12, 0),
+                    timestamp = LocalDateTime.of(currentYear(), currentMonth, currentDay, 12, 0),
                     isElectric = false, electricTotal = null,
                     isWater = true, waterTotal = value,
                     note = null
@@ -364,7 +364,7 @@ class SmartInputParser {
             if (currentMonth == null || currentDay == null) return ContextParseResult.Error("缺少日期上下文")
             return ContextParseResult.Record(
                 ParseResult.Success(
-                    timestamp = LocalDateTime.of(currentYear, currentMonth, currentDay, 12, 0),
+                    timestamp = LocalDateTime.of(currentYear(), currentMonth, currentDay, 12, 0),
                     isElectric = false, electricTotal = null,
                     isWater = false,
                     isGas = true, gasTotal = value,
@@ -426,7 +426,7 @@ class SmartInputParser {
         thresholds: ClassificationThresholds? = null
     ): ParseResult.Success {
         val t = thresholds ?: ClassificationThresholds.DEFAULTS
-        val timestamp = LocalDateTime.of(currentYear, month, day, hour, minute)
+        val timestamp = LocalDateTime.of(currentYear(), month, day, hour, minute)
 
         // 先从备注提取峰谷值
         val (notePeak, noteValley, cleanedNote) = extractPeakValleyFromNote(note)
@@ -496,6 +496,11 @@ class SmartInputParser {
         chineseToArabic.forEach { (chinese, arabic) ->
             result = result.replace(chinese, arabic)
         }
+        // 处理 "X十Y" 模式：如 "三十五" → "3十5" → "35"
+        result = result.replace(Regex("(\\d)十(\\d)"), "$1$2")
+        // 处理 "X十" 模式（无个位）：如 "三十" → "3十" → "30"
+        result = result.replace(Regex("(\\d)十"), "$10")
+        // 处理 "十Y" 模式（无十位）：如 "十五" → "105" → "15"
         result = result.replace(Regex("10(\\d)"), "1$1")
         return result
     }
@@ -516,7 +521,7 @@ class SmartInputParser {
     }
 
     private fun isValidDate(month: Int, day: Int): Boolean = runCatching {
-        LocalDateTime.of(currentYear, month, day, 0, 0)
+        LocalDateTime.of(currentYear(), month, day, 0, 0)
     }.isSuccess
 
     private fun isValidTime(hour: Int, minute: Int): Boolean = hour in 0..23 && minute in 0..59
@@ -531,10 +536,11 @@ data class PendingElectric(
     val total: Double?
 ) {
     fun toSuccess(month: Int, day: Int): ParseResult.Success {
+        val computedTotal = total ?: if (peak != null && valley != null) peak + valley else null
         return ParseResult.Success(
             timestamp = LocalDateTime.of(Year.now().value, month, day, 12, 0),
             isElectric = true,
-            electricTotal = total ?: (peak ?: 0.0) + (valley ?: 0.0),
+            electricTotal = computedTotal,
             electricPeak = peak,
             electricValley = valley,
             isWater = false,

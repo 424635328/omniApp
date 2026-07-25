@@ -55,6 +55,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,12 +95,12 @@ import java.time.YearMonth
 
 @Composable
 fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel()) {
-    val rules by viewModel.billingRulesFlow.collectAsState(initial = BillingRules())
-    val deepSeekApiKey by viewModel.deepSeekApiKeyFlow.collectAsState(initial = "")
-    val isDark by viewModel.isDarkThemeFlow.collectAsState(initial = true)
-    val followSystem by viewModel.followSystemThemeFlow.collectAsState(initial = false)
-    val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsState(initial = false)
-    val themeDistEnabled by viewModel.themeDistEnabledFlow.collectAsState(initial = true)
+    val rules by viewModel.billingRulesFlow.collectAsStateWithLifecycle(initialValue = BillingRules())
+    val deepSeekApiKey by viewModel.deepSeekApiKeyFlow.collectAsStateWithLifecycle(initialValue = "")
+    val isDark by viewModel.isDarkThemeFlow.collectAsStateWithLifecycle(initialValue = true)
+    val followSystem by viewModel.followSystemThemeFlow.collectAsStateWithLifecycle(initialValue = false)
+    val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsStateWithLifecycle(initialValue = false)
+    val themeDistEnabled by viewModel.themeDistEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
 
     var showClearDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current

@@ -43,7 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -108,20 +108,20 @@ fun ChartScreen(
     viewModel: ChartViewModel = hiltViewModel(),
     onWrapped: () -> Unit = {}
 ) {
-    val chartData by viewModel.chartData.collectAsState()
-    val timeRange by viewModel.timeRange.collectAsState()
-    val showCost by viewModel.showCost.collectAsState()
-    val billResult by viewModel.billResult.collectAsState()
-    val prediction by viewModel.prediction.collectAsState()
-    val predictedBill by viewModel.predictedBill.collectAsState()
-    val predictionTracking by viewModel.predictionTracking.collectAsState()
-    val eventImpacts by viewModel.eventImpacts.collectAsState()
-    val aiAnalysis by viewModel.aiAnalysis.collectAsState()
-    val aiLoading by viewModel.aiLoading.collectAsState()
-    val carbonData by viewModel.carbonData.collectAsState()
-    val weatherData by viewModel.weatherData.collectAsState()
-    val weatherLoading by viewModel.weatherLoading.collectAsState()
-    val weatherError by viewModel.weatherError.collectAsState()
+    val chartData by viewModel.chartData.collectAsStateWithLifecycle()
+    val timeRange by viewModel.timeRange.collectAsStateWithLifecycle()
+    val showCost by viewModel.showCost.collectAsStateWithLifecycle()
+    val billResult by viewModel.billResult.collectAsStateWithLifecycle()
+    val prediction by viewModel.prediction.collectAsStateWithLifecycle()
+    val predictedBill by viewModel.predictedBill.collectAsStateWithLifecycle()
+    val predictionTracking by viewModel.predictionTracking.collectAsStateWithLifecycle()
+    val eventImpacts by viewModel.eventImpacts.collectAsStateWithLifecycle()
+    val aiAnalysis by viewModel.aiAnalysis.collectAsStateWithLifecycle()
+    val aiLoading by viewModel.aiLoading.collectAsStateWithLifecycle()
+    val carbonData by viewModel.carbonData.collectAsStateWithLifecycle()
+    val weatherData by viewModel.weatherData.collectAsStateWithLifecycle()
+    val weatherLoading by viewModel.weatherLoading.collectAsStateWithLifecycle()
+    val weatherError by viewModel.weatherError.collectAsStateWithLifecycle()
     var showWeather by remember { mutableStateOf(false) }
     var selectedChartIndex by remember { mutableIntStateOf(-1) }
 
@@ -133,11 +133,11 @@ fun ChartScreen(
     }
 
     // ── 电/水/气 表类型 ──
-    val selectedMeterType by viewModel.selectedMeterType.collectAsState()
-    val waterChartData by viewModel.waterChartData.collectAsState()
-    val waterBillResult by viewModel.waterBillResult.collectAsState()
-    val waterPrediction by viewModel.waterPrediction.collectAsState()
-    val gasChartData by viewModel.gasChartData.collectAsState()
+    val selectedMeterType by viewModel.selectedMeterType.collectAsStateWithLifecycle()
+    val waterChartData by viewModel.waterChartData.collectAsStateWithLifecycle()
+    val waterBillResult by viewModel.waterBillResult.collectAsStateWithLifecycle()
+    val waterPrediction by viewModel.waterPrediction.collectAsStateWithLifecycle()
+    val gasChartData by viewModel.gasChartData.collectAsStateWithLifecycle()
 
     val isEmpty = when (selectedMeterType) {
         ChartViewModel.MeterType.ELECTRIC -> chartData == ChartData.Empty
@@ -923,7 +923,7 @@ private fun BillBreakdownPanel(bill: BillData) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     PriceChip("峰", bill.peakPrice, ElectricPeakColor)
-                    PriceChip("平", bill.flatPrice, Color(0xFF888888))
+                    PriceChip("平", bill.flatPrice, TextSecondary)
                     PriceChip("谷", bill.valleyPrice, ElectricValleyColor)
                 }
             }

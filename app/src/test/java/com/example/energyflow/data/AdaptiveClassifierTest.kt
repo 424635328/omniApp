@@ -168,14 +168,14 @@ class AdaptiveClassifierTest {
     // ── totalElectricMin 下限 ──
 
     @Test
-    fun `total electric min is at least 5000`() = runTest {
+    fun `total electric min uses average when records exist`() = runTest {
         coEvery { prefs.getCachedThresholds() } returns null
         coEvery { dao.getElectricRecords() } returns flowOf(
-            listOf(electricRecord(100.0))  // avg=100, 100*0.85=85, but coerceAtLeast(5000)
+            listOf(electricRecord(100.0))  // avg=100, 100*0.85=85
         )
         coEvery { dao.getWaterRecords() } returns flowOf(emptyList())
 
         val thresholds = classifier.getThresholds()
-        assertEquals(5000.0, thresholds.totalElectricMin, 0.01) // coerceAtLeast(5000)
+        assertEquals(85.0, thresholds.totalElectricMin, 0.01) // 100 * 0.85
     }
 }

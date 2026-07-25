@@ -24,7 +24,8 @@ object InsightGenerator {
      */
     fun generate(
         records: List<MeterRecord>,
-        weather: List<DailyWeather> = emptyList()
+        weather: List<DailyWeather> = emptyList(),
+        rules: BillingRules = BillingRules()
     ): Insight? {
         if (records.size < 4) return null
 
@@ -34,7 +35,7 @@ object InsightGenerator {
         if (sorted.size < 4) return null
 
         return listOfNotNull(
-            checkTierWarning(sorted),
+            checkTierWarning(sorted, rules),
             checkHighTempSpike(sorted, weather),
             checkValleyLow(sorted),
             checkWeekendAnomaly(sorted)
@@ -44,13 +45,12 @@ object InsightGenerator {
     /**
      * 阶梯预警：本月用电已超二档阈值 80%
      */
-    private fun checkTierWarning(records: List<MeterRecord>): Insight? {
+    private fun checkTierWarning(records: List<MeterRecord>, rules: BillingRules): Insight? {
         val now = YearMonth.now()
         val thisMonth = records.filter { YearMonth.from(it.timestamp) == now }
         if (thisMonth.size < 2) return null
 
-        val kwh = thisMonth.last().electricTotal!! - thisMonth.first().electricTotal!!
-        val rules = BillingRules()
+        val kwh = (thisMonth.last().electricTotal!! - thisMonth.first().electricTotal!!).coerceAtLeast(0.0)
         val threshold80 = rules.electricTier2Limit * 0.8
 
         return if (kwh > threshold80) {
@@ -163,7 +163,9 @@ object InsightGenerator {
             )
             if (days <= 0 || days > 3) continue
 
-            val kwh = (next.electricTotal ?: 0.0) - (curr.electricTotal ?: 0.0)
+            val currTotal = curr.electricTotal ?: continue
+            val nextTotal = next.electricTotal ?: continue
+            val kwh = nextTotal - currTotal
             if (kwh < 0) continue
 
             val isWeekend = curr.timestamp.dayOfWeek == DayOfWeek.SATURDAY ||

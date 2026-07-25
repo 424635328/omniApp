@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.sp
 import com.example.energyflow.data.DailyWeather
+import com.example.energyflow.ui.theme.ElectricEnd
 import com.example.energyflow.ui.theme.GasStart
 import com.example.energyflow.ui.theme.WarningNeon
 import java.time.LocalDate
@@ -45,7 +46,7 @@ fun WeatherOverlay(
 
     val hotBgColor = WarningNeon.copy(alpha = 0.06f)
     val hotLineColor = WarningNeon.copy(alpha = 0.5f)
-    val coldLineColor = Color(0xFF4FC3F7).copy(alpha = 0.45f)
+    val coldLineColor = ElectricEnd.copy(alpha = 0.45f)
 
     Canvas(modifier = modifier) {
         val drawWidth = size.width - paddingLeft - paddingRight

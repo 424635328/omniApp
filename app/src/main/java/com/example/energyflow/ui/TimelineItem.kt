@@ -542,7 +542,7 @@ private fun ActionChip(
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = color, modifier = Modifier.size(16.dp))
+        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(16.dp))
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             label,

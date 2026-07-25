@@ -478,7 +478,7 @@ fun MainScreen(
                     sheetState = sheetState,
                     containerColor = DarkBackground,
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                    scrimColor = Color.Black.copy(alpha = 0.6f)
+                    scrimColor = DarkBackground.copy(alpha = 0.6f)
                 ) {
                     AddRecordSheet(
                         initiallyShowPeakValley = peakValleyExpanded,
@@ -512,7 +512,7 @@ fun MainScreen(
                     sheetState = sheetState,
                     containerColor = DarkBackground,
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                    scrimColor = Color.Black.copy(alpha = 0.6f)
+                    scrimColor = DarkBackground.copy(alpha = 0.6f)
                 ) {
                     BatchImportSheet(
                         onImport = { text ->
@@ -534,7 +534,7 @@ fun MainScreen(
                     sheetState = sheetState,
                     containerColor = DarkBackground,
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                    scrimColor = Color.Black.copy(alpha = 0.6f)
+                    scrimColor = DarkBackground.copy(alpha = 0.6f)
                 ) {
                     EditRecordSheet(
                         record = record,
@@ -1009,7 +1009,7 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.Bolt, contentDescription = null,
+                        Icons.Default.Bolt, contentDescription = "闪电图标",
                         tint = ElectricColor, modifier = Modifier.size(iconSize * 0.55f)
                     )
                 }

@@ -34,6 +34,10 @@ interface MeterRecordDao {
     @Query("SELECT * FROM meter_records ORDER BY timestamp DESC, id DESC LIMIT 1")
     suspend fun getLatestRecord(): MeterRecord?
 
+    // 按时间戳查询记录（用于重复检查）
+    @Query("SELECT * FROM meter_records WHERE timestamp = :timestamp LIMIT 1")
+    suspend fun findByTimestamp(timestamp: java.time.LocalDateTime): MeterRecord?
+
     // 查询上一条记录（用于计算差值）
     @Query("SELECT * FROM meter_records WHERE timestamp < :currentTime ORDER BY timestamp DESC, id DESC LIMIT 1")
     suspend fun getPreviousRecord(currentTime: LocalDateTime): MeterRecord?

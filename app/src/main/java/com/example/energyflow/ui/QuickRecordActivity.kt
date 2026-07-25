@@ -28,29 +28,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.room.Room
-import com.example.energyflow.data.AppDatabase
 import com.example.energyflow.data.MeterRecord
+import com.example.energyflow.data.MeterRecordDao
+import com.example.energyflow.ui.theme.ElectricColor
+import com.example.energyflow.ui.theme.DarkBackground
+import com.example.energyflow.ui.theme.DarkCard
+import com.example.energyflow.ui.theme.MonoFontFamily
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class QuickRecordActivity : ComponentActivity() {
 
-    private lateinit var database: AppDatabase
+    @Inject lateinit var meterRecordDao: MeterRecordDao
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        database = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java,
-            "energyflow-db"
-        ).build()
 
         setContent {
             val scope = rememberCoroutineScope()
@@ -60,7 +59,7 @@ class QuickRecordActivity : ComponentActivity() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0x80000000)),
+                    .background(DarkBackground.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -69,7 +68,7 @@ class QuickRecordActivity : ComponentActivity() {
                         .fillMaxWidth()
                         .padding(24.dp)
                         .background(
-                            color = Color(0xFF1C1C1E),
+                            color = DarkCard,
                             shape = RoundedCornerShape(24.dp)
                         )
                         .padding(24.dp),
@@ -77,8 +76,9 @@ class QuickRecordActivity : ComponentActivity() {
                 ) {
                     Text(
                         text = "⚡ 快速记录 / 💧 快速记录",
-                        color = Color(0xFF00FFC4),
-                        fontSize = 18.sp
+                        color = ElectricColor,
+                        fontSize = 18.sp,
+                        fontFamily = MonoFontFamily
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -86,18 +86,18 @@ class QuickRecordActivity : ComponentActivity() {
                     OutlinedTextField(
                         value = electricTotal,
                         onValueChange = { electricTotal = it },
-                        label = { Text("电表总读数") },
+                        label = { Text("电表总读数", fontFamily = MonoFontFamily) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF00FFC4),
-                            unfocusedBorderColor = Color(0xFF3A3A3C),
-                            focusedLabelColor = Color(0xFF00FFC4),
-                            unfocusedLabelColor = Color(0xFF8E8E93),
-                            cursorColor = Color(0xFF00FFC4),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = ElectricColor,
+                            unfocusedBorderColor = DarkCard,
+                            focusedLabelColor = ElectricColor,
+                            unfocusedLabelColor = DarkCard,
+                            cursorColor = ElectricColor,
+                            focusedTextColor = DarkBackground,
+                            unfocusedTextColor = DarkBackground
                         )
                     )
 
@@ -106,18 +106,18 @@ class QuickRecordActivity : ComponentActivity() {
                     OutlinedTextField(
                         value = waterTotal,
                         onValueChange = { waterTotal = it },
-                        label = { Text("水表总读数") },
+                        label = { Text("水表总读数", fontFamily = MonoFontFamily) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF00FFC4),
-                            unfocusedBorderColor = Color(0xFF3A3A3C),
-                            focusedLabelColor = Color(0xFF00FFC4),
-                            unfocusedLabelColor = Color(0xFF8E8E93),
-                            cursorColor = Color(0xFF00FFC4),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = ElectricColor,
+                            unfocusedBorderColor = DarkCard,
+                            focusedLabelColor = ElectricColor,
+                            unfocusedLabelColor = DarkCard,
+                            cursorColor = ElectricColor,
+                            focusedTextColor = DarkBackground,
+                            unfocusedTextColor = DarkBackground
                         )
                     )
 
@@ -137,7 +137,7 @@ class QuickRecordActivity : ComponentActivity() {
                             }
                             scope.launch {
                                 try {
-                                    database.meterRecordDao().insert(
+                                    meterRecordDao.insert(
                                         MeterRecord(
                                             timestamp = LocalDateTime.now(),
                                             isElectricRecorded = electric != null,
@@ -166,14 +166,15 @@ class QuickRecordActivity : ComponentActivity() {
                             .fillMaxWidth()
                             .height(48.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF00FFC4),
-                            contentColor = Color(0xFF0D0F12)
+                            containerColor = ElectricColor,
+                            contentColor = DarkBackground
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
                             text = "保存",
-                            fontSize = 16.sp
+                            fontSize = 16.sp,
+                            fontFamily = MonoFontFamily
                         )
                     }
                 }

@@ -92,7 +92,7 @@ class UserPreferencesTest {
     @Test
     fun `billing rules uses saved values when version matches`() = runTest {
         val prefs = UserPreferences(dataStoreWith(
-            "billing_version" to 2,
+            "billing_version" to 3,
             "peak_price" to 0.6,
             "valley_price" to 0.35
         ))

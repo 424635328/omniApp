@@ -22,7 +22,7 @@ class UserPreferences @Inject constructor(
 ) {
     companion object {
         // ── 计费规则版本号（递增即触发迁移，重置为南京最新默认值） ──
-        private const val CURRENT_BILLING_VERSION = 2
+        private const val CURRENT_BILLING_VERSION = 3
         private val BILLING_VERSION = intPreferencesKey("billing_version")
 
         private val THEME_DARK = booleanPreferencesKey("theme_dark")
@@ -67,6 +67,7 @@ class UserPreferences @Inject constructor(
         private val CARBON_ELECTRIC_FACTOR = doublePreferencesKey("carbon_electric_factor")
         private val CARBON_GAS_FACTOR = doublePreferencesKey("carbon_gas_factor")
         private val CARBON_TREE_KG_PER_YEAR = doublePreferencesKey("carbon_tree_kg_per_year")
+        private val GAS_UNIT_PRICE = doublePreferencesKey("gas_unit_price")
     }
 
     val isOnboardingComplete: Flow<Boolean> = dataStore.data.map { it[ONBOARDING_COMPLETE] ?: false }
@@ -116,6 +117,7 @@ class UserPreferences @Inject constructor(
                 it[WATER_PRICE] = defaults.waterTier1Price
                 it[WATER_TIER_2_PRICE] = defaults.waterTier2Price
                 it[WATER_TIER_3_PRICE] = defaults.waterTier3Price
+                it[GAS_UNIT_PRICE] = defaults.gasUnitPrice
             }
             emit(BillingRules())
         }
@@ -138,7 +140,8 @@ class UserPreferences @Inject constructor(
             waterTier2Limit = prefs[WATER_TIER_2_LIMIT] ?: 22.5,
             waterTier1Price = prefs[WATER_PRICE] ?: 3.42,
             waterTier2Price = prefs[WATER_TIER_2_PRICE] ?: 4.32,
-            waterTier3Price = prefs[WATER_TIER_3_PRICE] ?: 7.02
+            waterTier3Price = prefs[WATER_TIER_3_PRICE] ?: 7.02,
+            gasUnitPrice = prefs[GAS_UNIT_PRICE] ?: 2.8
         )
     }
     val peakPrice: Flow<Double> = billingRules.map { it.peakPrice }
@@ -160,6 +163,7 @@ class UserPreferences @Inject constructor(
         it[WATER_PRICE] = rules.waterTier1Price
         it[WATER_TIER_2_PRICE] = rules.waterTier2Price
         it[WATER_TIER_3_PRICE] = rules.waterTier3Price
+        it[GAS_UNIT_PRICE] = rules.gasUnitPrice
     }
 
     /** Kept for callers compiled against the first settings screen. */

@@ -115,7 +115,7 @@ object PredictiveAnalyzerShared {
         var level = dailyRates[0]
         var trend = dailyRates.getOrNull(1)?.minus(dailyRates[0]) ?: 0.0
 
-        for (i in 1 until dailyRates.size) {
+        for (i in 2 until dailyRates.size) {
             val prevLevel = level
             level = ALPHA * dailyRates[i] + (1 - ALPHA) * (level + trend)
             trend = BETA * (level - prevLevel) + (1 - BETA) * trend

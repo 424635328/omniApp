@@ -60,7 +60,7 @@ class AdaptiveClassifier @Inject constructor(
 
         return ClassificationThresholds(
             totalElectricMin = if (totals.isNotEmpty()) {
-                (totals.average() * 0.85).coerceAtLeast(5000.0)
+                (totals.average() * 0.85).coerceAtLeast(0.0)
             } else {
                 ClassificationThresholds.DEFAULTS.totalElectricMin
             },

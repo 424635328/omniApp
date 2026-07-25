@@ -66,7 +66,9 @@ object CarbonCalculator {
         val electricKgCO2 = kwh * config.electricFactor
         val gasKgCO2 = gasM3 * config.gasFactor
         val totalKgCO2 = electricKgCO2 + gasKgCO2
-        val treeDays = round(totalKgCO2 / (config.treeKgPerYear / 365.0)).toInt()
+        val treeDays = if (config.treeKgPerYear > 0) {
+            round(totalKgCO2 / (config.treeKgPerYear / 365.0)).toInt()
+        } else 0
         return CarbonResult(totalKgCO2, electricKgCO2, gasKgCO2, treeDays)
     }
 

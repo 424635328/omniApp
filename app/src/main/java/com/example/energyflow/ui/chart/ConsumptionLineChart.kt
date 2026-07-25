@@ -49,6 +49,7 @@ import com.example.energyflow.ui.theme.ElectricEnd
 import com.example.energyflow.ui.theme.ElectricGradient
 import com.example.energyflow.ui.theme.ElectricStart
 import com.example.energyflow.ui.theme.NeonBlue
+import com.example.energyflow.ui.theme.StaticPeakColor
 import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.utils.Formatters.formatDecimal1
 import kotlinx.coroutines.launch
@@ -141,7 +142,7 @@ fun ConsumptionLineChart(
     }
     val tempMaxPaint = remember {
         android.graphics.Paint().apply {
-            color = Color(0xFFFF8800).toArgb()
+            color = StaticPeakColor.toArgb()
             isAntiAlias = true
             textAlign = android.graphics.Paint.Align.LEFT
             isFakeBoldText = true
@@ -155,6 +156,12 @@ fun ConsumptionLineChart(
         }
     }
     val sepLabelPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.LEFT
+        }
+    }
+    val forecastLabelPaint = remember {
         android.graphics.Paint().apply {
             isAntiAlias = true
             textAlign = android.graphics.Paint.Align.LEFT
@@ -181,6 +188,12 @@ fun ConsumptionLineChart(
         tempMinPaint.textSize = s11
         sepLabelPaint.color = TextSecondary.copy(alpha = 0.4f).toArgb()
         sepLabelPaint.textSize = s11
+    }
+
+    LaunchedEffect(density, chartColor) {
+        val s9 = with(density) { 9.sp.toPx() }
+        forecastLabelPaint.color = chartColor.copy(alpha = 0.6f).toArgb()
+        forecastLabelPaint.textSize = s9
     }
 
     Box(
@@ -468,12 +481,6 @@ fun ConsumptionLineChart(
                     )
                 )
                 // 预报起点的"预估"小标签
-                val forecastLabelPaint = android.graphics.Paint().apply {
-                    color = chartColor.copy(alpha = 0.6f).toArgb()
-                    textSize = with(density) { 9.sp.toPx() }
-                    isAntiAlias = true
-                    textAlign = android.graphics.Paint.Align.LEFT
-                }
                 drawContext.canvas.nativeCanvas.drawText(
                     "预估",
                     lastActualPoint.x + xStep - 4f,

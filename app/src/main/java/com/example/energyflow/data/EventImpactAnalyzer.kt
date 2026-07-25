@@ -41,7 +41,7 @@ class EventImpactAnalyzer @Inject constructor() {
             val days = Duration.between(from.timestamp, to.timestamp).toMinutes() / MINUTES_PER_DAY
             if (usage < 0.0 || days <= 0.0) return@forEach
 
-            val midpoint = from.timestamp.plusMinutes(Duration.between(from.timestamp, to.timestamp).toMinutes() / 2)
+            val midpoint = from.timestamp.plusMinutes((Duration.between(from.timestamp, to.timestamp).toMinutes() / 2.0).toLong())
             if (windows.any { midpoint >= it.start && midpoint < it.end }) {
                 active.add(usage, days)
             } else {

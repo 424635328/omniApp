@@ -39,6 +39,7 @@ class MeterRepositoryTest {
         coEvery { dao.getElectricRecords() } returns flowOf(emptyList())
         coEvery { dao.getWaterRecords() } returns flowOf(emptyList())
         every { dao.getAllRecords() } returns flowOf(emptyList())   // 无已有记录
+        coEvery { dao.findByTimestamp(any()) } returns null          // 无重复记录
         // classifier.reLearn
         coEvery { classifier.reLearn() } returns Unit
         coEvery { classifier.getThresholds() } returns ClassificationThresholds.DEFAULTS

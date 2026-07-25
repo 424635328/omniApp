@@ -206,8 +206,7 @@ fun WrappedScreen(
         }
 
         // Bottom nav buttons
-        if (currentPage > 0 || currentPage < pages.size - 1) {
-            Row(
+        Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -233,7 +232,7 @@ fun WrappedScreen(
                         onClick = { currentPage++ },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ElectricColor,
-                            contentColor = Color(0xFF0C0E14)
+                            contentColor = DarkBackground
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -245,7 +244,6 @@ fun WrappedScreen(
             }
         }
     }
-}
 
 @Composable
 private fun HeroPage(state: WrappedState) {

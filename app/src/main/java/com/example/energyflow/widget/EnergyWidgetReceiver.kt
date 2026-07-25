@@ -51,15 +51,23 @@ class EnergyWidgetReceiver : GlanceAppWidgetReceiver() {
             }.sortedBy { it.timestamp }
 
             val kwh = if (thisMonth.size >= 2) {
-                thisMonth.last().electricTotal!! - thisMonth.first().electricTotal!!
+                val last = thisMonth.last().electricTotal
+                val first = thisMonth.first().electricTotal
+                if (last != null && first != null) last - first else 0.0
             } else 0.0
 
             val peakRecords = thisMonth.filter { it.electricPeak != null }
             val valleyRecords = thisMonth.filter { it.electricValley != null }
-            val peakKwh = if (peakRecords.size >= 2)
-                (peakRecords.last().electricPeak!! - peakRecords.first().electricPeak!!).coerceAtLeast(0.0) else 0.0
-            val valleyKwh = if (valleyRecords.size >= 2)
-                (valleyRecords.last().electricValley!! - valleyRecords.first().electricValley!!).coerceAtLeast(0.0) else 0.0
+            val peakKwh = if (peakRecords.size >= 2) {
+                val last = peakRecords.last().electricPeak
+                val first = peakRecords.first().electricPeak
+                if (last != null && first != null) (last - first).coerceAtLeast(0.0) else 0.0
+            } else 0.0
+            val valleyKwh = if (valleyRecords.size >= 2) {
+                val last = valleyRecords.last().electricValley
+                val first = valleyRecords.first().electricValley
+                if (last != null && first != null) (last - first).coerceAtLeast(0.0) else 0.0
+            } else 0.0
 
             val bill = costEngine.calculateBill(kwh, peakKwh, valleyKwh)
             val monthLabel = "${now.year}年${now.monthValue}月"
@@ -74,8 +82,8 @@ class EnergyWidgetReceiver : GlanceAppWidgetReceiver() {
                 }
                 glanceAppWidget.update(context, glanceId)
             }
-        } catch (_: Exception) {
-            // 静默失败
+        } catch (e: Exception) {
+            android.util.Log.w("EnergyWidgetReceiver", "refreshWidget failed", e)
         }
     }
 }

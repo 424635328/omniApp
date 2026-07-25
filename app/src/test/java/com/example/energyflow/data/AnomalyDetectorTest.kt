@@ -77,4 +77,5 @@ private class FakeDao(
     override fun getNoteCount(): Flow<Int> = flowOf((electric + water).count { !it.note.isNullOrBlank() })
     override suspend fun getLatestElectricRecord(): MeterRecord? = electric.maxByOrNull { it.timestamp }
     override suspend fun getLatestWaterRecord(): MeterRecord? = water.maxByOrNull { it.timestamp }
+    override suspend fun findByTimestamp(timestamp: LocalDateTime): MeterRecord? = (electric + water).find { it.timestamp == timestamp }
 }

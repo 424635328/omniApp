@@ -187,27 +187,27 @@ object BillReportGenerator {
         appendLine("""h1{font-size:22px;font-weight:700;margin-bottom:4px}""")
         appendLine("""h2{font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px}""")
         appendLine(""".sub{color:$textSecondary;font-size:13px;margin-bottom:20px}""")
-        appendLine("""..card{background:$cardBg;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.06)}""")
-        appendLine("""..row{display:flex;justify-content:space-between;align-items:center;padding:8px 0}""")
-        appendLine("""..row+.row{border-top:1px solid rgba(255,255,255,0.05)}""")
-        appendLine("""..label{color:$textSecondary;font-size:14px}""")
-        appendLine("""..value{font-size:14px;font-weight:600}""")
-        appendLine("""..total-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0 0}""")
-        appendLine("""..total-label{font-size:15px;font-weight:700}""")
-        appendLine("""..total-value{font-size:22px;font-weight:700;color:$accent}""")
-        appendLine("""..badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}""")
-        appendLine("""..bar-bg{height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;margin:4px 0 8px}""")
-        appendLine("""..bar-fill{height:100%;border-radius:4px;transition:width .3s}""")
-        appendLine("""..pv-row{display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0}""")
-        appendLine("""..pv-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}""")
-        appendLine("""..pv-bar{flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden}""")
-        appendLine("""..pv-fill{height:100%;border-radius:3px}""")
-        appendLine("""..pv-val{min-width:60px;text-align:right;font-size:12px;color:$textSecondary}""")
-        appendLine("""..tag{display:inline-block;padding:1px 8px;border-radius:8px;background:rgba(0,255,196,0.1);color:$accent;font-size:11px;margin:2px 3px}""")
-        appendLine("""..footer{text-align:center;color:$textTertiary;font-size:11px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06)}""")
-        appendLine("""..comparison{background:rgba(0,255,196,0.05);border-radius:8px;padding:12px;margin-top:12px;border:1px solid rgba(0,255,196,0.12)}""")
-        appendLine("""..comp-title{font-size:12px;color:$textSecondary;margin-bottom:8px}""")
-        appendLine("""..comp-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0}""")
+        appendLine(""".card{background:$cardBg;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.06)}""")
+        appendLine(""".row{display:flex;justify-content:space-between;align-items:center;padding:8px 0}""")
+        appendLine(""".row+.row{border-top:1px solid rgba(255,255,255,0.05)}""")
+        appendLine(""".label{color:$textSecondary;font-size:14px}""")
+        appendLine(""".value{font-size:14px;font-weight:600}""")
+        appendLine(""".total-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0 0}""")
+        appendLine(""".total-label{font-size:15px;font-weight:700}""")
+        appendLine(""".total-value{font-size:22px;font-weight:700;color:$accent}""")
+        appendLine(""".badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}""")
+        appendLine(""".bar-bg{height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;margin:4px 0 8px}""")
+        appendLine(""".bar-fill{height:100%;border-radius:4px;transition:width .3s}""")
+        appendLine(""".pv-row{display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0}""")
+        appendLine(""".pv-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}""")
+        appendLine(""".pv-bar{flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden}""")
+        appendLine(""".pv-fill{height:100%;border-radius:3px}""")
+        appendLine(""".pv-val{min-width:60px;text-align:right;font-size:12px;color:$textSecondary}""")
+        appendLine(""".tag{display:inline-block;padding:1px 8px;border-radius:8px;background:rgba(0,255,196,0.1);color:$accent;font-size:11px;margin:2px 3px}""")
+        appendLine(""".footer{text-align:center;color:$textTertiary;font-size:11px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06)}""")
+        appendLine(""".comparison{background:rgba(0,255,196,0.05);border-radius:8px;padding:12px;margin-top:12px;border:1px solid rgba(0,255,196,0.12)}""")
+        appendLine(""".comp-title{font-size:12px;color:$textSecondary;margin-bottom:8px}""")
+        appendLine(""".comp-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0}""")
         appendLine("""</style></head><body>""")
 
         // ── Header ──
@@ -367,7 +367,7 @@ object BillReportGenerator {
             else -> "一档"
         }
         val waterTierInfo = buildWaterTierInfo(waterTons, activeRules)
-        val gasCost = gasM3 * 2.8
+        val gasCost = gasM3 * activeRules.gasUnitPrice
 
         return ReportData(
             yearMonth = "${targetMonth.year}-${targetMonth.monthValue}",

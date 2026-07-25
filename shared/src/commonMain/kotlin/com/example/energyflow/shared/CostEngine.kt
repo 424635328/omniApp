@@ -21,7 +21,8 @@ data class BillingRules(
     val waterTier2Limit: Double = 22.5,
     val waterTier1Price: Double = 3.42,
     val waterTier2Price: Double = 4.32,
-    val waterTier3Price: Double = 7.02
+    val waterTier3Price: Double = 7.02,
+    val gasUnitPrice: Double = 2.8
 )
 
 data class BillResult(

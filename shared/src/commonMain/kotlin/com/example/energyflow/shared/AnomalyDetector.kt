@@ -44,16 +44,16 @@ object AnomalyDetectorShared {
             }
         }
 
-        // 尖峰检测
-        if (records.size >= 3) {
-            val recent = records.takeLast(3)
+        // 尖峰检测（使用最近4条记录计算基线，避免单条低读数导致误报）
+        if (records.size >= 4) {
+            val recent = records.takeLast(4)
             val deltas = mutableListOf<Double>()
             for (i in 1 until recent.size) {
                 val curr = recent[i].electricTotal ?: continue
                 val prev = recent[i - 1].electricTotal ?: continue
                 deltas.add(curr - prev)
             }
-            if (deltas.size >= 2) {
+            if (deltas.size >= 3) {
                 val lastDelta = deltas.last()
                 val avgDelta = deltas.dropLast(1).average()
                 if (avgDelta > 0 && lastDelta > avgDelta * 5 && lastDelta > 50) {

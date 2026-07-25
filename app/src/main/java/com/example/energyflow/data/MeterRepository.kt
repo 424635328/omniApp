@@ -1,6 +1,8 @@
 package com.example.energyflow.data
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -16,6 +18,7 @@ class MeterRepository @Inject constructor(
     private val classifier: AdaptiveClassifier,
     private val anomalyDetector: AnomalyDetector
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val parser = SmartInputParser()
 
     fun getAllRecords(): Flow<List<MeterRecord>> = meterRecordDao.getAllRecords()
@@ -101,8 +104,8 @@ class MeterRepository @Inject constructor(
         val record = result.toMeterRecord()
 
         // ── 检查是否已存在相同记录 ──
-        val existing = meterRecordDao.getAllRecords().first()
-        if (existing.any { it.timestamp == record.timestamp && areValuesSame(it, record) }) {
+        val existing = meterRecordDao.findByTimestamp(record.timestamp)
+        if (existing != null && areValuesSame(existing, record)) {
             return InsertResult.Error("该记录已存在，跳过重复导入")
         }
 
@@ -310,9 +313,12 @@ class MeterRepository @Inject constructor(
         val pair = indexed
             .zipWithNext()
             .firstOrNull { (previous, current) ->
+                val prevVal = valueOf(previous)
+                val currVal = valueOf(current)
                 current.timestamp > previous.timestamp &&
                     previous.id > 0L &&
-                    (valueOf(current) ?: 0.0) < (valueOf(previous) ?: 0.0)
+                    prevVal != null && currVal != null &&
+                    currVal < prevVal
             }
             ?: return emptyList()
 
@@ -341,10 +347,8 @@ class MeterRepository @Inject constructor(
         if (now - lastReLearnTime < reLearnMinIntervalMs) return
         lastReLearnTime = now
         reLearnJob?.cancel()
-        reLearnJob = kotlinx.coroutines.coroutineScope {
-            launch(Dispatchers.IO) {
-                classifier.reLearn()
-            }
+        reLearnJob = scope.launch {
+            classifier.reLearn()
         }
     }
 
@@ -360,15 +364,15 @@ class MeterRepository @Inject constructor(
             ?: return ConsumptionResult.NoPreviousRecord
 
         val electricConsumption = if (currentRecord.isElectricRecorded && previousRecord.isElectricRecorded) {
-            val current = currentRecord.electricTotal ?: 0.0
-            val previous = previousRecord.electricTotal ?: 0.0
-            current - previous
+            val current = currentRecord.electricTotal
+            val previous = previousRecord.electricTotal
+            if (current != null && previous != null) current - previous else null
         } else null
 
         val waterConsumption = if (currentRecord.isWaterRecorded && previousRecord.isWaterRecorded) {
-            val current = currentRecord.waterTotal ?: 0.0
-            val previous = previousRecord.waterTotal ?: 0.0
-            current - previous
+            val current = currentRecord.waterTotal
+            val previous = previousRecord.waterTotal
+            if (current != null && previous != null) current - previous else null
         } else null
 
         val daysBetween = Duration.between(previousRecord.timestamp, currentRecord.timestamp).toDays()
