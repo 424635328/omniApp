@@ -1,0 +1,21 @@
+[submodule "android-open-source-projects/Anki-Android"]
+	path = android-open-source-projects/Anki-Android
+	url = https://github.com/ankidroid/Anki-Android.git
+[submodule "android-open-source-projects/GSYGithubAppKotlin"]
+	path = android-open-source-projects/GSYGithubAppKotlin
+	url = https://github.com/CarGuo/GSYGithubAppKotlin.git
+[submodule "android-open-source-projects/NewPipe"]
+	path = android-open-source-projects/NewPipe
+	url = https://github.com/TeamNewPipe/NewPipe.git
+[submodule "android-open-source-projects/Seal"]
+	path = android-open-source-projects/Seal
+	url = https://github.com/JunkFood02/Seal.git
+[submodule "android-open-source-projects/nowinandroid"]
+	path = android-open-source-projects/nowinandroid
+	url = https://github.com/android/nowinandroid.git
+[submodule "android-open-source-projects/pokedex-compose"]
+	path = android-open-source-projects/pokedex-compose
+	url = https://github.com/skydoves/pokedex-compose.git
+[submodule "android-open-source-projects/sunflower"]
+	path = android-open-source-projects/sunflower
+	url = https://github.com/android/sunflower.git

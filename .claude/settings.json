@@ -1,85 +1,32 @@
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && if echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"shared/src/commonMain\"; then grep -rn \"java\\.time\\|java\\.util\\|android\\.\" shared/src/commonMain/ --include=\"*.kt\" 2>/dev/null && echo \"[KMP] ❌ violation!\" || echo \"[KMP] ✅\"; fi; true"
-          }
-        ]
-      }
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch --show-current*)",
+      "Bash(java -version*)",
+      "Bash(./gradlew tasks*)",
+      "Bash(./gradlew :app:compileDebugKotlin*)",
+      "Bash(./gradlew :shared:compileDebugKotlinAndroid*)",
+      "Bash(./gradlew :shared:desktopTest*)",
+      "Bash(./gradlew :app:testDebugUnitTest*)",
+      "Bash(./gradlew :app:assembleDebug*)"
     ],
-    "PostToolUse": [],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo \"[Stop] 🏁 改代码→编译+测试过了吗？改了shared→KMP边界检查了吗？新UI→颜色/字体/状态合规吗？\""
-          }
-        ]
-      }
+    "ask": [
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(git pull*)",
+      "Bash(git merge*)",
+      "Bash(git reset*)",
+      "Bash(git restore*)",
+      "Bash(git stash*)",
+      "Bash(git cherry-pick*)",
+      "Bash(rm *)"
     ]
-  },
-  "allowed-tools": [
-    {
-      "tool": "Read",
-      "description": "Reading files is always safe"
-    },
-    {
-      "tool": "Glob",
-      "description": "File pattern matching is always safe"
-    },
-    {
-      "tool": "Grep",
-      "description": "Content search is always safe"
-    },
-    {
-      "tool": "Bash",
-      "rules": {
-        "safe": [
-          "./gradlew :app:compileDebugKotlin",
-          "./gradlew :shared:compileDebugKotlinAndroid",
-          "./gradlew :app:testDebugUnitTest",
-          "./gradlew :app:assembleDebug",
-          "./gradlew clean",
-          "./gradlew tasks",
-          "./gradlew :app:dependencies",
-          "ls ",
-          "find ",
-          "echo ",
-          "cat ",
-          "wc -l",
-          "mkdir -p",
-          "grep -rn",
-          "grep -r",
-          "git diff",
-          "git diff --stat",
-          "git diff --name-only",
-          "git status",
-          "git log",
-          "git branch",
-          "git stash",
-          "git stash pop",
-          "git add ",
-          "git commit ",
-          "git remote ",
-          "git fetch ",
-          "git cherry-pick ",
-          "git checkout -b ",
-          "git checkout -- ",
-          "git switch ",
-          "git restore ",
-          "git reset ",
-          "git merge ",
-          "java -version",
-          "rm -f E:/GitHub/omniAPP/.git/index.lock",
-          "export ANDROID_HOME="
-        ]
-      }
-    }
-  ]
+  }
 }

@@ -1,24 +1,11 @@
 @echo off
 chcp 65001>nul
-echo GitHub Sync Tool
-echo git pull
 
-git pull
-
-echo git add
-
-git add .
-
-echo git commit
-
-git commit -m "%date:~-10% %time%"
-
-echo git push
-
-git push
-
-echo git status
-
-git status
+echo EnergyFlow repository status
+echo.
+git status --short --branch
+echo.
+echo This helper no longer stages, commits, pulls, or pushes automatically.
+echo Run tests, review git diff, then use explicit Git commands when ready.
 
 pause

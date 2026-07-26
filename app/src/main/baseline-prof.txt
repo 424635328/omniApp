@@ -1,6 +1,6 @@
-HSPLcom/example/energyflow/EnergyFlowApplication;
-HSPLcom/example/energyflow/MainActivity;
-HSPLcom/example/energyflow/ui/navigation/AppNavGraphKt;
-HSPLcom/example/energyflow/ui/MainViewModel;
-HSPLcom/example/energyflow/ui/chart/ChartViewModel;
-HSPLcom/example/energyflow/data/MeterRepository;
+Lcom/example/energyflow/EnergyFlowApplication;
+Lcom/example/energyflow/MainActivity;
+Lcom/example/energyflow/ui/navigation/AppNavGraphKt;
+Lcom/example/energyflow/ui/MainViewModel;
+Lcom/example/energyflow/ui/chart/ChartViewModel;
+Lcom/example/energyflow/data/MeterRepository;

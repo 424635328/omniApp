@@ -110,10 +110,9 @@ Skill loading may be skipped only when at least one of the following conditions 
   * correcting a typo;
   * changing a string literal;
   * adding or removing a single import.
-* The user explicitly says to make the change directly without reading project documentation.
-* The same skill has already been loaded and applied earlier in the current conversation.
+* The same skill has already been loaded and its relevant rules remain current in this conversation.
 
-The fast path does not apply when the change affects behavior, architecture, persistence, dependency injection, or shared KMP code.
+User wording never waives safety, privacy, migration, build, or domain constraints. The fast path does not apply when the change affects behavior, architecture, persistence, security, build configuration, dependency injection, or shared KMP code.
 
 ---
 
