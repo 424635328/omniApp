@@ -68,9 +68,9 @@ class UserPreferencesTest {
     }
 
     @Test
-    fun `weather api key defaults to legacy key`() = runTest {
+    fun `weather api key defaults to empty`() = runTest {
         val prefs = UserPreferences(dataStoreWith())
-        assertEquals("8e6f345a7e6041c7b046b049b8642a19", prefs.weatherApiKey.first())
+        assertEquals("", prefs.weatherApiKey.first())
     }
 
     // ── 计费规则 ──

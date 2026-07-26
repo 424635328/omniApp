@@ -59,7 +59,6 @@ class UserPreferences @Inject constructor(
         private val WEATHER_FORECAST_DATE = stringPreferencesKey("weather_forecast_date")
         private val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
         private val FILTER_DUPLICATES = booleanPreferencesKey("filter_duplicates")
-        private val DEEPSEEK_API_KEY = stringPreferencesKey("deepseek_api_key")
         private val WEATHER_API_KEY = stringPreferencesKey("weather_api_key")
         private val WEATHER_CITY_ID = stringPreferencesKey("weather_city_id")
 
@@ -176,9 +175,6 @@ class UserPreferences @Inject constructor(
     val peakValleyExpanded: Flow<Boolean> = dataStore.data.map { it[PEAK_VALLEY_EXPANDED] ?: false }
     suspend fun setChartShowCost(showCost: Boolean) = dataStore.edit { it[CHART_SHOW_COST] = showCost }
     suspend fun setPeakValleyExpanded(expanded: Boolean) = dataStore.edit { it[PEAK_VALLEY_EXPANDED] = expanded }
-
-    val deepSeekApiKey: Flow<String> = dataStore.data.map { it[DEEPSEEK_API_KEY] ?: "" }
-    suspend fun setDeepSeekApiKey(key: String) = dataStore.edit { it[DEEPSEEK_API_KEY] = key.trim() }
 
     val weatherApiKey: Flow<String> = dataStore.data.map { it[WEATHER_API_KEY] ?: "" }
     val weatherCityId: Flow<String> = dataStore.data.map { it[WEATHER_CITY_ID] ?: "" }

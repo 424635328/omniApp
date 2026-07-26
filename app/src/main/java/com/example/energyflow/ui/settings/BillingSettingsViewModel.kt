@@ -6,6 +6,7 @@ import com.example.energyflow.data.BillReportGenerator
 import com.example.energyflow.data.BatchInsertResult
 import com.example.energyflow.data.BillingRules
 import com.example.energyflow.data.CarbonFootprint
+import com.example.energyflow.data.DeepSeekCredentialStore
 import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.data.MeterRepository
 import com.example.energyflow.data.ReportExporter
@@ -13,11 +14,9 @@ import com.example.energyflow.data.UserPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -28,6 +27,7 @@ import javax.inject.Inject
 @HiltViewModel
 class BillingSettingsViewModel @Inject constructor(
     private val userPreferences: UserPreferences,
+    private val credentialStore: DeepSeekCredentialStore,
     private val repository: MeterRepository,
     private val costEngine: com.example.energyflow.data.CostEngine,
     private val carbonFootprint: CarbonFootprint
@@ -38,8 +38,7 @@ class BillingSettingsViewModel @Inject constructor(
         private val jsonLenient = Json { ignoreUnknownKeys = true }
     }
     val billingRulesFlow: Flow<BillingRules> = userPreferences.billingRules
-    val deepSeekApiKeyFlow: StateFlow<String> = userPreferences.deepSeekApiKey
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+    val deepSeekApiKeyFlow: StateFlow<String> = credentialStore.apiKey
     val isDarkThemeFlow: Flow<Boolean> = userPreferences.isDarkTheme
     val followSystemThemeFlow: Flow<Boolean> = userPreferences.followSystemTheme
     val peakValleyExpandedFlow: Flow<Boolean> = userPreferences.peakValleyExpanded
@@ -84,7 +83,7 @@ class BillingSettingsViewModel @Inject constructor(
         userPreferences.setPeakValleyExpanded(expanded)
     }
     fun saveDeepSeekApiKey(key: String) = viewModelScope.launch {
-        userPreferences.setDeepSeekApiKey(key)
+        credentialStore.setApiKey(key)
     }
     fun setThemeDistEnabled(enabled: Boolean) = viewModelScope.launch {
         userPreferences.setThemeDistEnabled(enabled)
@@ -112,7 +111,6 @@ class BillingSettingsViewModel @Inject constructor(
     suspend fun generateReportImage(context: android.content.Context, yearMonth: YearMonth = YearMonth.now()): android.net.Uri? {
         _reportExporting.value = true
         try {
-            // 使用统一数据源
             val (data, _, isDark) = buildReportDataWithCarbon(yearMonth) ?: return null
             val content = BillReportGenerator.toReportContent(data, isDark)
             val uri = ReportExporter.export(context, content)
@@ -164,7 +162,6 @@ class BillingSettingsViewModel @Inject constructor(
             electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules, yearMonth
         ) ?: return null
 
-        // Override carbon values with user-configurable factors
         val carbonResult = carbonFootprint.calculate(data.electricKwh, data.gasM3)
         val dataWithCarbon = data.copy(co2Kg = carbonResult.electricKgCO2, treeDays = carbonResult.treeDays)
 
@@ -172,7 +169,6 @@ class BillingSettingsViewModel @Inject constructor(
             dataWithCarbon, electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules
         )
 
-        // 计算上月费用（用于图片报告）
         val prevMonth = yearMonth.minusMonths(1)
         val prevMonthRecords = electricRecords.filter {
             YearMonth.from(it.timestamp) == prevMonth && it.electricTotal != null
