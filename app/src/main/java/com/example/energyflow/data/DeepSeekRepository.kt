@@ -7,7 +7,6 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -22,7 +21,7 @@ import javax.inject.Singleton
 @Singleton
 class DeepSeekRepository @Inject constructor(
     private val httpClient: HttpClient,
-    private val userPreferences: UserPreferences
+    private val credentialStore: DeepSeekCredentialStore,
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -53,7 +52,7 @@ class DeepSeekRepository @Inject constructor(
      * @return AI 分析文本，失败或无 Key 时返回 null
      */
     suspend fun analyze(prompt: String): String? {
-        val apiKey = userPreferences.deepSeekApiKey.first()
+        val apiKey = credentialStore.apiKey.value
         if (apiKey.isBlank()) return null
 
         return try {
@@ -84,7 +83,7 @@ class DeepSeekRepository @Inject constructor(
      * 返回解析后的文本行（可直接传给 parseWithContext），方便二次解析。
      */
     suspend fun parseNaturalInput(input: String): String? {
-        val apiKey = userPreferences.deepSeekApiKey.first()
+        val apiKey = credentialStore.apiKey.value
         if (apiKey.isBlank()) return null
 
         return try {

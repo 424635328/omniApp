@@ -13,9 +13,11 @@ import com.example.energyflow.data.UserPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -36,7 +38,8 @@ class BillingSettingsViewModel @Inject constructor(
         private val jsonLenient = Json { ignoreUnknownKeys = true }
     }
     val billingRulesFlow: Flow<BillingRules> = userPreferences.billingRules
-    val deepSeekApiKeyFlow: Flow<String> = userPreferences.deepSeekApiKey
+    val deepSeekApiKeyFlow: StateFlow<String> = userPreferences.deepSeekApiKey
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
     val isDarkThemeFlow: Flow<Boolean> = userPreferences.isDarkTheme
     val followSystemThemeFlow: Flow<Boolean> = userPreferences.followSystemTheme
     val peakValleyExpandedFlow: Flow<Boolean> = userPreferences.peakValleyExpanded

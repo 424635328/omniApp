@@ -11,10 +11,9 @@ import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.serialization.json.Json
-import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -25,11 +24,11 @@ import org.junit.Test
  * DeepSeekRepository 单元测试。
  *
  * 使用 Ktor MockEngine 模拟 HTTP 响应。
- * 使用 MockK 模拟 UserPreferences。
+ * 使用 MockK 模拟 DeepSeekCredentialStore。
  */
 class DeepSeekRepositoryTest {
 
-    private val prefs = mockk<UserPreferences>(relaxUnitFun = true)
+    private val credentialStore = mockk<DeepSeekCredentialStore>(relaxUnitFun = true)
 
     /** 创建带 ContentNegotiation 的 Mock HttpClient，返回指定 JSON + 状态码。 */
     private fun buildMockClient(
@@ -52,15 +51,15 @@ class DeepSeekRepositoryTest {
 
     @Test
     fun `blank api key returns null`() = runTest {
-        coEvery { prefs.deepSeekApiKey } returns flowOf("")
-        val repo = DeepSeekRepository(mockk(relaxed = true), prefs)
+        every { credentialStore.apiKey } returns MutableStateFlow("")
+        val repo = DeepSeekRepository(mockk(relaxed = true), credentialStore)
         assertNull(repo.analyze("test prompt"))
     }
 
     @Test
     fun `whitespace api key returns null`() = runTest {
-        coEvery { prefs.deepSeekApiKey } returns flowOf("   ")
-        val repo = DeepSeekRepository(mockk(relaxed = true), prefs)
+        every { credentialStore.apiKey } returns MutableStateFlow("   ")
+        val repo = DeepSeekRepository(mockk(relaxed = true), credentialStore)
         assertNull(repo.analyze("test prompt"))
     }
 
@@ -68,7 +67,7 @@ class DeepSeekRepositoryTest {
 
     @Test
     fun `successful response returns content`() = runTest {
-        coEvery { prefs.deepSeekApiKey } returns flowOf("sk-valid-key")
+        every { credentialStore.apiKey } returns MutableStateFlow("sk-valid-key")
 
         val httpClient = buildMockClient("""
         {
@@ -82,7 +81,7 @@ class DeepSeekRepositoryTest {
             ]
         }
         """.trimIndent())
-        val repo = DeepSeekRepository(httpClient, prefs)
+        val repo = DeepSeekRepository(httpClient, credentialStore)
 
         val result = repo.analyze("分析一下")
         assertNotNull(result)
@@ -91,7 +90,7 @@ class DeepSeekRepositoryTest {
 
     @Test
     fun `successful response with multiple choices returns first`() = runTest {
-        coEvery { prefs.deepSeekApiKey } returns flowOf("sk-valid-key")
+        every { credentialStore.apiKey } returns MutableStateFlow("sk-valid-key")
 
         val httpClient = buildMockClient("""
         {
@@ -101,24 +100,24 @@ class DeepSeekRepositoryTest {
             ]
         }
         """.trimIndent())
-        val repo = DeepSeekRepository(httpClient, prefs)
+        val repo = DeepSeekRepository(httpClient, credentialStore)
 
         assertEquals("第一个回答", repo.analyze("分析"))
     }
 
     @Test
     fun `response with empty choices returns null`() = runTest {
-        coEvery { prefs.deepSeekApiKey } returns flowOf("sk-valid-key")
+        every { credentialStore.apiKey } returns MutableStateFlow("sk-valid-key")
 
         val httpClient = buildMockClient("""{ "choices": [] }""")
-        val repo = DeepSeekRepository(httpClient, prefs)
+        val repo = DeepSeekRepository(httpClient, credentialStore)
 
         assertNull(repo.analyze("分析"))
     }
 
     @Test
     fun `response without message content returns null`() = runTest {
-        coEvery { prefs.deepSeekApiKey } returns flowOf("sk-valid-key")
+        every { credentialStore.apiKey } returns MutableStateFlow("sk-valid-key")
 
         val httpClient = buildMockClient("""
         {
@@ -127,7 +126,7 @@ class DeepSeekRepositoryTest {
             ]
         }
         """.trimIndent())
-        val repo = DeepSeekRepository(httpClient, prefs)
+        val repo = DeepSeekRepository(httpClient, credentialStore)
 
         assertNull(repo.analyze("分析"))
     }
@@ -136,17 +135,17 @@ class DeepSeekRepositoryTest {
 
     @Test
     fun `http error returns null silently`() = runTest {
-        coEvery { prefs.deepSeekApiKey } returns flowOf("sk-valid-key")
+        every { credentialStore.apiKey } returns MutableStateFlow("sk-valid-key")
 
         val httpClient = buildMockClient("""{"error": "unauthorized"}""", HttpStatusCode.Unauthorized)
-        val repo = DeepSeekRepository(httpClient, prefs)
+        val repo = DeepSeekRepository(httpClient, credentialStore)
 
         assertNull(repo.analyze("分析"))
     }
 
     @Test
     fun `malformed json response returns null`() = runTest {
-        coEvery { prefs.deepSeekApiKey } returns flowOf("sk-valid-key")
+        every { credentialStore.apiKey } returns MutableStateFlow("sk-valid-key")
 
         val httpClient = HttpClient(MockEngine) {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
@@ -160,7 +159,7 @@ class DeepSeekRepositoryTest {
                 }
             }
         }
-        val repo = DeepSeekRepository(httpClient, prefs)
+        val repo = DeepSeekRepository(httpClient, credentialStore)
 
         assertNull(repo.analyze("分析"))
     }

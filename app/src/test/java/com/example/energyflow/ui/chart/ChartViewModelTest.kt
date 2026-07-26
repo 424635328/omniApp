@@ -52,7 +52,6 @@ class ChartViewModelTest {
         every { repository.getRecordCount() } returns flowOf(1)
 
         every { userPreferences.chartShowCost } returns MutableStateFlow(false)
-        every { userPreferences.deepSeekApiKey } returns MutableStateFlow("")
         every { userPreferences.predictionSnapshot } returns MutableStateFlow(null)
         every { userPreferences.weatherForecastDate } returns MutableStateFlow(null)
         every { userPreferences.billingRules } returns flowOf(BillingRules())
