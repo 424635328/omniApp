@@ -143,6 +143,20 @@ class PredictiveAnalyzerTest {
         assertNull(analyzer.predictMonth(records, now = now))
     }
 
+    @Test
+    fun `zero consumption with enough records returns null`() {
+        // Arrange
+        val records = (5L downTo 1L).map { daysAgo ->
+            reading(now.minusDays(daysAgo), 100.0)
+        }
+
+        // Act
+        val result = analyzer.predictMonth(records, now = now)
+
+        // Assert
+        assertNull(result)
+    }
+
     // ── 历史回退 ──
 
     @Test

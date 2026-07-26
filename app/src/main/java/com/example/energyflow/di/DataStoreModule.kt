@@ -27,7 +27,10 @@ object DataStoreModule {
 
     @Provides
     @Singleton
-    fun provideUserPreferences(dataStore: DataStore<Preferences>): UserPreferences {
-        return UserPreferences(dataStore)
+    fun provideUserPreferences(
+        dataStore: DataStore<Preferences>,
+        credentialStore: DeepSeekCredentialStore,
+    ): UserPreferences {
+        return UserPreferences(dataStore, credentialStore)
     }
 }

@@ -18,7 +18,8 @@ import javax.inject.Singleton
 
 @Singleton
 class UserPreferences @Inject constructor(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val credentialStore: DeepSeekCredentialStore? = null,
 ) {
     companion object {
         // ── 计费规则版本号（递增即触发迁移，重置为南京最新默认值） ──
@@ -47,8 +48,6 @@ class UserPreferences @Inject constructor(
         private val CHART_SHOW_COST = booleanPreferencesKey("chart_show_cost")
         private val PEAK_VALLEY_EXPANDED = booleanPreferencesKey("peak_valley_expanded")
         private val DEEPSEEK_API_KEY = stringPreferencesKey("deepseek_api_key")
-        private val WEATHER_API_KEY = stringPreferencesKey("weather_api_key")
-        private val WEATHER_CITY_ID = stringPreferencesKey("weather_city_id")
         private val TH_TOTAL_ELECTRIC_MIN = doublePreferencesKey("th_total_electric_min")
         private val TH_PEAK_MIN = doublePreferencesKey("th_peak_min")
         private val TH_PEAK_MAX = doublePreferencesKey("th_peak_max")
@@ -177,14 +176,25 @@ class UserPreferences @Inject constructor(
     suspend fun setChartShowCost(showCost: Boolean) = dataStore.edit { it[CHART_SHOW_COST] = showCost }
     suspend fun setPeakValleyExpanded(expanded: Boolean) = dataStore.edit { it[PEAK_VALLEY_EXPANDED] = expanded }
 
-    val deepSeekApiKey: Flow<String> = dataStore.data.map { it[DEEPSEEK_API_KEY] ?: "" }
-    suspend fun setDeepSeekApiKey(key: String) = dataStore.edit { it[DEEPSEEK_API_KEY] = key.trim() }
+    val deepSeekApiKey: Flow<String> = credentialStore?.apiKey
+        ?: dataStore.data.map { it[DEEPSEEK_API_KEY] ?: "" }
 
-    val weatherApiKey: Flow<String> = dataStore.data.map { it[WEATHER_API_KEY] ?: "8e6f345a7e6041c7b046b049b8642a19" }
-    val weatherCityId: Flow<String> = dataStore.data.map { it[WEATHER_CITY_ID] ?: "101190101" }
-    suspend fun setWeatherConfig(apiKey: String, cityId: String) = dataStore.edit {
-        it[WEATHER_API_KEY] = apiKey.trim()
-        it[WEATHER_CITY_ID] = cityId.trim()
+    suspend fun setDeepSeekApiKey(key: String) {
+        credentialStore?.setApiKey(key) ?: dataStore.edit { it[DEEPSEEK_API_KEY] = key.trim() }
+        if (credentialStore != null) {
+            dataStore.edit { it.remove(DEEPSEEK_API_KEY) }
+        }
+    }
+
+    suspend fun migrateLegacyDeepSeekApiKey() {
+        val secureStore = credentialStore ?: return
+        val legacyKey = dataStore.data.first()[DEEPSEEK_API_KEY]?.trim().orEmpty()
+        if (legacyKey.isNotEmpty() && secureStore.apiKey.value.isEmpty()) {
+            secureStore.setApiKey(legacyKey)
+        }
+        if (legacyKey.isNotEmpty()) {
+            dataStore.edit { it.remove(DEEPSEEK_API_KEY) }
+        }
     }
 
     suspend fun getCachedThresholds(): ClassificationThresholds? = dataStore.data.first().let { prefs ->
