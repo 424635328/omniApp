@@ -1,34 +1,34 @@
 ---
 name: energyflow-data-migration
-description: 数据迁移引导——Room schema 变更、DataStore 版本升级、数据修复
+description: Data migration guide — Room schema changes, DataStore version upgrades, data repairs
 ---
 
-# EnergyFlow — 数据迁移引导
+# EnergyFlow — Data Migration Guide
 
-**用途**: 改 Room 实体 / 改 DataStore 结构 / 数据格式变更时使用。
+**Use when**: Changing Room entities / changing DataStore structure / data format changes.
 
-## Room Schema 变更
+## Room Schema Changes
 
-### ⚠️ 当前状态
-`AppDatabase` 使用 `fallbackToDestructiveMigration()`！意味着：
-- **任何 schema 变更都会清空全部数据**
-- 这是开发阶段的妥协，生产环境必须有 Migration
+### ⚠️ Current State
+`AppDatabase` uses `fallbackToDestructiveMigration()`! This means:
+- **Any schema change will clear all data**
+- This is a development-phase compromise; production requires Migrations
 
-### 安全变更流程
+### Safe Change Flow
 
-#### 方案 A: 开发阶段（当前）
+#### Option A: Development Phase (Current)
 ```kotlin
-@Database(version = 3) // 从 2 → 3
+@Database(version = 3) // From 2 → 3
 abstract class AppDatabase : RoomDatabase() {
-    // fallbackToDestructiveMigration() 保持不变
-    // 开发数据会丢失，但没关系
+    // fallbackToDestructiveMigration() remains unchanged
+    // Development data will be lost, but that's okay
 }
 ```
-- ✅ 简单
-- ❌ 数据清零
-- 适用: 开发/测试环境
+- ✅ Simple
+- ❌ Data cleared
+- Applies to: Dev/test environments
 
-#### 方案 B: 有 Migration（生产就绪）
+#### Option B: With Migration (Production-Ready)
 ```kotlin
 @Database(version = 3)
 abstract class AppDatabase : RoomDatabase() {
@@ -41,34 +41,34 @@ abstract class AppDatabase : RoomDatabase() {
     }
 }
 
-// 在 DatabaseModule 中
+// In DatabaseModule
 Room.databaseBuilder(context, AppDatabase::class.java, "energy_flow_database")
     .addMigrations(AppDatabase.MIGRATION_2_3)
     .build()
 ```
 
-### 常见 Schema 变更速查
+### Common Schema Change Quick Reference
 
-| 变更 | SQL |
-|------|-----|
-| 加列 (nullable) | `ALTER TABLE meter_records ADD COLUMN new_col REAL` |
-| 加列 (NOT NULL) | `ALTER TABLE ... ADD COLUMN ... NOT NULL DEFAULT 0` |
-| 加索引 | `CREATE INDEX idx_name ON meter_records(column)` |
-| 重命名表 | Room 不支持直接 ALTER，需要 Migration |
+| Change | SQL |
+|--------|-----|
+| Add column (nullable) | `ALTER TABLE meter_records ADD COLUMN new_col REAL` |
+| Add column (NOT NULL) | `ALTER TABLE ... ADD COLUMN ... NOT NULL DEFAULT 0` |
+| Add index | `CREATE INDEX idx_name ON meter_records(column)` |
+| Rename table | Room does not support direct ALTER, requires Migration |
 
-### 检查清单
-- [ ] bump `@Database(version = N+1)`
-- [ ] 添加 Migration 对象（或保持 destructive fallback）
-- [ ] 更新 `MeterRecord` 实体（加新字段）
-- [ ] 更新 `Converters.kt`（如果新字段需要类型转换）
-- [ ] 更新 Room DAO（如果新字段需要新查询）
-- [ ] 运行全量测试确认
+### Checklist
+- [ ] Bump `@Database(version = N+1)`
+- [ ] Add Migration object (or keep destructive fallback)
+- [ ] Update `MeterRecord` entity (add new field)
+- [ ] Update `Converters.kt` (if new field needs type conversion)
+- [ ] Update Room DAO (if new field needs new queries)
+- [ ] Run all tests to confirm
 
 ---
 
-## DataStore 版本迁移
+## DataStore Version Migration
 
-### 计费规则迁移 (UserPreferences)
+### Billing Rules Migration (UserPreferences)
 ```kotlin
 // UserPreferences.kt
 companion object {
@@ -76,11 +76,11 @@ companion object {
 }
 ```
 
-**触发条件**: 存储的版本 < CURRENT_BILLING_VERSION
-**行为**: 自动重置计费规则为默认值
-**注意**: 只在 `billingRules.first()` 首次访问时触发，且有"已迁移"标记防重复
+**Trigger condition**: Stored version < CURRENT_BILLING_VERSION
+**Behavior**: Automatically resets billing rules to defaults
+**Note**: Only triggers on first access of `billingRules.first()`, with "already migrated" flag to prevent duplicates
 
-### 新增 DataStore Key 流程
+### New DataStore Key Flow
 ```kotlin
 // UserPreferences.kt
 private val NEW_KEY = booleanPreferencesKey("new_setting")
@@ -94,27 +94,27 @@ suspend fun setNewSetting(value: Boolean) {
 }
 ```
 
-### 检查清单
-- [ ] Key 名称清晰 —— 不要缩写
-- [ ] 默认值合理
-- [ ] 如果 Key 改名 → 需要迁移旧 Key 的数据
-- [ ] 不要用 DataStore 存大量数据 → 用 Room
-- [ ] DataStore 异步，在协程中读写
+### Checklist
+- [ ] Key name is clear — no abbreviations
+- [ ] Default value is reasonable
+- [ ] If key is renamed → need to migrate old key data
+- [ ] Do not use DataStore for large amounts of data → use Room
+- [ ] DataStore is async, read/write in coroutines
 
 ---
 
-## 数据修复
+## Data Repair
 
-### 手动修复异常数据
+### Manually Fix Anomalous Data
 ```kotlin
-// 在 MeterRepository 中添加修复函数
+// Add repair function in MeterRepository
 suspend fun fixDecreasingReadings(): Int {
     val records = dao.getAllRecords().first()
     var fixed = 0
     for (i in 1 until records.size) {
         if (records[i].electricTotal != null && records[i-1].electricTotal != null) {
             if (records[i].electricTotal!! < records[i-1].electricTotal!!) {
-                dao.delete(records[i]) // 或标记为"换表"
+                dao.delete(records[i]) // Or mark as "meter replaced"
                 fixed++
             }
         }
@@ -123,18 +123,18 @@ suspend fun fixDecreasingReadings(): Int {
 }
 ```
 
-### 批量数据修复检查清单
-- [ ] 备份: 在修数据前先导出 (设置页 → 导出数据)
-- [ ] Dry-run: 先只打印要修改的记录，不实际修改
-- [ ] 事务: 用 `@Transaction` 保证原子性
-- [ ] 可逆: 提供回滚方式
+### Batch Data Repair Checklist
+- [ ] Backup: Export data before modifying (Settings → Export Data)
+- [ ] Dry-run: Only print records to modify, do not actually modify
+- [ ] Transaction: Use `@Transaction` for atomicity
+- [ ] Reversible: Provide rollback method
 
-## 禁止事项
-- ❌ 不要在有用户数据的设备上使用 destructive migration
-- ❌ 不要忘记 bump schema version
-- ❌ 不要在 Migration 中写复杂业务逻辑 —— 只改 DDL
-- ❌ 不要在主线程操作 DataStore edit
+## Prohibited Actions
+- ❌ Do not use destructive migration on devices with user data
+- ❌ Do not forget to bump schema version
+- ❌ Do not write complex business logic in Migration — only DDL changes
+- ❌ Do not operate DataStore edit on the main thread
 
-## 相关 Skills
-- 跑测试: `energyflow-test` — 迁移后必须全量测试
-- 预检: `energyflow-quick-scan` — 迁移后扫描遗留引用
+## Related Skills
+- Run tests: `energyflow-test` — must run all tests after migration
+- Pre-scan: `energyflow-quick-scan` — scan for lingering references after migration

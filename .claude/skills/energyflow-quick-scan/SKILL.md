@@ -1,92 +1,92 @@
 ---
 name: energyflow-quick-scan
-description: 提交前快速扫描——检查常见错误、风格问题、KMP边界、遗漏的测试
+description: Pre-commit quick scan — check for common errors, style issues, KMP boundary violations, missing tests
 ---
 
-# EnergyFlow — 提交前快速扫描
+# EnergyFlow — Pre-Commit Quick Scan
 
-**用途**: 提交代码前的最后一轮检查——5分钟内找出明显问题。
+**Use when**: Final check before committing code — find obvious issues in 5 minutes.
 
-## 扫描清单（按优先级）
+## Scan Checklist (By Priority)
 
-### 1. KMP 边界（最高优先级）
+### 1. KMP Boundary (Highest Priority)
 ```bash
-# 检查 shared 模块是否误用 java.time 或 android.*
+# Check if shared module mistakenly uses java.time or android.*
 grep -rn "java\.time\|android\.\|java\.util\." shared/src/commonMain/ --include="*.kt"
 ```
-- ✅ 应该 0 结果
-- ❌ 如果有结果 → 替换为 kotlinx.datetime / kotlinx.*
+- ✅ Should be 0 results
+- ❌ If results found → replace with kotlinx.datetime / kotlinx.*
 
-### 2. 硬编码颜色
+### 2. Hardcoded Colors
 ```bash
-# 检查是否硬编码了 hex 颜色（应该用主题色）
+# Check for hardcoded hex colors (should use theme colors)
 grep -rn "Color(0x[0-9A-Fa-f]\{6,8\})" app/src/main/java/com/example/energyflow/ui/ --include="*.kt"
 ```
-- ✅ 可能 0 结果（或用函数参数传入的颜色）
-- ❌ 如果有新的硬编码 → 替换为主题色 (`ElectricColor`, `DarkBackground` 等)
-- ⚠️ 遗留代码中的 `DarkCard = Color(0xFF212538)` 等定义在 `Color.kt` 中是允许的
+- ✅ May be 0 results (or colors passed via function parameters)
+- ❌ If new hardcoding found → replace with theme colors (`ElectricColor`, `DarkBackground` etc.)
+- ⚠️ Legacy code like `DarkCard = Color(0xFF212538)` definitions in `Color.kt` are allowed
 
-### 3. 状态收集
+### 3. State Collection
 ```bash
-# 检查是否用了 collectAsState() 而非 collectAsStateWithLifecycle()
+# Check for collectAsState() instead of collectAsStateWithLifecycle()
 grep -rn "\.collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt"
 ```
-- ChartScreen 已知使用 `collectAsState()`（遗留不一致）
-- 新代码必须用 `collectAsStateWithLifecycle()`
+- ChartScreen is known to use `collectAsState()` (legacy inconsistency)
+- New code must use `collectAsStateWithLifecycle()`
 
-### 4. 字体
+### 4. Font
 ```bash
-# 检查新代码是否使用了默认字体
+# Check if new code uses default font
 rg -n 'fontFamily\s*=' app/src/main/java/com/example/energyflow/ui/ | rg -v 'fontFamily\s*=\s*MonoFontFamily'
 ```
-- ✅ 所有 `fontFamily` 都应该是 `MonoFontFamily` 或不需要显式设置
+- ✅ All `fontFamily` should be `MonoFontFamily` or not need explicit setting
 
-### 5. Null 安全
+### 5. Null Safety
 ```bash
-# 检查 MeterRecord 字段的非空断言（可能崩溃）
+# Check for non-null assertions on MeterRecord fields (may crash)
 grep -rn "electricTotal!!\|electricPeak!!\|electricValley!!\|waterTotal!!\|gasTotal!!" app/src/ --include="*.kt"
 ```
-- ✅ 应该 0 使用 `!!`
-- ❌ 如果有 → 替换为 `?: 0.0` 或 `?: null` 安全处理
+- ✅ Should be 0 uses of `!!`
+- ❌ If found → replace with `?: 0.0` or `?: null` safe handling
 
-### 6. 测试覆盖
-快速检查新增/修改的 public 函数是否有对应测试：
+### 6. Test Coverage
+Quick check if new/modified public functions have corresponding tests:
 ```bash
-# 查看改了哪些文件
+# See which files were changed
 git diff --name-only
-# 对于 data/ 下的文件，检查 app/src/test/ 是否有对应测试
+# For files under data/, check if app/src/test/ has corresponding tests
 ```
 
-## 快速修复常见问题
+## Quick Fix Common Issues
 
-| 问题 | 快速修复 |
-|------|---------|
-| 用了 `#XXXXXX` 颜色 | 查 `.claude/docs/ui-layer/theme-and-navigation.md` 颜色表找对应主题色 |
-| 用了 `java.time` in shared | 改为 `kotlinx.datetime`，必要时在 Android wrapper 转换 |
-| 用了 `collectAsState()` | 改为 `collectAsStateWithLifecycle()` |
-| 用了 `!!` 空断言 | 改为 `?: 0.0` / `?: return` / `?.let{}` |
-| 没写测试 | 在对应测试文件添加至少边界条件测试 |
-| 改了 public API | 确认所有调用方已更新，运行全量测试 |
+| Issue | Quick Fix |
+|-------|----------|
+| Used `#XXXXXX` color | Check `.claude/docs/ui-layer/theme-and-navigation.md` color table for corresponding theme color |
+| Used `java.time` in shared | Change to `kotlinx.datetime`, convert in Android wrapper if needed |
+| Used `collectAsState()` | Change to `collectAsStateWithLifecycle()` |
+| Used `!!` null assertion | Change to `?: 0.0` / `?: return` / `?.let{}` |
+| No tests written | Add at least edge case tests in corresponding test file |
+| Changed public API | Confirm all callers are updated, run all tests |
 
-## 输出格式
+## Output Format
 
-扫描完成后，用以下格式输出结果：
+After scan completes, output results in this format:
 ```
 ## Quick Scan Results
 
-### 🔴 Critical (必须修复)
-- file.kt:42 — 在 shared 模块用了 java.time
+### 🔴 Critical (Must Fix)
+- file.kt:42 — Used java.time in shared module
 
-### 🟡 Warning (建议修复)
-- file.kt:88 — 新代码未写测试
+### 🟡 Warning (Recommended Fix)
+- file.kt:88 — New code without tests
 
-### 🟢 Info (已确认合规)
-- KMP 边界: ✅
-- 颜色规范: ✅
-- 字体: ✅
+### 🟢 Info (Confirmed Compliant)
+- KMP boundary: ✅
+- Color convention: ✅
+- Font: ✅
 ```
 
-## 相关 Skills
-- 跑测试: `energyflow-test` — 扫描前先跑测试
-- 提交: `energyflow-commit` — 扫描通过后规范化提交
-- 安全: `energyflow-security` — 安全专项检查
+## Related Skills
+- Run tests: `energyflow-test` — run tests before scanning
+- Commit: `energyflow-commit` — standardized commit after scan passes
+- Security: `energyflow-security` — security-specific checks

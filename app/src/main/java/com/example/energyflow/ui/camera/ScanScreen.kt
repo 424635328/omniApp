@@ -37,7 +37,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
@@ -125,7 +125,7 @@ fun ScanScreen(
             PermissionDeniedView { permissionLauncher.launch(Manifest.permission.CAMERA) }
         } else if (recognizedText != null) {
             ScanResultView(
-                recognizedText = recognizedText!!,
+                recognizedText = recognizedText ?: "",
                 onConfirm = { edited -> onResult(edited) },
                 onRetry = { recognizedText = null },
                 onDismiss = onDismiss
@@ -237,7 +237,7 @@ private fun CameraPreviewSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = Color.White)
             }
             Text("对准表盘数字", color = Color.White, fontFamily = MonoFontFamily, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             IconButton(onClick = {

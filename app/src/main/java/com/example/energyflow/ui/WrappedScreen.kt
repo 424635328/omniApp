@@ -61,8 +61,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.energyflow.data.ReportExporter
 import com.example.energyflow.data.ShareUtils
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
@@ -102,7 +102,7 @@ fun WrappedScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
             .pointerInput(currentPage) {
@@ -126,7 +126,7 @@ fun WrappedScreen(
                 .padding(top = 8.dp, end = 8.dp)
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(DarkCard)
+                .background(AppCard)
         ) {
             Icon(
                 Icons.Default.Close,
@@ -223,7 +223,7 @@ fun WrappedScreen(
                     Button(
                         onClick = { currentPage-- },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = DarkCard,
+                            containerColor = AppCard,
                             contentColor = TextPrimary
                         ),
                         shape = RoundedCornerShape(12.dp)
@@ -238,7 +238,7 @@ fun WrappedScreen(
                         onClick = { currentPage++ },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ElectricColor,
-                            contentColor = DarkBackground
+                            contentColor = AppBackground
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -487,29 +487,45 @@ private fun PeakValleyPage(state: WrappedState) {
                 .clip(RoundedCornerShape(20.dp))
                 .background(OutlineDark)
         ) {
-            if (peakRatio > 0.01f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(peakRatio)
-                        .fillMaxHeight()
-                        .background(ElectricPeakColor)
-                        .padding(start = 12.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    if (peakRatio > 0.12f) {
-                        Text("峰", color = Color.White, fontFamily = MonoFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Row(modifier = Modifier.fillMaxSize()) {
+                if (peakRatio > 0.01f) {
+                    Box(
+                        modifier = Modifier
+                            .weight(peakRatio)
+                            .fillMaxHeight()
+                            .background(ElectricPeakColor),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (peakRatio > 0.12f) {
+                            Text("峰", color = Color.White, fontFamily = MonoFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
-            }
-            if (flatRatio > 0.01f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(peakRatio + flatRatio)
-                        .fillMaxHeight()
-                        .padding(start = if (peakRatio > 0.01f) 0.dp else 12.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    // This is the flat section drawn after peak
+                if (flatRatio > 0.01f) {
+                    Box(
+                        modifier = Modifier
+                            .weight(flatRatio)
+                            .fillMaxHeight()
+                            .background(OutlineDark),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (flatRatio > 0.12f) {
+                            Text("平", color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                if (valleyRatio > 0.01f) {
+                    Box(
+                        modifier = Modifier
+                            .weight(valleyRatio)
+                            .fillMaxHeight()
+                            .background(ElectricValleyColor),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (valleyRatio > 0.12f) {
+                            Text("谷", color = Color.White, fontFamily = MonoFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -597,7 +613,7 @@ private fun BadgesPage(state: WrappedState) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(DarkCard)
+                    .background(AppCard)
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -673,7 +689,7 @@ private fun SavingsTipsPage(state: WrappedState) {
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(DarkCard)
+                    .background(AppCard)
                     .padding(12.dp)
             ) {
                 Text(
@@ -724,13 +740,13 @@ private fun SharePage(
                 .height(56.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = ElectricColor,
-                contentColor = DarkBackground
+                contentColor = AppBackground
             ),
             shape = RoundedCornerShape(14.dp)
         ) {
             if (exporting == 1) {
                 CircularProgressIndicator(
-                    color = DarkBackground,
+                    color = AppBackground,
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp
                 )

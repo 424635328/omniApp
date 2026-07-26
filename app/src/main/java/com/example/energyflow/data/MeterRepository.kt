@@ -151,7 +151,8 @@ class MeterRepository @Inject constructor(
         // ── 批内去重（先过滤同批次内的重复） ──
         var prev: MeterRecord? = null
         val dedupedWithinBatch = allRecords.filter { record ->
-            val keep = prev == null || prev!!.timestamp != record.timestamp || !areValuesSame(prev!!, record)
+            val p = prev
+            val keep = p == null || p.timestamp != record.timestamp || !areValuesSame(p, record)
             if (keep) prev = record
             keep
         }

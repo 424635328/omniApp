@@ -79,9 +79,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
-import com.example.energyflow.ui.theme.DarkSurface
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
+import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
@@ -245,7 +245,7 @@ fun AddRecordSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkBackground)
+            .background(AppBackground)
             .imePadding()
             .clickable(
                 indication = null,
@@ -293,7 +293,7 @@ fun AddRecordSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(DarkCard.copy(alpha = 0.6f))
+                    .background(AppCard.copy(alpha = 0.6f))
                     .clickable {
                         val f = { d: Double -> String.format(Locale.US, "%.2f", d) }
                         // 一键沿用 — 填入上次的值
@@ -579,8 +579,8 @@ fun AddRecordSheet(
         enabled = canSave,
         colors = ButtonDefaults.buttonColors(
             containerColor = ElectricColor,
-            contentColor = DarkBackground,
-            disabledContainerColor = DarkCard,
+            contentColor = AppBackground,
+            disabledContainerColor = AppCard,
             disabledContentColor = TextSecondary
         ),
         shape = RoundedCornerShape(12.dp)
@@ -621,15 +621,15 @@ fun AddRecordSheet(
                 }
             },
             colors = DatePickerDefaults.colors(
-                containerColor = DarkSurface
+                containerColor = AppSurface
             )
         ) {
             DatePicker(
                 state = datePickerState,
                 colors = DatePickerDefaults.colors(
-                    containerColor = DarkSurface,
+                    containerColor = AppSurface,
                     selectedDayContainerColor = ElectricColor,
-                    selectedDayContentColor = DarkBackground,
+                    selectedDayContentColor = AppBackground,
                     todayContentColor = ElectricColor,
                     todayDateBorderColor = ElectricColor
                 )
@@ -659,7 +659,7 @@ fun AddRecordSheet(
                 }
             },
             colors = DatePickerDefaults.colors(
-                containerColor = DarkSurface
+                containerColor = AppSurface
             )
         ) {
             Box(
@@ -673,9 +673,9 @@ fun AddRecordSheet(
                     colors = TimePickerDefaults.colors(
                         selectorColor = ElectricColor,
                         periodSelectorSelectedContainerColor = ElectricColor,
-                        periodSelectorSelectedContentColor = DarkBackground,
-                        clockDialColor = DarkCard,
-                        clockDialSelectedContentColor = DarkBackground
+                        periodSelectorSelectedContentColor = AppBackground,
+                        clockDialColor = AppCard,
+                        clockDialSelectedContentColor = AppBackground
                     )
                 )
             }
@@ -739,8 +739,8 @@ private fun DateTimeChip(
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        DarkCard,
-                        DarkCard.copy(alpha = 0.8f)
+                        AppCard,
+                        AppCard.copy(alpha = 0.8f)
                     )
                 )
             )
@@ -795,8 +795,8 @@ private fun MeterSection(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        DarkCard,
-                        DarkCard.copy(alpha = 0.9f)
+                        AppCard,
+                        AppCard.copy(alpha = 0.9f)
                     )
                 )
             )
@@ -831,7 +831,7 @@ private fun MeterSection(
                     checkedThumbColor = iconColor,
                     checkedTrackColor = iconColor.copy(alpha = 0.3f),
                     uncheckedThumbColor = TextSecondary,
-                    uncheckedTrackColor = DarkSurface
+                    uncheckedTrackColor = AppSurface
                 )
             )
         }
@@ -909,7 +909,7 @@ private fun MeterInputField(
                 isError = error != null,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = if (error != null) ErrorNeon else color,
-                    unfocusedBorderColor = if (error != null) ErrorNeon else DarkSurface,
+                    unfocusedBorderColor = if (error != null) ErrorNeon else AppSurface,
                     cursorColor = color,
                     focusedTextColor = TextPrimary,
                     unfocusedTextColor = TextPrimary
@@ -948,7 +948,7 @@ private fun NoteSection(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .padding(16.dp)
     ) {
         Text(
@@ -971,7 +971,7 @@ private fun NoteSection(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (isSelected) ElectricColor.copy(alpha = 0.2f) else DarkSurface)
+                        .background(if (isSelected) ElectricColor.copy(alpha = 0.2f) else AppSurface)
                         .border(
                             width = 1.dp,
                             color = if (isSelected) ElectricColor else Color.Transparent,
@@ -1003,7 +1003,7 @@ private fun NoteSection(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (isSelected) ElectricColor.copy(alpha = 0.2f) else DarkSurface)
+                        .background(if (isSelected) ElectricColor.copy(alpha = 0.2f) else AppSurface)
                         .border(
                             width = 1.dp,
                             color = if (isSelected) ElectricColor else Color.Transparent,
@@ -1040,7 +1040,7 @@ private fun NoteSection(
             },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = ElectricColor,
-                unfocusedBorderColor = DarkSurface,
+                unfocusedBorderColor = AppSurface,
                 cursorColor = ElectricColor,
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary

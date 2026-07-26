@@ -44,8 +44,8 @@ import com.example.energyflow.ui.chart.ChartScreen
 import com.example.energyflow.ui.chart.ChartViewModel
 import com.example.energyflow.ui.settings.BillingSettingsScreen
 import com.example.energyflow.ui.settings.BillingSettingsViewModel
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.TextPrimary
@@ -101,7 +101,7 @@ fun AppNavGraph() {
     Scaffold(
         bottomBar = {
             NavigationBar(
-                containerColor = DarkBackground,
+                containerColor = AppBackground,
                 contentColor = TextPrimary
             ) {
                 bottomBarScreens.forEach { screen ->
@@ -119,7 +119,7 @@ fun AppNavGraph() {
                     NavigationBarItem(
                         icon = {
                             Icon(
-                                imageVector = screen.icon!!,
+                                imageVector = screen.icon ?: Icons.Default.Home,
                                 contentDescription = screen.title,
                                 modifier = Modifier
                                     .size(24.dp)
@@ -144,7 +144,7 @@ fun AppNavGraph() {
                             selectedTextColor = ElectricColor,
                             unselectedIconColor = TextSecondary,
                             unselectedTextColor = TextSecondary,
-                            indicatorColor = DarkCard
+                            indicatorColor = AppCard
                         )
                     )
                 }

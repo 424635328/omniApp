@@ -44,5 +44,7 @@ private fun MeterRecord.toSharedReading(): PredictiveAnalyzerShared.Reading =
 
 private fun DailyWeather.toSharedForecast(): PredictiveAnalyzerShared.WeatherForecast =
     PredictiveAnalyzerShared.WeatherForecast(
-        kotlinx.datetime.LocalDate(date.year, date.monthValue, date.dayOfMonth), tempMax
+        date = kotlinx.datetime.LocalDate(date.year, date.monthValue, date.dayOfMonth),
+        tempMax = tempMax,
+        tempMin = tempMin
     )

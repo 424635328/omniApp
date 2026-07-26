@@ -34,8 +34,8 @@ import androidx.compose.ui.unit.sp
 import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.data.MeterRecordDao
 import com.example.energyflow.ui.theme.ElectricColor
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
 import com.example.energyflow.ui.theme.MonoFontFamily
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -59,7 +59,7 @@ class QuickRecordActivity : ComponentActivity() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(DarkBackground.copy(alpha = 0.5f)),
+                    .background(AppBackground.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -68,7 +68,7 @@ class QuickRecordActivity : ComponentActivity() {
                         .fillMaxWidth()
                         .padding(24.dp)
                         .background(
-                            color = DarkCard,
+                            color = AppCard,
                             shape = RoundedCornerShape(24.dp)
                         )
                         .padding(24.dp),
@@ -92,12 +92,12 @@ class QuickRecordActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = ElectricColor,
-                            unfocusedBorderColor = DarkCard,
+                            unfocusedBorderColor = AppCard,
                             focusedLabelColor = ElectricColor,
-                            unfocusedLabelColor = DarkCard,
+                            unfocusedLabelColor = AppCard,
                             cursorColor = ElectricColor,
-                            focusedTextColor = DarkBackground,
-                            unfocusedTextColor = DarkBackground
+                            focusedTextColor = AppBackground,
+                            unfocusedTextColor = AppBackground
                         )
                     )
 
@@ -112,12 +112,12 @@ class QuickRecordActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = ElectricColor,
-                            unfocusedBorderColor = DarkCard,
+                            unfocusedBorderColor = AppCard,
                             focusedLabelColor = ElectricColor,
-                            unfocusedLabelColor = DarkCard,
+                            unfocusedLabelColor = AppCard,
                             cursorColor = ElectricColor,
-                            focusedTextColor = DarkBackground,
-                            unfocusedTextColor = DarkBackground
+                            focusedTextColor = AppBackground,
+                            unfocusedTextColor = AppBackground
                         )
                     )
 
@@ -167,7 +167,7 @@ class QuickRecordActivity : ComponentActivity() {
                             .height(48.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ElectricColor,
-                            contentColor = DarkBackground
+                            contentColor = AppBackground
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {

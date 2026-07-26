@@ -41,9 +41,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.energyflow.ui.theme.DarkCard
+import com.example.energyflow.ui.theme.AppCard
 import com.example.energyflow.data.DailyWeather
-import com.example.energyflow.ui.theme.DarkSurface
+import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricEnd
 import com.example.energyflow.ui.theme.ElectricGradient
@@ -98,7 +98,7 @@ fun ConsumptionLineChart(
     }
 
     val chartColor = accentColor
-    val gridColor = DarkCard.copy(alpha = 0.6f)
+    val gridColor = AppCard.copy(alpha = 0.6f)
     val labelColor = TextSecondary
 
     // ── 双指缩放 + 平移 + 惯性滑动状态 ──
@@ -671,8 +671,8 @@ private fun DrawScope.drawTooltip(
     val vw = tooltipValuePaint.measureText(valueStr)
     val row1W = dw + vw + 12f
 
-    val wHighStr = if (hasWeather) "H${selWeather!!.tempMax.toInt()}°" else ""
-    val wLowStr  = if (hasWeather) "L${selWeather!!.tempMin.toInt()}°" else ""
+    val wHighStr = selWeather?.let { "H${it.tempMax.toInt()}°" } ?: ""
+    val wLowStr  = selWeather?.let { "L${it.tempMin.toInt()}°" } ?: ""
     val sepStr   = if (hasWeather) "  ·  " else ""
     val whw = tempMaxPaint.measureText(wHighStr)
     val wsw = sepLabelPaint.measureText(sepStr)
@@ -694,7 +694,7 @@ private fun DrawScope.drawTooltip(
 
     // 背景
     drawRoundRect(
-        color = DarkSurface,
+        color = AppSurface,
         topLeft = Offset(left, baseY),
         size = Size(tooltipW, tooltipH),
         cornerRadius = CornerRadius(tooltipRadius, tooltipRadius)
@@ -741,7 +741,7 @@ private fun DrawScope.drawTooltip(
         lineTo(selPoint.x, baseY + tooltipH + 7f)
         close()
     }
-    drawPath(triPath, color = DarkSurface)
+    drawPath(triPath, color = AppSurface)
     drawPath(triPath, chartColor.copy(alpha = 0.3f), style = Stroke(1f))
 }
 

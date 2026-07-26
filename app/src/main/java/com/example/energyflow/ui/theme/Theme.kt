@@ -17,7 +17,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import com.example.energyflow.data.ThemeDistColors
 import kotlin.math.abs
 
@@ -112,7 +111,6 @@ fun EnergyFlowTheme(
 
     // ── 主色微染表面 — 极淡 primary 混入 card，形成品牌色系连贯感 ──
     val surfaceVariantTinted = lerp(card, primary, 0.04f)
-    val outlineColor = lerp(card, textTertiary, 0.35f)
 
     // ── M3 表面色调系统 — 从活跃 surface 推导 6 个层级 ──
     val surfaceDim: Color
@@ -143,7 +141,7 @@ fun EnergyFlowTheme(
     val inversePrimary = lerp(primary, Color.White, 0.50f)
     val scrim = Color.Black.copy(alpha = 0.50f)
 
-    // ── 写入 ThemeState ──
+    // ── 写入 ThemeState — 同时更新暗/亮两套字段，避免切换时残留旧值 ──
     ThemeState.colors = ThemeState.colors.copy(
         isDark = darkTheme,
         electricColor = primary,
@@ -151,11 +149,11 @@ fun EnergyFlowTheme(
         electricValleyColor = valleyColor,
         waterColor = waterColor,
         gasColor = GasStart,
-        darkBackground = bg,
-        darkSurface = surface,
-        darkCard = card,
-        darkSurfaceBright = surfaceBright,
-        darkSurfaceContainer = surfaceContainer,
+        darkBackground = if (darkTheme) bg else BackgroundDark,
+        darkSurface = if (darkTheme) surface else SurfaceDark,
+        darkCard = if (darkTheme) card else SurfaceVariant,
+        darkSurfaceBright = if (darkTheme) surfaceBright else SurfaceBrightDark,
+        darkSurfaceContainer = if (darkTheme) surfaceContainer else SurfaceContainerDark,
         lightBackground = if (!darkTheme) bg else LightBackground,
         lightSurface = if (!darkTheme) surface else LightSurface,
         lightCard = if (!darkTheme) card else LightCard,
@@ -194,8 +192,8 @@ fun EnergyFlowTheme(
             surfaceContainerHighest = surfaceContainerHighest,
             inverseSurface = inverseSurface,
             inverseOnSurface = inverseOnSurface,
-            outline = outlineColor,
-            outlineVariant = outlineColor.copy(alpha = 0.4f),
+            outline = OutlineDark,
+            outlineVariant = OutlineVariant,
             scrim = scrim,
             error = ErrorNeon,
             onError = Color.Black
@@ -227,8 +225,8 @@ fun EnergyFlowTheme(
             surfaceContainerHighest = surfaceContainerHighest,
             inverseSurface = inverseSurface,
             inverseOnSurface = inverseOnSurface,
-            outline = textTertiary.copy(alpha = 0.6f),
-            outlineVariant = textTertiary.copy(alpha = 0.3f),
+            outline = LightOutline,
+            outlineVariant = LightOutline.copy(alpha = 0.5f),
             scrim = scrim,
             error = ErrorNeon,
             onError = Color.Black
@@ -249,16 +247,21 @@ fun EnergyFlowTheme(
         LocalAppTextPrimary provides textPrimary,
         LocalAppTextSecondary provides textSecondary,
         LocalAppTextTertiary provides textTertiary,
+        LocalErrorColor provides ErrorNeon,
+        LocalWarningColor provides WarningNeon,
+        LocalSuccessColor provides SuccessGreen,
+        LocalInfoColor provides InfoBlue,
     ) {
         val view = LocalView.current
         if (!view.isInEditMode) {
+            @Suppress("DEPRECATION")
             SideEffect {
                 val window = (view.context as Activity).window
+                // Edge-to-edge: 导航栏/状态栏透明，内容延伸到系统栏
                 window.statusBarColor = bg.toArgb()
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-                // 统一导航栏颜色，避免底部割裂感
                 window.navigationBarColor = bg.toArgb()
-                WindowInsetsControllerCompat(window, view).apply {
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !darkTheme
                     isAppearanceLightNavigationBars = !darkTheme
                 }
             }
@@ -267,6 +270,7 @@ fun EnergyFlowTheme(
         MaterialTheme(
             colorScheme = colorScheme,
             typography = EnergyFlowTypography,
+            shapes = EnergyFlowShapes,
             content = content
         )
     }

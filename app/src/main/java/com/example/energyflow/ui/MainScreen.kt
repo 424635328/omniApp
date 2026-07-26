@@ -1,7 +1,6 @@
 package com.example.energyflow.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -14,7 +13,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -91,9 +89,9 @@ import com.example.energyflow.ui.components.AddRecordSheet
 import com.example.energyflow.ui.components.BatchImportSheet
 import com.example.energyflow.ui.components.EditRecordSheet
 import com.example.energyflow.data.MeterRecord
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
-import com.example.energyflow.ui.theme.DarkSurface
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
+import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.GasColor
@@ -292,7 +290,7 @@ fun MainScreen(
             SnackbarHost(snackbarHostState) { data ->
                 Snackbar(
                     snackbarData = data,
-                    containerColor = DarkCard,
+                    containerColor = AppCard,
                     contentColor = ElectricColor,
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -319,7 +317,7 @@ fun MainScreen(
                                 )
                                 .shadow(6.dp, CircleShape, ambientColor = ElectricColor.copy(0.3f))
                                 .clip(CircleShape)
-                                .background(DarkCard)
+                                .background(AppCard)
                                 .clickable { coroutineScope.launch { listState.animateScrollToItem(0) } },
                             contentAlignment = Alignment.Center
                         ) {
@@ -339,7 +337,7 @@ fun MainScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DarkBackground)
+                .background(AppBackground)
                 .padding(paddingValues)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -471,9 +469,9 @@ fun MainScreen(
                         viewModel.clearPendingOcr()
                     },
                     sheetState = sheetState,
-                    containerColor = DarkBackground,
+                    containerColor = AppBackground,
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                    scrimColor = DarkBackground.copy(alpha = 0.6f)
+                    scrimColor = AppBackground.copy(alpha = 0.6f)
                 ) {
                     AddRecordSheet(
                         initiallyShowPeakValley = peakValleyExpanded,
@@ -505,9 +503,9 @@ fun MainScreen(
                 ModalBottomSheet(
                     onDismissRequest = { showBatchImport = false },
                     sheetState = sheetState,
-                    containerColor = DarkBackground,
+                    containerColor = AppBackground,
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                    scrimColor = DarkBackground.copy(alpha = 0.6f)
+                    scrimColor = AppBackground.copy(alpha = 0.6f)
                 ) {
                     BatchImportSheet(
                         onImport = { text ->
@@ -527,9 +525,9 @@ fun MainScreen(
                 ModalBottomSheet(
                     onDismissRequest = { editingRecord = null },
                     sheetState = sheetState,
-                    containerColor = DarkBackground,
+                    containerColor = AppBackground,
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                    scrimColor = DarkBackground.copy(alpha = 0.6f)
+                    scrimColor = AppBackground.copy(alpha = 0.6f)
                 ) {
                     EditRecordSheet(
                         record = record,
@@ -556,7 +554,13 @@ fun MainScreen(
             confirmButton = {
                 TextButton({
                     state.selectedDateMillis?.let {
-                        filterStartDate = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val selected = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                        if (filterEndDate != null && selected.isAfter(filterEndDate)) {
+                            filterStartDate = filterEndDate
+                            filterEndDate = selected
+                        } else {
+                            filterStartDate = selected
+                        }
                     }
                     showStartDatePicker = false
                 }) { Text("确定", color = ElectricColor) }
@@ -564,10 +568,10 @@ fun MainScreen(
             dismissButton = {
                 TextButton({ showStartDatePicker = false }) { Text("取消", color = TextSecondary) }
             },
-            colors = DatePickerDefaults.colors(containerColor = DarkSurface)
+            colors = DatePickerDefaults.colors(containerColor = AppSurface)
         ) {
-            DatePicker(state, colors = DatePickerDefaults.colors(containerColor = DarkSurface,
-                selectedDayContainerColor = ElectricColor, selectedDayContentColor = DarkBackground,
+            DatePicker(state, colors = DatePickerDefaults.colors(containerColor = AppSurface,
+                selectedDayContainerColor = ElectricColor, selectedDayContentColor = AppBackground,
                 todayContentColor = ElectricColor, todayDateBorderColor = ElectricColor))
         }
     }
@@ -582,7 +586,13 @@ fun MainScreen(
             confirmButton = {
                 TextButton({
                     state.selectedDateMillis?.let {
-                        filterEndDate = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val selected = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                        if (filterStartDate != null && selected.isBefore(filterStartDate)) {
+                            filterEndDate = filterStartDate
+                            filterStartDate = selected
+                        } else {
+                            filterEndDate = selected
+                        }
                     }
                     showEndDatePicker = false
                 }) { Text("确定", color = ElectricColor) }
@@ -590,10 +600,10 @@ fun MainScreen(
             dismissButton = {
                 TextButton({ showEndDatePicker = false }) { Text("取消", color = TextSecondary) }
             },
-            colors = DatePickerDefaults.colors(containerColor = DarkSurface)
+            colors = DatePickerDefaults.colors(containerColor = AppSurface)
         ) {
-            DatePicker(state, colors = DatePickerDefaults.colors(containerColor = DarkSurface,
-                selectedDayContainerColor = ElectricColor, selectedDayContentColor = DarkBackground,
+            DatePicker(state, colors = DatePickerDefaults.colors(containerColor = AppSurface,
+                selectedDayContainerColor = ElectricColor, selectedDayContentColor = AppBackground,
                 todayContentColor = ElectricColor, todayDateBorderColor = ElectricColor))
         }
     }
@@ -612,7 +622,7 @@ private fun AnomalyWarningDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DarkCard,
+        containerColor = AppCard,
         titleContentColor = TextPrimary,
         textContentColor = TextSecondary,
         title = {
@@ -771,7 +781,7 @@ private fun SmallFAB(onClick: () -> Unit, content: @Composable () -> Unit) {
                 spotColor = ElectricColor.copy(alpha = 0.2f)
             )
             .clip(CircleShape)
-            .background(DarkCard)
+            .background(AppCard)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -816,33 +826,17 @@ private fun FilterBar(
             val count = counts[filter] ?: 0
             val chipColor = filter.chipColor()
 
-            // 背景色 + 边框动画：spring 弹性过渡
-            val chipBg by animateColorAsState(
-                targetValue = if (isSelected) chipColor.copy(alpha = 0.12f) else DarkCard.copy(alpha = 0.45f),
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                label = "chipBg"
-            )
-            val chipBorderAlpha by animateFloatAsState(
-                targetValue = if (isSelected) 0.25f else 0f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                label = "chipBorder"
-            )
-
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
-                    .background(chipBg)
-                    .drawBehind {
-                        if (chipBorderAlpha > 0.01f) {
-                            drawRoundRect(
-                                brush = Brush.horizontalGradient(
-                                    listOf(chipColor.copy(alpha = chipBorderAlpha), chipColor.copy(alpha = chipBorderAlpha * 0.3f))
-                                ),
-                                style = Stroke(width = 1.5f),
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                        }
-                    }
+                    .background(if (isSelected) chipColor.copy(alpha = 0.12f) else AppCard.copy(alpha = 0.45f))
+                    .then(
+                        if (isSelected) Modifier.border(
+                            width = 1.dp,
+                            color = chipColor.copy(alpha = 0.25f),
+                            shape = RoundedCornerShape(16.dp)
+                        ) else Modifier
+                    )
                     .clickable { onFilterChange(filter) }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
@@ -887,11 +881,7 @@ private fun DateFilterBar(
     onClear: () -> Unit
 ) {
     val hasFilter = startDate != null || endDate != null
-    val dateBg by animateColorAsState(
-        targetValue = if (hasFilter) ElectricColor.copy(alpha = 0.12f) else ElectricColor.copy(alpha = 0.06f),
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "dateBg"
-    )
+    val dateBg = if (hasFilter) ElectricColor.copy(alpha = 0.12f) else ElectricColor.copy(alpha = 0.06f)
 
     Row(
         modifier = Modifier
@@ -910,7 +900,7 @@ private fun DateFilterBar(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("📅", fontSize = 11.sp)
                 Text(
-                    if (startDate != null) "从 ${startDate!!.format(DateDotFmt)}" else "开始日期",
+                    startDate?.let { "从 ${it.format(DateDotFmt)}" } ?: "开始日期",
                     color = if (startDate != null) ElectricColor else TextSecondary,
                     fontFamily = MonoFontFamily,
                     fontSize = 11.sp,
@@ -929,7 +919,7 @@ private fun DateFilterBar(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("📅", fontSize = 11.sp)
                 Text(
-                    if (endDate != null) "到 ${endDate!!.format(DateDotFmt)}" else "结束日期",
+                    endDate?.let { "到 ${it.format(DateDotFmt)}" } ?: "结束日期",
                     color = if (endDate != null) ElectricColor else TextSecondary,
                     fontFamily = MonoFontFamily,
                     fontSize = 11.sp,
@@ -965,35 +955,18 @@ private fun DateFilterBar(
 
 @Composable
 private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
-    val topPadding by animateDpAsState(
-        targetValue = if (collapsed) 6.dp else 8.dp,
-        animationSpec = tween(250), label = "topPad"
-    )
-    val bottomPadding by animateDpAsState(
-        targetValue = if (collapsed) 4.dp else 6.dp,
-        animationSpec = tween(250), label = "botPad"
-    )
-    val iconSize by animateDpAsState(
-        targetValue = if (collapsed) 22.dp else 26.dp,
-        animationSpec = tween(250), label = "iconSize"
-    )
-    val titleSize by animateFloatAsState(
-        targetValue = if (collapsed) 15f else 20f,
-        animationSpec = tween(250), label = "titleSize"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkBackground)
-            .padding(start = 20.dp, end = 20.dp, top = topPadding, bottom = bottomPadding)
+            .background(AppBackground)
+            .padding(start = 20.dp, end = 20.dp, top = if (collapsed) 6.dp else 8.dp, bottom = if (collapsed) 4.dp else 6.dp)
     ) {
         if (collapsed) {
             // ── 折叠态：单行紧凑图标+标题 ──
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(iconSize)
+                        .size(22.dp)
                         .shadow(3.dp, RoundedCornerShape(6.dp), ambientColor = ElectricColor.copy(0.2f), spotColor = ElectricColor.copy(0.2f))
                         .clip(RoundedCornerShape(6.dp))
                         .background(
@@ -1005,7 +978,7 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                 ) {
                     Icon(
                         Icons.Default.Bolt, contentDescription = "闪电图标",
-                        tint = ElectricColor, modifier = Modifier.size(iconSize * 0.55f)
+                        tint = ElectricColor, modifier = Modifier.size(12.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -1014,7 +987,7 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                     color = TextPrimary,
                     fontFamily = MonoFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = titleSize.sp
+                    fontSize = 15.sp
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Text("$recordCount", color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 11.sp)
@@ -1025,7 +998,7 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(iconSize)
+                            .size(26.dp)
                             .shadow(4.dp, RoundedCornerShape(8.dp), ambientColor = ElectricColor.copy(0.3f), spotColor = ElectricColor.copy(0.3f))
                             .clip(RoundedCornerShape(8.dp))
                             .background(
@@ -1037,7 +1010,7 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                     ) {
                         Icon(
                             Icons.Default.Bolt, contentDescription = null,
-                            tint = ElectricColor, modifier = Modifier.size(iconSize * 0.55f)
+                            tint = ElectricColor, modifier = Modifier.size(14.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
@@ -1046,7 +1019,7 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                         color = TextPrimary,
                         fontFamily = MonoFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = titleSize.sp
+                        fontSize = 20.sp
                     )
                 }
 
@@ -1128,7 +1101,7 @@ private fun HomeEmptyState(onAddClick: () -> Unit, onBatchImport: () -> Unit = {
                             colors = listOf(
                                 ElectricColor.copy(alpha = breatheAlpha),
                                 ElectricColor.copy(alpha = breatheAlpha * 0.3f),
-                                DarkCard
+                                AppCard
                             )
                         )
                     )
@@ -1258,7 +1231,7 @@ private fun TierProgressBar(tierProgress: MainViewModel.TierProgress) {
                 .fillMaxWidth()
                 .height(6.dp)
                 .clip(RoundedCornerShape(3.dp))
-                .background(DarkSurface)
+                .background(AppSurface)
         ) {
             Box(
                 modifier = Modifier

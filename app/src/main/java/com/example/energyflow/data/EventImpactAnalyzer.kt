@@ -72,7 +72,8 @@ class EventImpactAnalyzer @Inject constructor() {
             val note = marker.note.orEmpty()
             when {
                 isStop(note) && startedAt != null -> {
-                    if (marker.timestamp > startedAt) windows += TimeWindow(startedAt!!, marker.timestamp)
+                    val start = startedAt ?: return@forEach
+                    if (marker.timestamp > start) windows += TimeWindow(start, marker.timestamp)
                     startedAt = null
                 }
                 isStart(note) && startedAt == null -> startedAt = marker.timestamp

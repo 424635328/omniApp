@@ -44,9 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.energyflow.data.ParseResult
 import com.example.energyflow.data.SmartInputParser
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
-import com.example.energyflow.ui.theme.DarkSurface
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
+import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.GasColor
@@ -78,7 +78,7 @@ fun BatchImportSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkBackground)
+            .background(AppBackground)
             .padding(horizontal = 20.dp, vertical = 16.dp)
             .verticalScroll(rememberScrollState())
     ) {
@@ -127,7 +127,7 @@ fun BatchImportSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(DarkCard)
+                .background(AppCard)
                 .padding(16.dp)
         ) {
             Column {
@@ -216,7 +216,7 @@ fun BatchImportSheet(
             },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = ElectricColor,
-                unfocusedBorderColor = DarkSurface,
+                unfocusedBorderColor = AppSurface,
                 cursorColor = ElectricColor,
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary
@@ -242,8 +242,8 @@ fun BatchImportSheet(
             enabled = text.isNotBlank() && !importing,
             colors = ButtonDefaults.buttonColors(
                 containerColor = ElectricColor,
-                contentColor = DarkBackground,
-                disabledContainerColor = DarkCard,
+                contentColor = AppBackground,
+                disabledContainerColor = AppCard,
                 disabledContentColor = TextSecondary
             ),
             shape = RoundedCornerShape(12.dp)

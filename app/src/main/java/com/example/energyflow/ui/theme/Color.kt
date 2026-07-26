@@ -13,43 +13,43 @@ import androidx.compose.ui.graphics.Color
 // ════════════════════════════════════════════
 
 // ── 暗色模式 · Obsidian（近黑 + 蓝调基底） ──
-val BackgroundDark = Color(0xFF0A0C14)     // 底层 — 近黑，微弱蓝调
-val SurfaceDark = Color(0xFF131624)        // 表面层 — 深海军灰
-val SurfaceVariant = Color(0xFF1A1E30)     // 卡片 — 略亮，层次分明
-val OutlineDark = Color(0xFF252A3D)        // 边框 — 含蓄
-val OutlineVariant = Color(0xFF1F2438)     // 浮层/弹窗 — 高出一档
-// 新增: M3 表面变体
-val SurfaceBrightDark = Color(0xFF1C2138)  // 抬高卡片
-val SurfaceContainerDark = Color(0xFF161B2C)// 容器底色
+val BackgroundDark = Color(0xFF080A12)     // 底层 — 深邃近黑，增强蓝调
+val SurfaceDark = Color(0xFF111425)        // 表面层 — 深海军灰
+val SurfaceVariant = Color(0xFF1B2035)     // 卡片 — 层次分明
+val OutlineDark = Color(0xFF2A304A)        // 边框 — 清晰可辨
+val OutlineVariant = Color(0xFF222842)     // 浮层/弹窗 — 高出一档
+val SurfaceBrightDark = Color(0xFF202644)  // 抬高卡片
+val SurfaceContainerDark = Color(0xFF15192C) // 容器底色
 
 // ── 亮色模式 · Pearl（暖白，干净现代） ──
-val LightBackground = Color(0xFFF8F9FC)    // 底层 — 暖白
-val LightSurface = Color(0xFFEFF1F7)       // 表面层 — 微灰
-val LightCard = Color(0xFFFFFFFF)          // 卡片 — 纯白
-val LightOutline = Color(0xFFDDE1EB)       // 边框 — 淡灰
-// 新增: M3 表面变体
+val LightBackground = Color(0xFFF5F6FA)    // 底层 — 暖白微蓝，避免纯白刺眼
+val LightSurface = Color(0xFFEAECF4)       // 表面层 — 柔和灰蓝
+val LightCard = Color(0xFFFFFFFF)          // 卡片 — 纯白，保持清晰
+val LightOutline = Color(0xFFD8DCE6)       // 边框 — 淡灰蓝，更柔和
 val SurfaceBrightLight = Color(0xFFFFFFFF) // 抬高卡片 — 纯白
-val SurfaceContainerLight = Color(0xFFF0F2F8)// 容器底色
+val SurfaceContainerLight = Color(0xFFEEEFF6) // 容器底色 — 微蓝灰
 
 // ── 能源渐变端点（精炼） ──
-val ElectricStart = Color(0xFF0098FF)      // 电光蓝
-val ElectricEnd = Color(0xFF0058DD)        // 深蓝
-val WaterStart = Color(0xFF00C8A0)         // 碧波青
-val WaterEnd = Color(0xFF0078B0)           // 深海蓝
-val GasStart = Color(0xFFFF7B3D)           // 暖橙
-val GasEnd = Color(0xFFE03000)             // 赤焰红
+val ElectricStart = Color(0xFF00A8FF)      // 电光蓝 — 更明亮鲜活
+val ElectricEnd = Color(0xFF0058DD)        // 深蓝 — 更深沉有力
+val WaterStart = Color(0xFF00DDBB)         // 碧波青 — 更鲜艳生动
+val WaterEnd = Color(0xFF007ABB)           // 深海蓝 — 更饱和沉稳
+val GasStart = Color(0xFFFF8844)           // 暖橙 — 更温暖明亮
+val GasEnd = Color(0xFFDD3300)             // 赤焰红 — 更浓郁热烈
 
 // ── 语义色（暗/亮共用） ──
-val ErrorNeon = Color(0xFFFF3B5C)          // 错误/删除
-val WarningNeon = Color(0xFFFFB020)        // 警告
-val SuccessGreen = Color(0xFF00D68F)        // 成功
+val ErrorNeon = Color(0xFFFF4466)          // 错误/删除 — 更鲜明
+val WarningNeon = Color(0xFFFFBB33)        // 警告 — 更温暖
+val SuccessGreen = Color(0xFF00DD99)        // 成功 — 更清新
+val InfoBlue = Color(0xFF3399FF)           // 信息 — 新增
+val HighlightYellow = Color(0xFFFFDD44)    // 高亮 — 新增
 
 // ════════════════════════════════════════════
-// 渐变 Brush — 用于装饰性元素
+// 渐变 Brush — 缓存实例，避免每次访问重建
 // ════════════════════════════════════════════
-val ElectricGradient: Brush get() = Brush.linearGradient(listOf(ElectricStart, ElectricEnd))
-val WaterGradient: Brush get() = Brush.linearGradient(listOf(WaterStart, WaterEnd))
-val GasGradient: Brush get() = Brush.linearGradient(listOf(GasStart, GasEnd))
+val ElectricGradient: Brush = Brush.linearGradient(listOf(ElectricStart, ElectricEnd))
+val WaterGradient: Brush = Brush.linearGradient(listOf(WaterStart, WaterEnd))
+val GasGradient: Brush = Brush.linearGradient(listOf(GasStart, GasEnd))
 
 // ════════════════════════════════════════════
 // 全局可变主题状态 — 单一 data class，一次重组
@@ -74,6 +74,10 @@ data class AppColors(
     val textPrimary: Color = Color(0xFFE2E8F0),
     val textSecondary: Color = Color(0xFF94A3B8),
     val textTertiary: Color = Color(0xFF64748B),
+    // 新增: 亮色模式文字色（更高对比度）
+    val lightTextPrimary: Color = Color(0xFF0F172A),
+    val lightTextSecondary: Color = Color(0xFF475569),
+    val lightTextTertiary: Color = Color(0xFF718096),
 )
 
 object ThemeState {
@@ -86,9 +90,9 @@ object ThemeState {
             textSecondary = Color(0xFF94A3B8),
             textTertiary = Color(0xFF64748B)
         ) else colors.copy(
-            textPrimary = Color(0xFF0F172A),
-            textSecondary = Color(0xFF475569),
-            textTertiary = Color(0xFF94A3B8)
+            textPrimary = colors.lightTextPrimary,
+            textSecondary = colors.lightTextSecondary,
+            textTertiary = colors.lightTextTertiary
         )
     }
 
@@ -114,8 +118,8 @@ val WaterColor: Color get() = ThemeState.colors.waterColor
 val GasColor: Color get() = ThemeState.colors.gasColor
 
 // 静态语义色（不跟随主题变化）
-val StaticPeakColor: Color = Color(0xFFFF8800)
-val StaticValleyColor: Color = Color(0xFF8866DD)
+val StaticPeakColor: Color = Color(0xFFFF9922)    // 峰电 — 更温暖明亮
+val StaticValleyColor: Color = Color(0xFF9977EE)  // 谷电 — 更柔和优雅
 
 /** 自动跟随暗/亮模式 */
 val AppBackground: Color get() = if (ThemeState.colors.isDark) ThemeState.colors.darkBackground else ThemeState.colors.lightBackground
@@ -141,9 +145,9 @@ val TextTertiary: Color get() = AppTextTertiary
 val NeonYellow: Color get() = ElectricStart    // 原名青绿，现为电光蓝
 val NeonOrange: Color get() = StaticPeakColor
 val NeonBlue: Color get() = WaterStart
-val NeonCyan: Color get() = Color(0xFF4488FF)
+val NeonCyan: Color get() = Color(0xFF4499FF)  // 更明亮
 val NeonRed: Color get() = GasStart
-val NeonPurple: Color get() = Color(0xFF9900FF)
+val NeonPurple: Color get() = Color(0xFFAA22FF) // 更鲜艳
 
 // ════════════════════════════════════════════
 // CompositionLocal
@@ -162,3 +166,9 @@ val LocalAppSurfaceContainer = compositionLocalOf { AppSurfaceContainer }
 val LocalAppTextPrimary = compositionLocalOf { AppTextPrimary }
 val LocalAppTextSecondary = compositionLocalOf { AppTextSecondary }
 val LocalAppTextTertiary = compositionLocalOf { AppTextTertiary }
+
+// 新增: 语义色 CompositionLocal
+val LocalErrorColor = compositionLocalOf { ErrorNeon }
+val LocalWarningColor = compositionLocalOf { WarningNeon }
+val LocalSuccessColor = compositionLocalOf { SuccessGreen }
+val LocalInfoColor = compositionLocalOf { InfoBlue }

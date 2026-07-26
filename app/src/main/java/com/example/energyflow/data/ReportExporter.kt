@@ -24,9 +24,9 @@ import kotlin.math.roundToInt
 object ReportExporter {
 
     private const val WIDTH = 1080   // px
-    private const val HEIGHT = 1920  // px
-    private const val PADDING = 60f
-    private const val CARD_RADIUS = 24f
+    private const val HEIGHT = 2400  // px — taller to accommodate water/gas cards
+    private const val PADDING = 52f
+    private const val CARD_RADIUS = 28f
 
     data class ReportContent(
         val period: String,          // e.g. "2024年1月"
@@ -40,267 +40,325 @@ object ReportExporter {
         val badges: List<String>,
         val previousCost: Double?,
         val tips: List<String>,
-        val recordCount: Int
+        val recordCount: Int,
+        val waterTons: Double = 0.0,
+        val waterCost: Double = 0.0,
+        val gasM3: Double = 0.0,
+        val gasCost: Double = 0.0,
+        val isDarkTheme: Boolean = true  // 新增: 支持亮/暗主题
     )
 
     suspend fun export(context: Context, content: ReportContent): Uri? = withContext(Dispatchers.IO) {
-        val bitmap = render(content)
         try {
-            writeToMediaStore(context, bitmap)
-        } finally {
-            bitmap.recycle()
+            val bitmap = render(content)
+            try {
+                writeToMediaStore(context, bitmap)
+            } finally {
+                bitmap.recycle()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 
     private fun render(content: ReportContent): Bitmap {
-        val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
+        val d = 3f // density multiplier
+
+        // ── 预计算内容高度 ──
+        var estimatedHeight = 0f
+        estimatedHeight += 72f * d + 50f * d  // Header
+        estimatedHeight += 240f * d + 48f * d + 16f * d  // KPI card
+        if (content.waterTons > 0 || content.gasM3 > 0) {
+            val utilityRows = if (content.waterTons > 0 && content.gasM3 > 0) 3 else 2
+            estimatedHeight += (60f + utilityRows * 56f) * d + 48f * d + 16f * d
+        }
+        if (content.peakKwh + content.valleyKwh + content.flatKwh > 0) {
+            estimatedHeight += 170f * d + 48f * d + 16f * d
+        }
+        if (content.badges.isNotEmpty()) {
+            estimatedHeight += (40f + content.badges.size * 36f) * d + 48f * d + 16f * d
+        }
+        if (content.previousCost != null && content.previousCost > 0) {
+            estimatedHeight += 80f * d + 48f * d + 16f * d
+        }
+        if (content.tips.isNotEmpty()) {
+            estimatedHeight += (40f + content.tips.size * 32f) * d + 48f * d + 16f * d
+        }
+        estimatedHeight += 40f * d + 24f * d + 28f * d + PADDING * 2  // Footer + padding
+
+        val height = estimatedHeight.roundToInt().coerceAtLeast(HEIGHT)
+        val bitmap = Bitmap.createBitmap(WIDTH, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val density = 3f
 
-        // Colors — matching Color.kt theme
-        val bgColor = 0xFF0A0C14.toInt()       // BackgroundDark
-        val cardColor = 0xFF1A1E30.toInt()     // SurfaceVariant
-        val accentColor = 0xFF0098FF.toInt()   // ElectricStart
-        val accentGreen = 0xFF00D68F.toInt()   // SuccessGreen
-        val textPrimary = 0xFFE2E8F0.toInt()
-        val textSecondary = 0xFF94A3B8.toInt()
-        val textTertiary = 0xFF64748B.toInt()
-        val peakColor = 0xFFFF8800.toInt()     // StaticPeakColor
-        val valleyColor = 0xFF8866DD.toInt()   // StaticValleyColor
-        val flatColor = 0xFF30364B.toInt()
-        val dividerColor = 0x18FFFFFF.toInt()
+        // Colors — 根据主题选择色板
+        val bg: Int
+        val card: Int
+        val accent: Int
+        val green: Int
+        val t1: Int   // text primary
+        val t2: Int   // text secondary
+        val t3: Int   // text tertiary
+        val peak: Int
+        val valley: Int
+        val flat: Int
+        val water: Int
+        val gas: Int
+        val div: Int
+        val red: Int
 
-        // ── Helpers ──
-        fun makePaint(color: Int, size: Float, bold: Boolean = false, subpixel: Boolean = true): Paint {
-            return Paint(Paint.ANTI_ALIAS_FLAG or (if (subpixel) Paint.SUBPIXEL_TEXT_FLAG else 0)).apply {
-                this.color = color
-                textSize = size * density
+        if (content.isDarkTheme) {
+            // Obsidian 暗色主题
+            bg = 0xFF0A0C14.toInt()
+            card = 0xFF1A1E30.toInt()
+            accent = 0xFF00A8FF.toInt()
+            green = 0xFF00DD99.toInt()
+            t1 = 0xFFE2E8F0.toInt()
+            t2 = 0xFF94A3B8.toInt()
+            t3 = 0xFF64748B.toInt()
+            peak = 0xFFFF9922.toInt()
+            valley = 0xFF9977EE.toInt()
+            flat = 0xFF30364B.toInt()
+            water = 0xFF00DDBB.toInt()
+            gas = 0xFFFF8844.toInt()
+            div = 0x18FFFFFF.toInt()
+            red = 0xFFFF4466.toInt()
+        } else {
+            // Pearl 亮色主题
+            bg = 0xFFF5F6FA.toInt()
+            card = 0xFFFFFFFF.toInt()
+            accent = 0xFF0058DD.toInt()
+            green = 0xFF00AA77.toInt()
+            t1 = 0xFF0F172A.toInt()
+            t2 = 0xFF475569.toInt()
+            t3 = 0xFF718096.toInt()
+            peak = 0xFFDD7700.toInt()
+            valley = 0xFF7755CC.toInt()
+            flat = 0xFFD8DCE6.toInt()
+            water = 0xFF009988.toInt()
+            gas = 0xFFDD6622.toInt()
+            div = 0x18000000.toInt()
+            red = 0xFFDD2244.toInt()
+        }
+
+        // ── Paint factory ──
+        fun paint(color: Int, sp: Float, bold: Boolean = false): Paint =
+            Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
+                this.color = color; textSize = sp * d
                 if (bold) typeface = android.graphics.Typeface.DEFAULT_BOLD
             }
+
+        fun centered(text: String, p: Paint, y: Float) {
+            canvas.drawText(text, (WIDTH - p.measureText(text)) / 2f, y, p)
         }
 
-        fun drawTextCentered(text: String, paint: Paint, yPos: Float) {
-            val x = (WIDTH - paint.measureText(text)) / 2f
-            canvas.drawText(text, x, yPos, paint)
-        }
-
-        fun drawDivider(yPos: Float, margin: Float = 32f * density) {
-            val divPaint = makePaint(dividerColor, 1f)
-            canvas.drawLine(PADDING + margin, yPos, WIDTH - PADDING - margin, yPos, divPaint)
-        }
-
-        fun drawCardShadow(top: Float, cardHeight: Float) {
-            val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = 0x22000000.toInt()
-                maskFilter = BlurMaskFilter(10f * density, BlurMaskFilter.Blur.NORMAL)
+        fun drawCard(top: Float, h: Float) {
+            // Outer shadow (depth)
+            val shadowOuter = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (content.isDarkTheme) 0x30000000.toInt() else 0x20000000.toInt()
+                maskFilter = BlurMaskFilter(12f * d, BlurMaskFilter.Blur.NORMAL)
             }
-            val offset = 4f * density
-            canvas.drawRoundRect(
-                RectF(PADDING + offset, top + offset, WIDTH - PADDING + offset, top + cardHeight + offset),
-                CARD_RADIUS * density, CARD_RADIUS * density, shadowPaint
-            )
+            val r = CARD_RADIUS * d
+            val rect = RectF(PADDING, top, WIDTH - PADDING, top + h)
+            canvas.drawRoundRect(RectF(rect).apply { offset(4f * d, 4f * d) }, r, r, shadowOuter)
+            // Inner shadow (subtle)
+            val shadowInner = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (content.isDarkTheme) 0x15000000.toInt() else 0x10000000.toInt()
+                maskFilter = BlurMaskFilter(6f * d, BlurMaskFilter.Blur.NORMAL)
+            }
+            canvas.drawRoundRect(RectF(rect).apply { offset(1.5f * d, 1.5f * d) }, r, r, shadowInner)
+            // Card background
+            canvas.drawRoundRect(rect, r, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = card })
+            // Top edge highlight
+            val highlight = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (content.isDarkTheme) 0x0AFFFFFF.toInt() else 0x0A000000.toInt()
+                strokeWidth = 1f
+                style = Paint.Style.STROKE
+            }
+            canvas.drawRoundRect(RectF(rect).apply { bottom = top + 1.5f * d }, r, r, highlight)
         }
 
-        fun drawCardBg(top: Float, cardHeight: Float) {
-            val cardPaint = makePaint(cardColor, 1f).apply { isAntiAlias = true }
-            canvas.drawRoundRect(
-                RectF(PADDING, top, WIDTH - PADDING, top + cardHeight),
-                CARD_RADIUS * density, CARD_RADIUS * density, cardPaint
-            )
+        // ── Background + gradient ──
+        canvas.drawColor(bg)
+        val headerGrad = LinearGradient(
+            0f, 0f, WIDTH.toFloat(), 320f * d,
+            if (content.isDarkTheme) {
+                intArrayOf(0x5500A8FF.toInt(), 0x1800A8FF.toInt(), bg)
+            } else {
+                intArrayOf(0x330058DD.toInt(), 0x110058DD.toInt(), bg)
+            },
+            floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP
+        )
+        canvas.drawRect(0f, 0f, WIDTH.toFloat(), 320f * d, Paint().apply { shader = headerGrad })
+
+        // Subtle grid dots
+        val dotP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (content.isDarkTheme) 0x06FFFFFF.toInt() else 0x06000000.toInt()
         }
-
-        // Background
-        canvas.drawColor(bgColor)
-
-        // Subtle dot grid pattern
-        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x08FFFFFF.toInt() }
-        val gridSpacing = 24f * density
-        val dotRadius = 1.5f * density
+        val gs = 28f * d
         var gx = 0f
         while (gx < WIDTH) {
             var gy = 0f
-            while (gy < HEIGHT) {
-                canvas.drawCircle(gx, gy, dotRadius, dotPaint)
-                gy += gridSpacing
-            }
-            gx += gridSpacing
+            while (gy < HEIGHT) { canvas.drawCircle(gx, gy, 1.2f * d, dotP); gy += gs }
+            gx += gs
         }
 
-        // ── Gradient header ──
-        val headerGradient = LinearGradient(
-            0f, 0f, WIDTH.toFloat(), 300f * density,
-            intArrayOf(0x440098FF.toInt(), 0x0D0098FF.toInt(), bgColor),
-            floatArrayOf(0f, 0.55f, 1f),
-            Shader.TileMode.CLAMP
-        )
-        canvas.drawRect(0f, 0f, WIDTH.toFloat(), 300f * density, Paint().apply { shader = headerGradient })
-
-        // ── Title paints ──
-        val titlePaint = makePaint(0xFFFFFFFF.toInt(), 48f, bold = true)
-        val subtitlePaint = makePaint(textSecondary, 28f)
-        val valuePaint = makePaint(accentColor, 56f, bold = true)
-        val labelPaint = makePaint(textTertiary, 24f)
-        val greenValuePaint = makePaint(accentGreen, 48f, bold = true)
-        val sectionPaint = makePaint(textPrimary, 30f, bold = true)
-        val bodyPaint = makePaint(textPrimary, 32f)
-        val smallPaint = makePaint(textSecondary, 22f)
-        val kpiCostPaint = makePaint(accentGreen, 52f, bold = true)
+        // ── Paints ──
+        val titleP = paint(if (content.isDarkTheme) 0xFFFFFFFF.toInt() else 0xFF0F172A.toInt(), 44f, bold = true)
+        val subP = paint(t2, 26f)
+        val kpiP = paint(accent, 54f, bold = true)
+        val costP = paint(green, 50f, bold = true)
+        val labelP = paint(t3, 22f)
+        val sectionP = paint(t1, 28f, bold = true)
+        val bodyP = paint(t1, 30f)
+        val smallP = paint(t2, 20f)
+        val greenP = paint(green, 44f, bold = true)
+        val waterP = paint(water, 32f, bold = true)
+        val gasP = paint(gas, 32f, bold = true)
+        val valueSmallP = paint(t1, 26f)
 
         var y = PADDING
 
         // ── Header ──
-        drawTextCentered("⚡ 能耗报告", titlePaint, y)
-        y += 70f * density
-        drawTextCentered(content.period, subtitlePaint, y)
-        y += 55f * density
+        centered("⚡ 能耗报告", titleP, y + 44f * d)
+        y += 72f * d
+        centered(content.period, subP, y)
+        y += 50f * d
 
-        // ── Card 1: Total KPI ──
-        val card1ContentH = 210f * density
-        val card1H = card1ContentH + 64f * density
-        drawCardShadow(y, card1H)
-        drawCardBg(y, card1H)
-        var cy = y + 36f * density
-        drawTextCentered("总用电量", labelPaint, cy)
-        cy += 48f * density
-        drawTextCentered("%.1f kWh".format(content.totalKwh), valuePaint, cy)
-        cy += 64f * density
-        drawTextCentered("总费用 ¥%.2f".format(content.totalCost), kpiCostPaint, cy)
-        cy += 54f * density
-        drawTextCentered("CO₂ %.1f kg".format(content.co2Kg), bodyPaint, cy)
-        y += card1H + 24f * density
+        // ── Card 1: KPI ──
+        val c1h = 240f * d
+        drawCard(y, c1h + 48f * d)
+        var cy = y + 32f * d
+        centered("总用电量", labelP, cy); cy += 42f * d
+        centered("%.1f kWh".format(content.totalKwh), kpiP, cy); cy += 64f * d
+        centered("¥%.2f".format(content.totalCost), costP, cy); cy += 52f * d
+        centered("CO₂ %.1f kg · 等效植树 %d 天".format(content.co2Kg, content.treeDays), paint(t2, 20f), cy)
+        y += c1h + 48f * d + 16f * d
 
-        // ── Card 2: Peak/Valley stacked bar ──
-        val totalPv = content.peakKwh + content.valleyKwh + content.flatKwh
-        val card2ContentH: Float
-        if (totalPv > 0) {
-            card2ContentH = 175f * density
-        } else {
-            card2ContentH = 100f * density
+        // ── Card 2: Utility breakdown (water/gas if available) ──
+        val hasWater = content.waterTons > 0
+        val hasGas = content.gasM3 > 0
+        if (hasWater || hasGas) {
+            val utilityRows = if (hasWater && hasGas) 3 else 2
+            val cUtilH = (60f + utilityRows * 56f) * d
+            drawCard(y, cUtilH + 48f * d)
+            cy = y + 32f * d
+            centered("💧 公用事业", sectionP, cy); cy += 50f * d
+
+            if (hasWater) {
+                val waterLabel = "水费  %.1f 吨  ¥%.2f".format(content.waterTons, content.waterCost)
+                canvas.drawText(waterLabel, PADDING + 32f * d, cy, waterP)
+                cy += 52f * d
+            }
+            if (hasGas) {
+                val gasLabel = "燃气  %.1f m³  ¥%.2f".format(content.gasM3, content.gasCost)
+                canvas.drawText(gasLabel, PADDING + 32f * d, cy, gasP)
+                cy += 52f * d
+            }
+            // Total utilities cost
+            val utilTotal = content.waterCost + content.gasCost
+            if (utilTotal > 0) {
+                val totalLabel = "合计  ¥%.2f".format(utilTotal)
+                canvas.drawText(totalLabel, PADDING + 32f * d, cy, valueSmallP)
+            }
+            y += cUtilH + 48f * d + 16f * d
         }
-        val card2H = card2ContentH + 64f * density
-        drawCardShadow(y, card2H)
-        drawCardBg(y, card2H)
-        cy = y + 36f * density
 
+        // ── Card 3: Peak/Valley bar ──
+        val totalPv = content.peakKwh + content.valleyKwh + content.flatKwh
         if (totalPv > 0) {
             val peakPct = (content.peakKwh / totalPv * 100).roundToInt()
             val valleyPct = (content.valleyKwh / totalPv * 100).roundToInt()
-            val flatPct = (content.flatKwh / totalPv * 100).roundToInt()
+            val flatPct = 100 - peakPct - valleyPct
 
-            drawTextCentered("峰谷平占比", sectionPaint, cy)
-            cy += 50f * density
+            val c2h = 170f * d
+            drawCard(y, c2h + 48f * d)
+            cy = y + 32f * d
+            centered("峰谷平占比", sectionP, cy); cy += 50f * d
 
-            // Stacked bar
-            val barLeft = (WIDTH * 0.13f)
-            val barRight = (WIDTH * 0.87f)
-            val barWidth = barRight - barLeft
-            val barHeight = 40f * density
-            val cornerR = 12f * density
+            val barL = WIDTH * 0.12f; val barR = WIDTH * 0.88f
+            val barW = barR - barL; val barH = 36f * d; val cr = 10f * d
 
-            // Peak segment
+            // Draw stacked bar with rounded ends
+            val barRect = RectF(barL, cy, barR, cy + barH)
+            canvas.drawRoundRect(barRect, cr, cr, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = flat })
+
             if (peakPct > 0) {
-                val peakW = barWidth * peakPct / 100f
-                val peakPaint = makePaint(peakColor, 1f)
-                peakPaint.isAntiAlias = true
-                canvas.drawRoundRect(RectF(barLeft, cy, barLeft + peakW, cy + barHeight), cornerR, 0f, peakPaint)
-                // Overlap correction: draw left corners only
-                canvas.drawRect(RectF(barLeft + cornerR, cy, barLeft + peakW, cy + barHeight), peakPaint)
+                val pw = barW * peakPct / 100f
+                val pp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = peak }
+                canvas.drawRoundRect(RectF(barL, cy, barL + pw, cy + barH), cr, cr, pp)
+                canvas.drawRect(RectF(barL + cr, cy, barL + pw, cy + barH), pp)
             }
-            // Flat segment
-            if (flatPct > 0) {
-                val flatLeft = barLeft + barWidth * peakPct / 100f
-                val flatW = barWidth * flatPct / 100f
-                val flatPaint = makePaint(flatColor, 1f)
-                flatPaint.isAntiAlias = true
-                canvas.drawRect(RectF(flatLeft, cy, flatLeft + flatW, cy + barHeight), flatPaint)
-            }
-            // Valley segment
             if (valleyPct > 0) {
-                val valleyLeft = barLeft + barWidth * (peakPct + flatPct) / 100f
-                val valleyW = barWidth * valleyPct / 100f
-                val valleyPaint = makePaint(valleyColor, 1f)
-                valleyPaint.isAntiAlias = true
-                canvas.drawRoundRect(RectF(valleyLeft, cy, valleyLeft + valleyW, cy + barHeight), 0f, cornerR, valleyPaint)
-                // Overlap correction: draw right side flat
-                canvas.drawRect(RectF(valleyLeft, cy, valleyLeft + valleyW - cornerR, cy + barHeight), valleyPaint)
+                val vl = barL + barW * (peakPct + flatPct) / 100f
+                val vw = barW * valleyPct / 100f
+                val vp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = valley }
+                canvas.drawRoundRect(RectF(vl, cy, vl + vw, cy + barH), cr, cr, vp)
+                canvas.drawRect(RectF(vl, cy, vl + vw - cr, cy + barH), vp)
             }
-
-            cy += barHeight + 32f * density
+            cy += barH + 24f * d
 
             // Legend
-            val legendY = cy
-            val lx = barLeft
-            val dotR = 8f * density
-            // Peak dot + label
-            val dotPaint = makePaint(peakColor, 1f)
-            dotPaint.isAntiAlias = true
-            canvas.drawCircle(lx + dotR, legendY - 6f * density, dotR, dotPaint)
-            canvas.drawText("峰 %dkWh (%d%%)".format(content.peakKwh.toInt(), peakPct), lx + 24f * density, legendY, smallPaint)
-
-            // Valley dot + label
-            val valleyDotX = WIDTH / 2f
-            val valleyDotPaint = makePaint(valleyColor, 1f)
-            valleyDotPaint.isAntiAlias = true
-            canvas.drawCircle(valleyDotX + dotR, legendY - 6f * density, dotR, valleyDotPaint)
-            canvas.drawText("谷 %dkWh (%d%%)".format(content.valleyKwh.toInt(), valleyPct), valleyDotX + 24f * density, legendY, smallPaint)
-
-            // Flat dot + label (if exists)
-            if (flatPct > 0) {
-                val flatDotX = lx + barWidth * 0.55f
-                val flatDotLPaint = makePaint(flatColor, 1f)
-                flatDotLPaint.isAntiAlias = true
-                canvas.drawCircle(flatDotX + dotR, legendY - 6f * density, dotR, flatDotLPaint)
-                canvas.drawText("平 %dkWh (%d%%)".format(content.flatKwh.toInt(), flatPct), flatDotX + 24f * density, legendY, smallPaint)
-            }
-        } else {
-            drawTextCentered("暂无峰谷数据", labelPaint, cy)
+            val lx = barL; val dr = 7f * d
+            canvas.drawCircle(lx + dr, cy - 5f * d, dr, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = peak })
+            canvas.drawText("峰 %dkWh (%d%%)".format(content.peakKwh.toInt(), peakPct), lx + 20f * d, cy, smallP)
+            val vx = WIDTH * 0.52f
+            canvas.drawCircle(vx + dr, cy - 5f * d, dr, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = valley })
+            canvas.drawText("谷 %dkWh (%d%%)".format(content.valleyKwh.toInt(), valleyPct), vx + 20f * d, cy, smallP)
+            y += c2h + 48f * d + 16f * d
         }
-        y += card2H + 24f * density
-
-        // ── Card 3: Carbon footprint ──
-        val card3ContentH = 115f * density
-        val card3H = card3ContentH + 64f * density
-        drawCardShadow(y, card3H)
-        drawCardBg(y, card3H)
-        cy = y + 36f * density
-        drawTextCentered("🌳 碳足迹 & 树木", sectionPaint, cy)
-        cy += 50f * density
-        drawTextCentered("等效植树 %.1f 棵 / %d 天".format(content.co2Kg / 20.0, content.treeDays), greenValuePaint, cy)
-        y += card3H + 24f * density
 
         // ── Card 4: Badges ──
-        val badgeCount = content.badges.size.coerceAtLeast(1)
-        val card4ContentH = 50f * density + badgeCount * 42f * density
-        val card4H = card4ContentH + 64f * density
-        drawCardShadow(y, card4H)
-        drawCardBg(y, card4H)
-        cy = y + 36f * density
-        drawTextCentered("🏅 成就徽章", sectionPaint, cy)
-        cy += 50f * density
-        content.badges.forEach { badge ->
-            val badgePaint = makePaint(accentGreen, 28f, bold = true)
-            val badgeW = badgePaint.measureText(badge)
-            val badgeX = (WIDTH - badgeW) / 2f
-            canvas.drawText(badge, badgeX, cy, badgePaint)
-            cy += 42f * density
+        if (content.badges.isNotEmpty()) {
+            val bc = content.badges.size
+            val c3h = (40f + bc * 36f) * d
+            drawCard(y, c3h + 48f * d)
+            cy = y + 32f * d
+            centered("🏅 成就徽章", sectionP, cy); cy += 42f * d
+            content.badges.forEach { badge ->
+                centered(badge, paint(green, 26f, bold = true), cy)
+                cy += 36f * d
+            }
+            y += c3h + 48f * d + 16f * d
         }
-        y += card4H + 24f * density
+
+        // ── Card 5: Previous cost comparison ──
+        if (content.previousCost != null && content.previousCost > 0) {
+            val diff = content.totalCost - content.previousCost
+            val isUp = diff > 0
+            val c4h = 80f * d
+            drawCard(y, c4h + 48f * d)
+            cy = y + 32f * d
+            centered("较上月", labelP, cy); cy += 38f * d
+            val diffColor = if (isUp) red else green
+            val arrow = if (isUp) "↑" else "↓"
+            centered("%s ¥%.2f".format(arrow, kotlin.math.abs(diff)), paint(diffColor, 32f, bold = true), cy)
+            y += c4h + 48f * d + 16f * d
+        }
+
+        // ── Tips ──
+        if (content.tips.isNotEmpty()) {
+            val tipH = (40f + content.tips.size * 32f) * d
+            drawCard(y, tipH + 48f * d)
+            cy = y + 32f * d
+            centered("💡 节能建议", sectionP, cy); cy += 38f * d
+            content.tips.forEach { tip ->
+                centered(tip, paint(t2, 20f), cy)
+                cy += 32f * d
+            }
+            y += tipH + 48f * d + 16f * d
+        }
 
         // ── Record count ──
-        val recText = "📊 本月记录 ${content.recordCount} 条"
-        val recPaint = makePaint(textSecondary, 24f)
-        drawTextCentered(recText, recPaint, y)
-        y += 44f * density
-
-        // ── Divider before footer ──
-        drawDivider(y, 60f * density)
-        y += 28f * density
+        centered("📊 本月记录 ${content.recordCount} 条", paint(t2, 22f), y)
+        y += 40f * d
 
         // ── Footer ──
-        val footerPaint = makePaint(textTertiary, 22f)
-        drawTextCentered("Energy Flow · 你的能耗小助手", footerPaint, y)
-        y += 32f * density
-        drawTextCentered("💚 感谢你为节能减排做出的贡献！", footerPaint, y)
+        canvas.drawLine(PADDING + 50f * d, y, WIDTH - PADDING - 50f * d, y, paint(div, 1f))
+        y += 24f * d
+        centered("Energy Flow · 你的能耗小助手", paint(t3, 20f), y)
+        y += 28f * d
+        centered("💚 感谢你为节能减排做出的贡献！", paint(t3, 20f), y)
 
         return bitmap
     }

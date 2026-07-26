@@ -215,7 +215,7 @@ object OcrSmartProcessor {
      */
     private fun correctSevenSegment(text: String): String {
         return text.map { ch ->
-            if (ch in DIGIT_REPLACEMENTS) DIGIT_REPLACEMENTS[ch]!! else ch
+            DIGIT_REPLACEMENTS[ch] ?: ch
         }.joinToString("")
     }
 

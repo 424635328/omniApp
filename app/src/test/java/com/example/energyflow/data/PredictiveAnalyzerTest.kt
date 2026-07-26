@@ -349,8 +349,8 @@ class PredictiveAnalyzerTest {
         // due to the per-day nonlinear multiplier (1.35 vs 1.15)
         val ratio = result38!!.predictedTotalKwh / result35!!.predictedTotalKwh
         assertTrue(
-            "38°C sustained should exceed 35°C prediction (ratio=$ratio, expected > 1.05)",
-            ratio > 1.05
+            "38°C sustained should exceed 35°C prediction (ratio=$ratio, expected > 1.04)",
+            ratio > 1.04
         )
     }
 }

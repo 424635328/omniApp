@@ -45,7 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.energyflow.R
-import com.example.energyflow.ui.theme.DarkBackground
+import com.example.energyflow.ui.theme.AppBackground
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricGradient
 import com.example.energyflow.ui.theme.MonoFontFamily
@@ -145,7 +145,7 @@ fun SplashScreen(onFinished: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppBackground)
             .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { handleTap() }
             .graphicsLayer { alpha = currentAlpha },
         contentAlignment = Alignment.Center

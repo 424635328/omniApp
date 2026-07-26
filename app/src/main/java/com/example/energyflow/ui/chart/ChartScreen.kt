@@ -70,9 +70,9 @@ import com.example.energyflow.data.WeatherInterpolator
 import com.example.energyflow.data.DailyWeather
 import com.example.energyflow.data.EventImpact
 import com.example.energyflow.data.MonthPrediction
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
-import com.example.energyflow.ui.theme.DarkSurface
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
+import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
@@ -156,7 +156,7 @@ fun ChartScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DarkBackground)
+                .background(AppBackground)
                 .verticalScroll(scrollState)
         ) {
             ChartTopBar(chartData, isEmpty, timeRange, selectedMeterType, onWrapped)
@@ -228,7 +228,7 @@ fun ChartScreen(
                     .size(40.dp)
                     .shadow(6.dp, CircleShape, ambientColor = ElectricColor.copy(0.3f))
                     .clip(CircleShape)
-                    .background(DarkCard)
+                    .background(AppCard)
                     .clickable { coroutineScope.launch { scrollState.animateScrollTo(0) } },
                 contentAlignment = Alignment.Center
             ) {
@@ -291,7 +291,7 @@ private fun ChartTopBar(
                     listOf(
                         topColor.copy(alpha = 0.08f),
                         topColor.copy(alpha = 0.03f),
-                        DarkBackground
+                        AppBackground
                     )
                 )
             )
@@ -384,7 +384,7 @@ private fun TimeRangeSelector(selectedRange: TimeRange, onRangeSelected: (TimeRa
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, ElectricColor.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
             .padding(4.dp)
     ) {
@@ -441,7 +441,7 @@ private fun ToggleCostButton(showCost: Boolean, onToggle: () -> Unit) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
-                .background(DarkCard)
+                .background(AppCard)
                 .border(1.dp, ElectricColor.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
                 .clickable { onToggle() }
                 .padding(horizontal = 5.dp, vertical = 5.dp)
@@ -511,7 +511,7 @@ private fun ChartSection(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, accentColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
             .drawBehind {
                 drawRoundRect(
@@ -557,7 +557,7 @@ private fun ChartSection(
                         .clip(RoundedCornerShape(16.dp))
                         .background(
                             if (showWeather) NeonBlue.copy(alpha = 0.12f)
-                            else DarkSurface
+                            else AppSurface
                         )
                         .clickable { onToggleWeather() }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -699,8 +699,8 @@ private fun KpiCard(
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        DarkCard,
-                        DarkCard.copy(alpha = 0.85f)
+                        AppCard,
+                        AppCard.copy(alpha = 0.85f)
                     )
                 )
             )
@@ -778,7 +778,7 @@ private fun BillBreakdownPanel(bill: BillData) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, ElectricColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
             .padding(18.dp)
     ) {
@@ -917,7 +917,7 @@ private fun BillBreakdownPanel(bill: BillData) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(DarkSurface)
+                        .background(AppSurface)
                         .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -936,7 +936,7 @@ private fun BillBreakdownPanel(bill: BillData) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(DarkSurface)
+                    .background(AppSurface)
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -1070,7 +1070,7 @@ private fun PredictionPanel(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, ElectricColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
             .padding(18.dp)
     ) {
@@ -1142,7 +1142,7 @@ private fun PredictionPanel(
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(DarkSurface)
+                .background(AppSurface)
         ) {
             Box(
                 modifier = Modifier
@@ -1240,7 +1240,7 @@ private fun PredictionPanel(
                     .weight(1f)
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(DarkSurface)
+                    .background(AppSurface)
             ) {
                 Box(
                     modifier = Modifier
@@ -1301,7 +1301,7 @@ private fun PredictionPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(DarkSurface)
+                    .background(AppSurface)
                     .padding(12.dp)
             ) {
                 Column {
@@ -1357,7 +1357,7 @@ private fun PredictionStatCard(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(DarkSurface)
+            .background(AppSurface)
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -1399,7 +1399,7 @@ private fun EventImpactPanel(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, ElectricColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
             .padding(18.dp)
     ) {
@@ -1627,7 +1627,7 @@ private fun EventImpactPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(DarkSurface)
+                        .background(AppSurface)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -1699,7 +1699,7 @@ private fun AnnotationsList(annotations: List<MeterRecord>) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, ElectricColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
             .padding(18.dp)
     ) {
@@ -1728,7 +1728,7 @@ private fun AnnotationsList(annotations: List<MeterRecord>) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(DarkSurface)
+                    .background(AppSurface)
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1796,7 +1796,7 @@ private fun EmptyChartPlaceholder(meterType: ChartViewModel.MeterType = ChartVie
                             listOf(
                                 color.copy(alpha = 0.15f),
                                 color.copy(alpha = 0.05f),
-                                DarkCard
+                                AppCard
                             )
                         )
                     )
@@ -1968,7 +1968,7 @@ private fun MeterTypeSelector(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, ElectricColor.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
             .padding(4.dp)
     ) {
@@ -2354,7 +2354,7 @@ private fun WaterBillPanel(bill: WaterBillData) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, WaterColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
             .padding(18.dp)
     ) {
@@ -2395,7 +2395,7 @@ private fun WaterBillPanel(bill: WaterBillData) {
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(DarkSurface)
+                .background(AppSurface)
         ) {
             Box(
                 modifier = Modifier
@@ -2486,7 +2486,7 @@ private fun WaterPredictionPanel(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, WaterColor.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
             .padding(18.dp)
     ) {
@@ -2526,7 +2526,7 @@ private fun WaterPredictionPanel(
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(DarkSurface)
+                .background(AppSurface)
         ) {
             Box(
                 modifier = Modifier
@@ -2597,7 +2597,7 @@ private fun CarbonSummaryCard(carbonResult: CarbonResult) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, SuccessGreen.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
             .padding(18.dp)
     ) {
@@ -2634,7 +2634,7 @@ private fun CarbonSummaryCard(carbonResult: CarbonResult) {
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(DarkSurface)
+                    .background(AppSurface)
                     .padding(12.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -2660,7 +2660,7 @@ private fun CarbonSummaryCard(carbonResult: CarbonResult) {
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(DarkSurface)
+                    .background(AppSurface)
                     .padding(12.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -2686,7 +2686,7 @@ private fun CarbonSummaryCard(carbonResult: CarbonResult) {
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(DarkSurface)
+                    .background(AppSurface)
                     .padding(12.dp),
                 contentAlignment = Alignment.Center
             ) {

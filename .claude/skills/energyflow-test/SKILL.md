@@ -1,36 +1,36 @@
 ---
 name: energyflow-test
-description: 测试运行与调试——快速运行、解读结果、写新测试
+description: Test running and debugging — quick execution, result interpretation, writing new tests
 ---
 
-# EnergyFlow — 测试运行与调试
+# EnergyFlow — Test Running and Debugging
 
-**用途**: 运行测试 / 调试测试失败 / 写新测试时使用。
+**Use when**: Running tests / debugging test failures / writing new tests.
 
-## 快速运行
+## Quick Execution
 
 ```bash
-# 全量
+# All tests
 ./gradlew :app:testDebugUnitTest
 
-# 单个测试类
+# Single test class
 ./gradlew :app:testDebugUnitTest --tests "com.example.energyflow.data.CostEngineTest"
 
-# 单个测试方法（用反引号中的描述）
+# Single test method (using backtick description)
 ./gradlew :app:testDebugUnitTest --tests "com.example.energyflow.data.CostEngineTest.electric tiers apply additive surcharge"
 
 # KMP shared module
 ./gradlew :shared:jvmTest
 
-# 编译检查（比跑测试快）
+# Compile check (faster than running tests)
 ./gradlew :app:compileDebugKotlin
 ./gradlew :shared:compileDebugKotlinAndroid
 ```
 
-## 测试文件速查
+## Test File Quick Reference
 
-| 测试文件 | 被测类 | 测试数 | 快速命令 |
-|---------|--------|--------|---------|
+| Test File | Class Under Test | Test Count | Quick Command |
+|-----------|-----------------|------------|---------------|
 | `CostEngineTest` | CostEngine/CostEngineShared | 4 | `--tests "*.data.CostEngineTest"` |
 | `PredictiveAnalyzerTest` | PredictiveAnalyzer | 15+ | `--tests "*.data.PredictiveAnalyzerTest"` |
 | `SmartInputParserTest` | SmartInputParser | 35+ | `--tests "*.data.SmartInputParserTest"` |
@@ -42,31 +42,31 @@ description: 测试运行与调试——快速运行、解读结果、写新测�
 | `MeterRepositoryTest` | MeterRepository | — | `--tests "*.data.MeterRepositoryTest"` |
 | `UserPreferencesTest` | UserPreferences | — | `--tests "*.data.UserPreferencesTest"` |
 
-## 测试失败排查
+## Test Failure Troubleshooting
 
-### 常见失败原因
-| 症状 | 可能原因 | 修复 |
-|------|---------|------|
-| assertEquals 差值很小 | 浮点精度 | 调大 delta 或使用 `roundTo` |
-| assertEquals 差值很大 | 逻辑错或测试数据错 | 检查计算逻辑 |
-| NullPointerException | Mock 不完整 | 补 coEvery 或使用 Fake |
-| ClassCastException | 类型不匹配 | 检查 cast |
-| Unresolved reference | import 缺失 | 自动补 import |
-| coEvery not matched | MockK stub 顺序 | 检查 stub 链 |
+### Common Failure Causes
+| Symptom | Possible Cause | Fix |
+|---------|---------------|-----|
+| assertEquals with small difference | Floating point precision | Increase delta or use `roundTo` |
+| assertEquals with large difference | Logic error or wrong test data | Check calculation logic |
+| NullPointerException | Incomplete mock | Add coEvery or use Fake |
+| ClassCastException | Type mismatch | Check cast |
+| Unresolved reference | Missing import | Auto-add import |
+| coEvery not matched | MockK stub order | Check stub chain |
 
-### 调试技巧
+### Debugging Tips
 ```kotlin
-// 1. 打印中间值（临时调试）
+// 1. Print intermediate values (temporary debug)
 println("DEBUG: tier1=$tier1, tier2=$tier2, avgSurcharge=$avgSurcharge")
 
-// 2. 逐步注释缩小范围
-// 3. 检查 Mock 是否正确挂载（coEvery vs every）
-// 4. 检查时间依赖是否固定（不用 LocalDateTime.now()）
+// 2. Progressively comment out to narrow scope
+// 3. Check if Mock is correctly mounted (coEvery vs every)
+// 4. Check if time dependency is fixed (do not use LocalDateTime.now())
 ```
 
-## 写新测试模板
+## New Test Template
 
-### 纯逻辑测试（CostEngine/PredictiveAnalyzer/CarbonCalculator）
+### Pure Logic Tests (CostEngine/PredictiveAnalyzer/CarbonCalculator)
 ```kotlin
 @Test
 fun `descriptive behavior name in backticks`() {
@@ -79,7 +79,7 @@ fun `descriptive behavior name in backticks`() {
 }
 ```
 
-### Repository/DAO 测试（需要 Mock）
+### Repository/DAO Tests (Require Mock)
 ```kotlin
 @Test
 fun `repository deduplicates identical insert`() = runTest {
@@ -89,14 +89,14 @@ fun `repository deduplicates identical insert`() = runTest {
 }
 ```
 
-### 测试规范
-- ✅ 方法名用反引号描述行为: `` `electric tiers apply additive surcharge` ``
-- ✅ 使用 AAA 模式 (Arrange-Act-Assert)
-- ✅ 浮点数用 delta: `assertEquals(expected, actual, 0.01)`
-- ✅ 时间依赖用固定时间，不用 `LocalDateTime.now()`
-- ❌ 不要用 `testCase1` / `testCalculate` 这种命名
-- ❌ 不要在测试间共享可变状态
+### Test Conventions
+- ✅ Method names use backtick descriptions: `` `electric tiers apply additive surcharge` ``
+- ✅ Use AAA pattern (Arrange-Act-Assert)
+- ✅ Use delta for floating point: `assertEquals(expected, actual, 0.01)`
+- ✅ Use fixed time for time dependencies, not `LocalDateTime.now()`
+- ❌ Do not use names like `testCase1` / `testCalculate`
+- ❌ Do not share mutable state between tests
 
-## 相关 Skills
-- Bug 诊断: `energyflow-diagnose` — 写复现测试是诊断的第一步
-- 预检: `energyflow-quick-scan` — 测试通过后做扫描再提交
+## Related Skills
+- Bug diagnosis: `energyflow-diagnose` — writing a reproduction test is the first step in diagnosis
+- Pre-scan: `energyflow-quick-scan` — scan after tests pass before committing

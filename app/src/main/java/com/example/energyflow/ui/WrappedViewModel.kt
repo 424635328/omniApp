@@ -35,9 +35,6 @@ class WrappedViewModel @Inject constructor(
         peakKwh = 0.0,
         valleyKwh = 0.0,
         flatKwh = 0.0,
-        hotDays = 0,
-        coldDays = 0,
-        avgTemp = null,
         eventHighlights = emptyList(),
         previousPeriodKwh = null,
         previousPeriodCost = null,
@@ -67,7 +64,6 @@ class WrappedViewModel @Inject constructor(
                         totalKwh = 0.0, totalCost = 0.0, totalCo2Kg = 0.0,
                         treeDays = 0, badges = emptyList(),
                         peakKwh = 0.0, valleyKwh = 0.0, flatKwh = 0.0,
-                        hotDays = 0, coldDays = 0, avgTemp = null,
                         eventHighlights = emptyList(),
                         previousPeriodKwh = null, previousPeriodCost = null,
                         tips = listOf("添加更多电表数据以生成报告"),
@@ -91,7 +87,8 @@ class WrappedViewModel @Inject constructor(
                 val bill = costEngine.calculateBill(totalKwh, peakKwh, valleyKwh)
                 val totalCost = bill.totalCost
 
-                val totalCo2Kg = totalKwh * 0.7
+                // 使用中国电网平均排放因子 0.583 kg CO₂/kWh
+                val totalCo2Kg = totalKwh * 0.583
                 val treeDays = (totalCo2Kg / 20.0).toInt().coerceAtLeast(0)
 
                 val badges = mutableListOf<String>()
@@ -138,9 +135,6 @@ class WrappedViewModel @Inject constructor(
                     peakKwh = peakKwh,
                     valleyKwh = valleyKwh,
                     flatKwh = flatKwh,
-                    hotDays = 0,
-                    coldDays = 0,
-                    avgTemp = null,
                     eventHighlights = emptyList(),
                     previousPeriodKwh = previousPeriodKwh,
                     previousPeriodCost = previousPeriodCost,

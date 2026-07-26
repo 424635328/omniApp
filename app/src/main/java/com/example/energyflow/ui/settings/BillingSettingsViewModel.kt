@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.energyflow.data.BillReportGenerator
 import com.example.energyflow.data.BatchInsertResult
 import com.example.energyflow.data.BillingRules
+import com.example.energyflow.data.CarbonFootprint
 import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.data.MeterRepository
 import com.example.energyflow.data.ReportExporter
@@ -26,8 +27,14 @@ import javax.inject.Inject
 class BillingSettingsViewModel @Inject constructor(
     private val userPreferences: UserPreferences,
     private val repository: MeterRepository,
-    private val costEngine: com.example.energyflow.data.CostEngine
+    private val costEngine: com.example.energyflow.data.CostEngine,
+    private val carbonFootprint: CarbonFootprint
 ) : ViewModel() {
+
+    companion object {
+        private val jsonPretty = Json { prettyPrint = true }
+        private val jsonLenient = Json { ignoreUnknownKeys = true }
+    }
     val billingRulesFlow: Flow<BillingRules> = userPreferences.billingRules
     val deepSeekApiKeyFlow: Flow<String> = userPreferences.deepSeekApiKey
     val isDarkThemeFlow: Flow<Boolean> = userPreferences.isDarkTheme
@@ -102,54 +109,9 @@ class BillingSettingsViewModel @Inject constructor(
     suspend fun generateReportImage(context: android.content.Context, yearMonth: YearMonth = YearMonth.now()): android.net.Uri? {
         _reportExporting.value = true
         try {
-            val electricRecords = repository.getElectricRecords().first()
-            val monthRecords = electricRecords.filter {
-                YearMonth.from(it.timestamp) == yearMonth && it.electricTotal != null
-            }.sortedBy { it.timestamp }
-            if (monthRecords.size < 2) return null
-
-            val first = monthRecords.first()
-            val last = monthRecords.last()
-            val totalKwh = ((last.electricTotal ?: 0.0) - (first.electricTotal ?: 0.0)).coerceAtLeast(0.0)
-
-            val firstPeak = first.electricPeak ?: 0.0
-            val firstValley = first.electricValley ?: 0.0
-            val lastPeak = last.electricPeak ?: 0.0
-            val lastValley = last.electricValley ?: 0.0
-            val peakKwh = (lastPeak - firstPeak).coerceAtLeast(0.0).coerceAtMost(totalKwh)
-            val valleyKwh = (lastValley - firstValley).coerceAtLeast(0.0).coerceAtMost(totalKwh - peakKwh)
-            val flatKwh = (totalKwh - peakKwh - valleyKwh).coerceAtLeast(0.0)
-
-            val bill = costEngine.calculateBill(totalKwh, peakKwh, valleyKwh)
-            val totalCo2Kg = totalKwh * 0.7
-            val treeDays = (totalCo2Kg / 20.0).toInt().coerceAtLeast(0)
-
-            val badges = mutableListOf<String>()
-            if (totalKwh < 300) badges.add("⚡节能先锋")
-            else if (totalKwh < 500) badges.add("⚡合理用电")
-            if (treeDays > 5) badges.add("🌿绿色达人")
-            if (peakKwh / totalKwh < 0.3 && totalKwh > 0) badges.add("🏔️错峰能手")
-            if (totalKwh > 0) badges.add("📊坚持记录")
-            if (badges.isEmpty()) badges.add("🌱初来乍到")
-
-            val tips = mutableListOf<String>()
-            if (peakKwh > 0) tips.add("将大功率电器移至谷电时段使用可节省电费")
-            tips.add("定期记录数据，获取更精准的能耗分析")
-
-            val content = ReportExporter.ReportContent(
-                period = "${yearMonth.year}年${yearMonth.monthValue}月",
-                totalKwh = totalKwh,
-                totalCost = bill.totalCost,
-                co2Kg = totalCo2Kg,
-                peakKwh = peakKwh,
-                valleyKwh = valleyKwh,
-                flatKwh = flatKwh,
-                treeDays = treeDays,
-                badges = badges,
-                previousCost = null,
-                tips = tips,
-                recordCount = monthRecords.size
-            )
+            // 使用统一数据源
+            val (data, _, isDark) = buildReportDataWithCarbon(yearMonth) ?: return null
+            val content = BillReportGenerator.toReportContent(data, isDark)
             val uri = ReportExporter.export(context, content)
             _reportImageUri.value = uri
             return uri
@@ -168,12 +130,12 @@ class BillingSettingsViewModel @Inject constructor(
 
     suspend fun exportRulesToJson(): String {
         val rules = billingRulesFlow.first()
-        return Json { prettyPrint = true }.encodeToString(rules)
+        return jsonPretty.encodeToString(rules)
     }
 
     suspend fun importRulesFromJson(json: String): String {
         return try {
-            val rules = Json { ignoreUnknownKeys = true }.decodeFromString<BillingRules>(json)
+            val rules = jsonLenient.decodeFromString<BillingRules>(json)
             userPreferences.setBillingRules(rules)
             "计费规则模板导入成功"
         } catch (e: Exception) {
@@ -184,23 +146,66 @@ class BillingSettingsViewModel @Inject constructor(
     // ── 账单分享 ──────────────────────────────────────────
 
     /**
-     * 生成纯文本账单报告（指定月份）。
+     * 构建报告数据（共享逻辑，避免重复查询数据库）。
+     * 统一数据源：文本/HTML/图片报告都使用此方法。
      */
-    suspend fun generateShareReport(yearMonth: YearMonth = YearMonth.now()): String? {
+    private suspend fun buildReportDataWithCarbon(yearMonth: YearMonth): Triple<BillReportGenerator.ReportData, BillReportGenerator.ComparisonData?, Boolean>? {
         val electricRecords = repository.getElectricRecords().first()
         val waterRecords = repository.getWaterRecords().first()
         val gasRecords = repository.getAllRecords().first().filter { it.isGasRecorded }
         val notesRecords = repository.getRecordsWithNotes().first()
         val rules = billingRulesFlow.first()
+        val isDark = isDarkThemeFlow.first()
 
         val data = BillReportGenerator.buildReportData(
             electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules, yearMonth
         ) ?: return null
 
+        // Override carbon values with user-configurable factors
+        val carbonResult = carbonFootprint.calculate(data.electricKwh, data.gasM3)
+        val dataWithCarbon = data.copy(co2Kg = carbonResult.electricKgCO2, treeDays = carbonResult.treeDays)
+
         val comparison = BillReportGenerator.buildComparison(
-            data, electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules
+            dataWithCarbon, electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules
         )
 
+        // 计算上月费用（用于图片报告）
+        val prevMonth = yearMonth.minusMonths(1)
+        val prevMonthRecords = electricRecords.filter {
+            YearMonth.from(it.timestamp) == prevMonth && it.electricTotal != null
+        }.sortedBy { it.timestamp }
+        val previousCost: Double? = if (prevMonthRecords.size >= 2) {
+            val pFirst = prevMonthRecords.first()
+            val pLast = prevMonthRecords.last()
+            val pKwh = ((pLast.electricTotal ?: 0.0) - (pFirst.electricTotal ?: 0.0)).coerceAtLeast(0.0)
+            val pPeakKwh = if (pLast.electricPeak != null && pFirst.electricPeak != null)
+                ((pLast.electricPeak ?: 0.0) - (pFirst.electricPeak ?: 0.0)).coerceAtLeast(0.0) else 0.0
+            val pValleyKwh = if (pLast.electricValley != null && pFirst.electricValley != null)
+                ((pLast.electricValley ?: 0.0) - (pFirst.electricValley ?: 0.0)).coerceAtLeast(0.0) else 0.0
+            val prevWaterMonth = waterRecords.filter {
+                it.waterTotal != null && YearMonth.from(it.timestamp) == prevMonth
+            }.sortedBy { it.timestamp }
+            val prevWaterTons = if (prevWaterMonth.size >= 2)
+                ((prevWaterMonth.last().waterTotal ?: 0.0) - (prevWaterMonth.first().waterTotal ?: 0.0)).coerceAtLeast(0.0) else 0.0
+            val prevGasMonth = gasRecords.filter {
+                it.gasTotal != null && YearMonth.from(it.timestamp) == prevMonth
+            }.sortedBy { it.timestamp }
+            val prevGasM3 = if (prevGasMonth.size >= 2)
+                ((prevGasMonth.last().gasTotal ?: 0.0) - (prevGasMonth.first().gasTotal ?: 0.0)).coerceAtLeast(0.0) else 0.0
+            val prevBill = costEngine.calculateBill(pKwh, pPeakKwh, pValleyKwh, prevWaterTons)
+            prevBill.totalCost + prevGasM3 * rules.gasUnitPrice
+        } else null
+
+        val dataWithPreviousCost = dataWithCarbon.copy(previousCost = previousCost)
+
+        return Triple(dataWithPreviousCost, comparison, isDark)
+    }
+
+    /**
+     * 生成纯文本账单报告（指定月份）。
+     */
+    suspend fun generateShareReport(yearMonth: YearMonth = YearMonth.now()): String? {
+        val (data, comparison, _) = buildReportDataWithCarbon(yearMonth) ?: return null
         return BillReportGenerator.generateTextReport(data, comparison)
     }
 
@@ -208,21 +213,8 @@ class BillingSettingsViewModel @Inject constructor(
      * 生成 HTML 账单报告（指定月份）。
      */
     suspend fun generateShareHtml(yearMonth: YearMonth = YearMonth.now()): String? {
-        val electricRecords = repository.getElectricRecords().first()
-        val waterRecords = repository.getWaterRecords().first()
-        val gasRecords = repository.getAllRecords().first().filter { it.isGasRecorded }
-        val notesRecords = repository.getRecordsWithNotes().first()
-        val rules = billingRulesFlow.first()
-
-        val data = BillReportGenerator.buildReportData(
-            electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules, yearMonth
-        ) ?: return null
-
-        val comparison = BillReportGenerator.buildComparison(
-            data, electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules
-        )
-
-        return BillReportGenerator.generateHtmlReport(data, comparison)
+        val (data, comparison, isDark) = buildReportDataWithCarbon(yearMonth) ?: return null
+        return BillReportGenerator.generateHtmlReport(data, comparison, isDark)
     }
 
     suspend fun exportRecordsToText(): String {
@@ -271,7 +263,7 @@ class BillingSettingsViewModel @Inject constructor(
         val sortedDates = grouped.keys.sorted()
 
         for (date in sortedDates) {
-            val dailyRecords = grouped[date] ?: return@forEach
+            val dailyRecords = grouped[date] ?: continue
             val latest = dailyRecords.maxBy { it.timestamp }
 
             sb.appendLine("${date.monthValue}.${date.dayOfMonth}")

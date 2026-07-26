@@ -1,123 +1,123 @@
 ---
 name: energyflow-new-feature
-description: 功能实现引导——从需求分析到代码验证的完整流程
+description: Feature implementation guide — complete flow from requirement analysis to code verification
 ---
 
-# EnergyFlow — 新功能实现引导
+# EnergyFlow — New Feature Implementation Guide
 
-**用途**: 加功能 / 改代码 / 实现需求时使用。
+**Use when**: Adding features / modifying code / implementing requirements.
 
-> **什么时候用这个 Skill vs Workflow?**
-> - 简单功能（单文件、已知方案）→ 继续用本 skill 手动实现
-> - 复杂功能（≥3 文件 + 跨模块）→ 用 `workflow:feature-development`（3-Agent 面板设计 + 并行实现）
-> - 批量加 N 个功能 → 用 `workflow:multi-feature`（N 个 Agent 并行分析→实现）
+> **When to use this Skill vs Workflow?**
+> - Simple feature (single file, known approach) → continue using this skill for manual implementation
+> - Complex feature (≥3 files + cross-module) → use `workflow:feature-development` (3-Agent panel design + parallel implementation)
+> - Batch add N features → use `workflow:multi-feature` (N Agents parallel analysis → implementation)
 
-## 第一步：领域分析
+## Step 1: Domain Analysis
 
-### 必读文档（按功能领域选择）
-| 功能涉及 | 必须读的 doc |
-|---------|-------------|
-| 计费/价格 | `.claude/docs/data-layer/cost-engine.md` |
-| 数据解析 | `.claude/docs/data-layer/smart-input-parser.md` |
-| 异常检测 | `.claude/docs/data-layer/anomaly-detector.md` |
-| 预测分析 | `.claude/docs/analytics/predictive-analyzer.md` |
-| 碳足迹/洞察 | `.claude/docs/analytics/carbon-and-insight.md` |
-| KMP 共享逻辑 | `.claude/docs/shared-kmp/module-design.md` |
-| UI/图表 | `.claude/docs/ui-layer/theme-and-navigation.md` + `chart-screen.md` |
-| 设置/报告 | `.claude/docs/ui-layer/settings-and-reports.md` |
-| 外部 API | `.claude/docs/data-layer/external-services.md` |
-| 数据模型 | `.claude/docs/data-layer/meter-record.md` |
-| **所有功能（必读）** | `.claude/docs/architecture/gotchas.md` |
+### Required Reading (Select by Feature Domain)
+| Feature Involves | Must-Read Doc |
+|-----------------|---------------|
+| Billing/pricing | `.claude/docs/data-layer/cost-engine.md` |
+| Data parsing | `.claude/docs/data-layer/smart-input-parser.md` |
+| Anomaly detection | `.claude/docs/data-layer/anomaly-detector.md` |
+| Predictive analytics | `.claude/docs/analytics/predictive-analyzer.md` |
+| Carbon footprint/insights | `.claude/docs/analytics/carbon-and-insight.md` |
+| KMP shared logic | `.claude/docs/shared-kmp/module-design.md` |
+| UI/charts | `.claude/docs/ui-layer/theme-and-navigation.md` + `chart-screen.md` |
+| Settings/reports | `.claude/docs/ui-layer/settings-and-reports.md` |
+| External API | `.claude/docs/data-layer/external-services.md` |
+| Data model | `.claude/docs/data-layer/meter-record.md` |
+| **All features (required)** | `.claude/docs/architecture/gotchas.md` |
 
-### 理解现有设计
-- 读相关 ADR (`adr-001`/`002`/`003`)——了解为什么这样设计
-- 读对应测试文件——了解现有行为契约
+### Understand Existing Design
+- Read related ADRs (`adr-001`/`002`/`003`) — understand why it's designed this way
+- Read corresponding test files — understand existing behavior contracts
 
-## 第二步：方案设计
+## Step 2: Plan Design
 
-在写代码前，回答以下问题：
-1. **改动落在哪一层？** shared (纯逻辑) / app:data (数据层) / app:ui (界面)
-2. **需要新的 DI 依赖吗？** @Singleton / @HiltViewModel / @Inject
-3. **需要新的 Room 实体/DAO 吗？** destructive migration 会清数据
-4. **涉及 KMP 边界吗？** shared 禁止 java.time / android.*
-5. **需要新的 DataStore key 吗？** 注意版本迁移
-6. **对现有测试有什么影响？** 哪些测试需要更新？
+Before writing code, answer these questions:
+1. **Which layer does the change fall in?** shared (pure logic) / app:data (data layer) / app:ui (UI)
+2. **Need new DI dependency?** @Singleton / @HiltViewModel / @Inject
+3. **Need new Room entity/DAO?** Destructive migration will clear data
+4. **Involves KMP boundary?** shared forbids java.time / android.*
+5. **Need new DataStore key?** Watch for version migration
+6. **Impact on existing tests?** Which tests need updating?
 
-## 第三步：检查清单
+## Step 3: Checklist
 
-写代码过程中逐个确认：
+Check each item while writing code:
 
-### KMP 边界检查
-- [ ] shared 模块没有 `import java.*` 或 `import android.*`
-- [ ] shared 模块只用 `kotlinx.datetime`，不用 `java.time`
-- [ ] Android 包装器正确处理类型转换 (java.time ↔ kotlinx.datetime)
+### KMP Boundary Check
+- [ ] shared module has no `import java.*` or `import android.*`
+- [ ] shared module only uses `kotlinx.datetime`, not `java.time`
+- [ ] Android wrapper correctly handles type conversion (java.time ↔ kotlinx.datetime)
 
-### Hilt 检查
-- [ ] Engine 类: `@Singleton class X @Inject constructor(deps)`
+### Hilt Check
+- [ ] Engine class: `@Singleton class X @Inject constructor(deps)`
 - [ ] ViewModel: `@HiltViewModel class X @Inject constructor(deps)`
-- [ ] 新 Module 正确 `@InstallIn(SingletonComponent::class)`
+- [ ] New Module correctly uses `@InstallIn(SingletonComponent::class)`
 
-### Compose 检查
-- [ ] 字体: 使用 `MonoFontFamily`（不是默认字体）
-- [ ] 颜色: 只用主题色 (`ElectricColor` 等)，禁止硬编码 hex
-- [ ] 状态: Flow 用 `collectAsStateWithLifecycle()`
-- [ ] 性能: 大列表项用 `remember{}`，列表用 `animateItem()`
+### Compose Check
+- [ ] Font: Use `MonoFontFamily` (not default font)
+- [ ] Colors: Only use theme colors (`ElectricColor` etc.), no hardcoded hex
+- [ ] State: Flow uses `collectAsStateWithLifecycle()`
+- [ ] Performance: Large list items use `remember{}`, lists use `animateItem()`
 
-### 数据层检查
-- [ ] MeterRecord 字段 nullable 使用前检查 null
-- [ ] 读数是累计值，非增量——减法方向要对
-- [ ] SmartInputParser 年份假设（当年）
-- [ ] 异常检测门控在保存前触发
+### Data Layer Check
+- [ ] Check null before using nullable MeterRecord fields
+- [ ] Readings are cumulative, not incremental — subtraction direction must be correct
+- [ ] SmartInputParser year assumption (current year)
+- [ ] Anomaly detection gates before saving
 
-### 简洁性检查
-- [ ] 没有为单次使用创建抽象
-- [ ] 没有"万一以后需要"的灵活性
-- [ ] 没有处理不可能发生的错误
-- [ ] 代码量合理（200行能搞定就不要写成500行）
-- [ ] 没有"顺手优化"相邻代码
+### Simplicity Check
+- [ ] No abstractions created for single use
+- [ ] No "in case we need it later" flexibility
+- [ ] No error handling for impossible scenarios
+- [ ] Reasonable code volume (if 200 lines can do it, don't write 500)
+- [ ] No "while you're at it" optimization of adjacent code
 
-## 第四步：验证
+## Step 4: Verification
 
 ```bash
-# 1. 编译检查
+# 1. Compile check
 ./gradlew :app:compileDebugKotlin
 
-# 2. KMP 编译检查（如果改了 shared）
+# 2. KMP compile check (if shared was changed)
 ./gradlew :shared:compileDebugKotlinAndroid
 
-# 3. 全量单元测试
+# 3. All unit tests
 ./gradlew :app:testDebugUnitTest
 
-# 4. 相关测试（更快）
+# 4. Related tests (faster)
 ./gradlew :app:testDebugUnitTest --tests "com.example.energyflow.data.YourTest"
 ```
 
-### 验证标准
-- ✅ 编译通过（无警告）
-- ✅ 全部已有测试通过（未破坏现有行为）
-- ✅ 新增逻辑有测试覆盖（至少边界条件）
-- ✅ 代码风格与现有代码一致
+### Verification Criteria
+- ✅ Compilation passes (no warnings)
+- ✅ All existing tests pass (no existing behavior broken)
+- ✅ New logic has test coverage (at least edge cases)
+- ✅ Code style matches existing code
 
-## 第五步：提交
+## Step 5: Commit
 
-按照 Conventional Commits 规范提交：
+Follow Conventional Commits specification:
 ```
 <type>(<scope>): <description>
 ```
 - type: feat / fix / refactor / test / docs / chore
 - scope: data / ui / shared / di / test
-- 示例: `feat(data): add water prediction to ChartViewModel`
+- Example: `feat(data): add water prediction to ChartViewModel`
 
-## 禁止事项
-- ❌ 不要在 shared 模块用 java.time
-- ❌ 不要硬编码 hex 颜色——用主题色
-- ❌ 不要跳过 gotchas.md
-- ❌ 不要"顺手优化"相邻代码
-- ❌ 不要为单次使用创建抽象层
-- ❌ 不要盲目用 NavHost——保持 AnimatedContent 模式
+## Prohibited Actions
+- ❌ Do not use java.time in shared module
+- ❌ Do not hardcode hex colors — use theme colors
+- ❌ Do not skip gotchas.md
+- ❌ Do not "while you're at it" optimize adjacent code
+- ❌ Do not create abstraction layers for single use
+- ❌ Do not blindly use NavHost — maintain AnimatedContent pattern
 
-## 相关 Skills
-- 写测试: `energyflow-test` — TDD 循环和测试模板
-- 提交: `energyflow-commit` — Conventional Commits 规范
-- 预检: `energyflow-quick-scan` — 提交前的最后一轮检查
-- 排查问题: `energyflow-diagnose` — 如果实现中遇到 bug
+## Related Skills
+- Write tests: `energyflow-test` — TDD cycle and test templates
+- Commit: `energyflow-commit` — Conventional Commits specification
+- Pre-scan: `energyflow-quick-scan` — final check before committing
+- Diagnose issues: `energyflow-diagnose` — if you encounter a bug during implementation

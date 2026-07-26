@@ -2,7 +2,6 @@ package com.example.energyflow.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -13,14 +12,11 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,14 +32,10 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -61,15 +52,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.energyflow.data.MeterRecord
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
-import com.example.energyflow.ui.theme.DarkSurface
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
+import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.ElectricPeakColor
@@ -88,7 +77,7 @@ import java.time.format.DateTimeFormatter
 private val DateDotFmt = DateTimeFormatter.ofPattern("MM.dd")
 private val TimeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TimelineItem(
     record: MeterRecord,
@@ -101,50 +90,14 @@ fun TimelineItem(
     onEdit: ((MeterRecord) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val haptic = LocalHapticFeedback.current
-    val isPressed by interactionSource.collectIsPressedAsState()
     var showActions by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-
-    // ── 按压动效：缩放 + 阴影变化 ──
-    val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessHigh
-        ),
-        label = "pressScale"
-    )
-
-    val borderAlpha by animateFloatAsState(
-        targetValue = if (isPressed || showActions) 0.3f else 0.05f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "borderAlpha"
-    )
-
-    // ── 左滑删除状态 ──
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.EndToStart -> {
-                    showDeleteDialog = true
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    false // 弹回，不消除
-                }
-                else -> false
-            }
-        }
-    )
 
     // ── 删除确认弹窗 ──
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            containerColor = DarkCard,
+            containerColor = AppCard,
             titleContentColor = TextPrimary,
             textContentColor = TextSecondary,
             title = {
@@ -184,114 +137,47 @@ fun TimelineItem(
         )
     }
 
-    // ── 左滑背景（红色删除区域） ──
-    SwipeToDismissBox(
-        state = dismissState,
-        modifier = modifier.fillMaxWidth(),
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = onDelete != null,
-        backgroundContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(
-                                Color.Transparent,
-                                ErrorNeon.copy(alpha = 0.2f)
-                            )
-                        )
+    val cardGlowColor = if (record.isElectricRecorded) ElectricColor
+        else if (record.isWaterRecorded) WaterColor
+        else GasColor
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .drawWithCache {
+                val radius = CornerRadius(16.dp.toPx())
+                val accentBrush = Brush.verticalGradient(
+                    listOf(cardGlowColor.copy(alpha = 0.6f), cardGlowColor.copy(alpha = 0.15f))
+                )
+                val borderBrush = Brush.horizontalGradient(
+                    listOf(cardGlowColor.copy(alpha = 0.12f), cardGlowColor.copy(alpha = 0.03f))
+                )
+                onDrawBehind {
+                    drawRoundRect(
+                        brush = accentBrush,
+                        topLeft = Offset.Zero,
+                        size = Size(3.dp.toPx(), size.height),
+                        cornerRadius = radius
                     )
-                    .padding(end = 24.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "滑动删除",
-                        tint = ErrorNeon,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Text(
-                        "删除",
-                        color = ErrorNeon,
-                        fontFamily = MonoFontFamily,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                    drawRoundRect(
+                        brush = borderBrush,
+                        style = Stroke(width = 1.5f),
+                        cornerRadius = radius
                     )
                 }
-            }
-        }
+            },
+        colors = CardDefaults.cardColors(containerColor = AppCard),
+        shape = RoundedCornerShape(16.dp)
     ) {
-        val cardGlowColor = if (record.isElectricRecorded) ElectricColor
-            else if (record.isWaterRecorded) WaterColor
-            else GasColor
-
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .scale(pressScale)
-                .drawWithCache {
-                    val radius = CornerRadius(16.dp.toPx())
-                    val accentBrush = Brush.verticalGradient(
-                        listOf(cardGlowColor.copy(alpha = 0.6f), cardGlowColor.copy(alpha = 0.15f))
-                    )
-                    val borderBrush = Brush.horizontalGradient(
-                        listOf(
-                            cardGlowColor.copy(alpha = if (isPressed) 0.30f else 0.12f),
-                            cardGlowColor.copy(alpha = 0.03f)
-                        )
-                    )
-                    onDrawBehind {
-                        drawRoundRect(
-                            brush = accentBrush,
-                            topLeft = Offset.Zero,
-                            size = Size(3.dp.toPx(), size.height),
-                            cornerRadius = radius
-                        )
-                        drawRoundRect(
-                            brush = borderBrush,
-                            style = Stroke(width = 1.5f),
-                            cornerRadius = radius
-                        )
-                    }
-                },
-            colors = CardDefaults.cardColors(containerColor = DarkCard),
-            shape = RoundedCornerShape(16.dp)
-        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .combinedClickable(
-                        interactionSource = interactionSource,
-                        indication = null,
                         onClick = { showActions = !showActions },
                         onLongClick = { showDeleteDialog = true }
                     )
                     .padding(16.dp)
             ) {
-                // ── 按压时的发光边框叠加层 ──
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .padding(horizontal = 32.dp)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(
-                            if (isPressed || showActions)
-                                Brush.horizontalGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        ElectricColor.copy(alpha = borderAlpha),
-                                        Color.Transparent
-                                    )
-                                )
-                            else Brush.horizontalGradient(
-                                listOf(Color.Transparent, Color.Transparent, Color.Transparent)
-                            )
-                        )
-                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -310,18 +196,17 @@ fun TimelineItem(
                             fontFamily = MonoFontFamily
                         )
 
-                        val dotGlow = if (isPressed) 0.6f else 0.3f
                         Box(
                             modifier = Modifier
                                 .padding(vertical = 6.dp)
                                 .size(10.dp)
                                 .shadow(
-                                    elevation = if (isPressed) 8.dp else 4.dp,
+                                    elevation = 4.dp,
                                     shape = CircleShape,
                                     ambientColor = (if (record.isElectricRecorded) ElectricColor else WaterColor)
-                                        .copy(alpha = dotGlow),
+                                        .copy(alpha = 0.3f),
                                     spotColor = (if (record.isElectricRecorded) ElectricColor else WaterColor)
-                                        .copy(alpha = dotGlow)
+                                        .copy(alpha = 0.3f)
                                 )
                                 .clip(CircleShape)
                                 .background(
@@ -428,7 +313,7 @@ fun TimelineItem(
                                         Brush.horizontalGradient(
                                             colors = listOf(
                                                 NeonBlue.copy(alpha = 0.1f),
-                                                DarkSurface
+                                                AppSurface
                                             )
                                         )
                                     )
@@ -502,7 +387,6 @@ fun TimelineItem(
                     }
                 }
             }
-        }
     }
 }
 
@@ -518,27 +402,11 @@ private fun ActionChip(
     color: Color,
     onClick: () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val chipScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.93f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessHigh
-        ),
-        label = "chipScale"
-    )
-
     Row(
         modifier = Modifier
-            .scale(chipScale)
             .clip(RoundedCornerShape(20.dp))
-            .background(color.copy(alpha = if (isPressed) 0.18f else 0.08f))
-            .combinedClickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
+            .background(color.copy(alpha = 0.08f))
+            .combinedClickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -577,7 +445,7 @@ private fun MeterValueCard(
                 Brush.verticalGradient(
                     colors = listOf(
                         iconColor.copy(alpha = 0.06f),
-                        DarkSurface.copy(alpha = 0.9f)
+                        AppSurface.copy(alpha = 0.9f)
                     )
                 )
             )

@@ -71,9 +71,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.energyflow.data.BillingRules
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
-import com.example.energyflow.ui.theme.DarkSurface
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
+import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricGradient
 import com.example.energyflow.ui.theme.ElectricPeakColor
@@ -218,7 +218,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            containerColor = DarkCard,
+            containerColor = AppCard,
             titleContentColor = TextPrimary,
             textContentColor = TextSecondary,
             title = {
@@ -247,7 +247,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppBackground)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
@@ -321,7 +321,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                 toast(context, "计费规则已保存")
             },
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = ElectricColor, contentColor = DarkBackground),
+            colors = ButtonDefaults.buttonColors(containerColor = ElectricColor, contentColor = AppBackground),
             shape = RoundedCornerShape(12.dp)
         ) {
             Text("保存计费规则", fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
@@ -358,7 +358,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                         viewModel.saveDeepSeekApiKey(apiKeyText)
                         toast(context, "API Key 已保存")
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ElectricColor, contentColor = DarkBackground),
+                    colors = ButtonDefaults.buttonColors(containerColor = ElectricColor, contentColor = AppBackground),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("保存", fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -404,7 +404,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(DarkBackground.copy(alpha = 0.88f)),
+                    .background(AppBackground.copy(alpha = 0.88f)),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -474,15 +474,19 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                     modifier = Modifier.weight(1f),
                     onClick = {
                         scope.launch {
-                            val report = viewModel.generateShareReport(selectedMonth)
-                            if (report != null) {
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, report)
+                            try {
+                                val report = viewModel.generateShareReport(selectedMonth)
+                                if (report != null) {
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, report)
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
+                                } else {
+                                    toast(context, "该月数据不足，至少需要 2 条电表读数")
                                 }
-                                context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
-                            } else {
-                                toast(context, "该月数据不足，至少需要 2 条电表读数")
+                            } catch (e: Exception) {
+                                toast(context, "导出失败: ${e.message}")
                             }
                         }
                     }
@@ -495,16 +499,20 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                     modifier = Modifier.weight(1f),
                     onClick = {
                         scope.launch {
-                            val html = viewModel.generateShareHtml(selectedMonth)
-                            if (html != null) {
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/html"
-                                    putExtra(Intent.EXTRA_TEXT, html)
-                                    putExtra(Intent.EXTRA_HTML_TEXT, html)
+                            try {
+                                val html = viewModel.generateShareHtml(selectedMonth)
+                                if (html != null) {
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/html"
+                                        putExtra(Intent.EXTRA_TEXT, html)
+                                        putExtra(Intent.EXTRA_HTML_TEXT, html)
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
+                                } else {
+                                    toast(context, "该月数据不足，至少需要 2 条电表读数")
                                 }
-                                context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
-                            } else {
-                                toast(context, "该月数据不足，至少需要 2 条电表读数")
+                            } catch (e: Exception) {
+                                toast(context, "导出失败: ${e.message}")
                             }
                         }
                     }
@@ -522,20 +530,24 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                     modifier = Modifier.weight(1f),
                     onClick = {
                         scope.launch {
-                            val report = viewModel.generateShareReport(selectedMonth)
-                            if (report != null) {
-                                clipboardManager.setText(AnnotatedString(report))
-                                toast(context, "账单已复制到剪贴板")
-                            } else {
-                                toast(context, "该月数据不足，至少需要 2 条电表读数")
+                            try {
+                                val report = viewModel.generateShareReport(selectedMonth)
+                                if (report != null) {
+                                    clipboardManager.setText(AnnotatedString(report))
+                                    toast(context, "账单已复制到剪贴板")
+                                } else {
+                                    toast(context, "该月数据不足，至少需要 2 条电表读数")
+                                }
+                            } catch (e: Exception) {
+                                toast(context, "导出失败: ${e.message}")
                             }
                         }
                     }
                 )
                 ShareActionButton(
                     icon = Icons.Default.FileDownload,
-                    label = "导出图片",
-                    desc = "精美卡片，适合发布",
+                    label = "微信分享",
+                    desc = "精美卡片，优先微信",
                     color = SuccessGreen,
                     modifier = Modifier.weight(1f),
                     onClick = {
@@ -543,7 +555,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                             try {
                                 val uri = viewModel.generateReportImage(context, selectedMonth)
                                 if (uri != null) {
-                                    com.example.energyflow.data.ShareUtils.shareImage(context, uri)
+                                    com.example.energyflow.data.ShareUtils.shareImageToWeChat(context, uri)
                                 } else {
                                     toast(context, "该月数据不足，至少需要 2 条电表读数")
                                 }
@@ -561,13 +573,17 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         Button(
             onClick = {
                 scope.launch {
-                    previewText = viewModel.generateShareReport(selectedMonth)
-                    showPreview = true
+                    try {
+                        previewText = viewModel.generateShareReport(selectedMonth)
+                        showPreview = true
+                    } catch (e: Exception) {
+                        toast(context, "预览失败: ${e.message}")
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth().height(44.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = DarkCard,
+                containerColor = AppCard,
                 contentColor = TextSecondary
             ),
             shape = RoundedCornerShape(10.dp)
@@ -579,7 +595,7 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         if (showPreview && previewText != null) {
             AlertDialog(
                 onDismissRequest = { showPreview = false },
-                containerColor = DarkCard,
+                containerColor = AppCard,
                 titleContentColor = TextPrimary,
                 textContentColor = TextSecondary,
                 title = {
@@ -722,7 +738,7 @@ private fun ShareActionButton(
         onClick = onClick,
         modifier = modifier.height(64.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = DarkCard,
+            containerColor = AppCard,
             contentColor = color
         ),
         shape = RoundedCornerShape(12.dp)
@@ -750,7 +766,7 @@ private fun DataActionButton(
     Button(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().height(56.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = DarkCard, contentColor = color),
+        colors = ButtonDefaults.buttonColors(containerColor = AppCard, contentColor = color),
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -823,7 +839,7 @@ private fun PreferenceSwitch(label: String, checked: Boolean, onCheckedChange: (
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -843,7 +859,7 @@ private fun PreferenceSwitch(label: String, checked: Boolean, onCheckedChange: (
 @Composable
 private fun fieldColors(color: Color) = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = color,
-    unfocusedBorderColor = DarkSurface,
+    unfocusedBorderColor = AppSurface,
     cursorColor = color,
     focusedTextColor = TextPrimary,
     unfocusedTextColor = TextPrimary

@@ -76,9 +76,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.energyflow.data.MeterRecord
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
-import com.example.energyflow.ui.theme.DarkSurface
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
+import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
@@ -180,7 +180,7 @@ fun EditRecordSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkBackground)
+            .background(AppBackground)
             .imePadding()
             .clickable(
                 indication = null,
@@ -288,7 +288,7 @@ fun EditRecordSheet(
             .scale(if (canSave) breatheScale else 0.97f)
             .shadow(if (canSave) 4.dp else 0.dp, RoundedCornerShape(12.dp), ambientColor = ElectricColor.copy(0.3f), spotColor = ElectricColor.copy(0.3f)),
         enabled = canSave,
-        colors = ButtonDefaults.buttonColors(ElectricColor, DarkBackground, DarkCard, TextSecondary),
+        colors = ButtonDefaults.buttonColors(ElectricColor, AppBackground, AppCard, TextSecondary),
         shape = RoundedCornerShape(12.dp)
     ) {
         Text("保存修改", fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -302,8 +302,8 @@ fun EditRecordSheet(
             onDismissRequest = { showDatePicker = false },
             confirmButton = { TextButton({ state.selectedDateMillis?.let { selectedDate = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }; showDatePicker = false }) { Text("确定", color = ElectricColor) } },
             dismissButton = { TextButton({ showDatePicker = false }) { Text("取消", color = TextSecondary) } },
-            colors = DatePickerDefaults.colors(DarkSurface)
-        ) { DatePicker(state, colors = DatePickerDefaults.colors(DarkSurface, ElectricColor, DarkBackground, ElectricColor, ElectricColor)) }
+            colors = DatePickerDefaults.colors(AppSurface)
+        ) { DatePicker(state, colors = DatePickerDefaults.colors(AppSurface, ElectricColor, AppBackground, ElectricColor, ElectricColor)) }
     }
 
     if (showTimePicker) {
@@ -312,10 +312,10 @@ fun EditRecordSheet(
             onDismissRequest = { showTimePicker = false },
             confirmButton = { TextButton({ selectedTime = LocalTime.of(state.hour, state.minute); showTimePicker = false }) { Text("确定", color = ElectricColor) } },
             dismissButton = { TextButton({ showTimePicker = false }) { Text("取消", color = TextSecondary) } },
-            colors = DatePickerDefaults.colors(DarkSurface)
+            colors = DatePickerDefaults.colors(AppSurface)
         ) {
             Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                TimePicker(state, colors = TimePickerDefaults.colors(ElectricColor, ElectricColor, DarkBackground, DarkCard, DarkBackground))
+                TimePicker(state, colors = TimePickerDefaults.colors(ElectricColor, ElectricColor, AppBackground, AppCard, AppBackground))
             }
         }
     }
@@ -323,7 +323,7 @@ fun EditRecordSheet(
 
 @Composable
 private fun DateTimeChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(Brush.horizontalGradient(listOf(DarkCard, DarkCard.copy(0.8f)))).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(Brush.horizontalGradient(listOf(AppCard, AppCard.copy(0.8f)))).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, label, tint = ElectricColor, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(10.dp))
         Column {
@@ -335,14 +335,14 @@ private fun DateTimeChip(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 
 @Composable
 private fun SectionCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, iconColor: Color, isEnabled: Boolean, onToggle: (Boolean) -> Unit, content: @Composable () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brush.verticalGradient(listOf(DarkCard, DarkCard.copy(0.9f)))).padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brush.verticalGradient(listOf(AppCard, AppCard.copy(0.9f)))).padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, title, tint = if (isEnabled) iconColor else TextSecondary, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(title, style = MaterialTheme.typography.titleMedium, color = if (isEnabled) TextPrimary else TextSecondary, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
             }
-            Switch(isEnabled, onToggle, colors = SwitchDefaults.colors(iconColor, iconColor.copy(0.3f), TextSecondary, DarkSurface))
+            Switch(isEnabled, onToggle, colors = SwitchDefaults.colors(iconColor, iconColor.copy(0.3f), TextSecondary, AppSurface))
         }
         AnimatedVisibility(isEnabled, enter = expandVertically(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow)), exit = shrinkVertically(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow))) {
             Column(modifier = Modifier.padding(top = 12.dp)) { content() }
@@ -362,7 +362,7 @@ private fun InputField(label: String, value: String, onValueChange: (String) -> 
             suffix = { Text(unit, color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 12.sp) },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = color,
-                unfocusedBorderColor = DarkSurface,
+                unfocusedBorderColor = AppSurface,
                 cursorColor = color,
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary
@@ -381,7 +381,7 @@ private fun InputField(label: String, value: String, onValueChange: (String) -> 
 @Composable
 private fun NoteSection(note: String, onNoteChange: (String) -> Unit, quickTags: List<String> = listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机")) {
     val tags = quickTags
-    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DarkCard).padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(AppCard).padding(16.dp)) {
         Text("备注", style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -390,7 +390,7 @@ private fun NoteSection(note: String, onNoteChange: (String) -> Unit, quickTags:
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (sel) ElectricColor.copy(0.2f) else DarkSurface)
+                        .background(if (sel) ElectricColor.copy(0.2f) else AppSurface)
                         .clickable { onNoteChange(if (sel) note.replace(tag, "").trim() else "$note $tag".trim()) }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
@@ -405,7 +405,7 @@ private fun NoteSection(note: String, onNoteChange: (String) -> Unit, quickTags:
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (sel) ElectricColor.copy(0.2f) else DarkSurface)
+                        .background(if (sel) ElectricColor.copy(0.2f) else AppSurface)
                         .clickable { onNoteChange(if (sel) note.replace(tag, "").trim() else "$note $tag".trim()) }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
@@ -421,7 +421,7 @@ private fun NoteSection(note: String, onNoteChange: (String) -> Unit, quickTags:
             placeholder = { Text("输入备注...", color = TextSecondary.copy(0.5f), fontFamily = MonoFontFamily) },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = ElectricColor,
-                unfocusedBorderColor = DarkSurface,
+                unfocusedBorderColor = AppSurface,
                 cursorColor = ElectricColor,
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary

@@ -59,11 +59,17 @@ class SmartInputParser {
                 }
                 is ContextParseResult.PendingPeakValley -> {
                     if (result.pending.peak != null && result.pending.valley != null) {
-                        results.add(result.pending.toSuccess(currentMonth!!, currentDay!!))
+                        if (currentMonth != null && currentDay != null) {
+                            results.add(result.pending.toSuccess(currentMonth, currentDay))
+                        } else {
+                            results.add(ParseResult.Error("缺少日期上下文"))
+                        }
                         pendingElectric = null
                     } else {
                         pendingElectric?.let { pe ->
-                            results.add(pe.toSuccess(currentMonth!!, currentDay!!))
+                            if (currentMonth != null && currentDay != null) {
+                                results.add(pe.toSuccess(currentMonth, currentDay))
+                            }
                         }
                         pendingElectric = result.pending
                     }

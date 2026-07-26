@@ -33,8 +33,10 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import java.time.YearMonth
@@ -55,11 +57,12 @@ class MainViewModel @Inject constructor(
     private val _loadLimit = MutableStateFlow(150)
     val allRecords: StateFlow<List<MeterRecord>> = _loadLimit
         .flatMapLatest { limit: Int ->
-            kotlinx.coroutines.flow.flow {
-                kotlinx.coroutines.delay(80) // 让 SplashScreen 先完成渲染
+            flow {
+                delay(80) // 让 SplashScreen 先完成渲染
                 emitAll(repository.getRecordsLimited(limit))
             }
         }
+        .onEach { _isLoadingMore.value = false } // 新数据到达后才重置加载标志
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // 筛选栏计数（轻量 COUNT 查询，不检索全表数据）
@@ -128,11 +131,14 @@ class MainViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
-        // 1. 阶梯进度：记录变化时重算
+        // 1. 阶梯进度：仅电表记录变化时重算
         viewModelScope.launch {
-            allRecords.collect { records ->
-                withContext(Dispatchers.IO) { computeTierProgress(records) }
-            }
+            allRecords
+                .map { records -> records.filter { it.isElectricRecorded } }
+                .distinctUntilChanged()
+                .collect { _ ->
+                    withContext(Dispatchers.IO) { computeTierProgress(allRecords.value) }
+                }
         }
         // 2. 天气主题：仅最新记录日期变化时获取
         viewModelScope.launch {
@@ -157,7 +163,9 @@ class MainViewModel @Inject constructor(
             if (result is WeatherResult.Success && result.data.isNotEmpty()) {
                 ThemeState.applyWeatherTheme(result.data.first().tempMax)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+        }
     }
 
     private suspend fun computeTierProgress(records: List<MeterRecord>) {
@@ -213,8 +221,7 @@ class MainViewModel @Inject constructor(
     fun loadMore() {
         if (_isLoadingMore.value) return
         _isLoadingMore.value = true
-        _loadLimit.value += 50  // 触发 flatMapLatest 以新 LIMIT 重新查询
-        _isLoadingMore.value = false
+        _loadLimit.value += 50  // 触发 flatMapLatest → Room 重新查询 → onEach 重置
     }
 
     // 重置为初始化数量
@@ -374,47 +381,6 @@ class MainViewModel @Inject constructor(
         )
         repository.insert(record)
         _uiState.value = UiState.Success("记录已保存")
-    }
-
-    fun insertFromRecordData(data: RecordData) {
-        if (!data.isElectric && !data.isWater && !data.isGas) {
-            _uiState.value = UiState.Error("请至少输入电表、水表或燃气数据")
-            return
-        }
-        if (data.isElectric && data.electricTotal == null) {
-            _uiState.value = UiState.Error("请输入电表读数")
-            return
-        }
-        if (data.isWater && data.waterTotal == null) {
-            _uiState.value = UiState.Error("请输入水表读数")
-            return
-        }
-        if (data.isGas && data.gasTotal == null) {
-            _uiState.value = UiState.Error("请输入燃气读数")
-            return
-        }
-
-        viewModelScope.launch {
-            _uiState.value = UiState.Loading
-            try {
-                val record = MeterRecord(
-                    timestamp = data.timestamp,
-                    isElectricRecorded = data.isElectric,
-                    electricTotal = data.electricTotal,
-                    electricPeak = data.electricPeak,
-                    electricValley = data.electricValley,
-                    isWaterRecorded = data.isWater,
-                    waterTotal = data.waterTotal,
-                    isGasRecorded = data.isGas,
-                    gasTotal = data.gasTotal,
-                    note = data.note
-                )
-                repository.insert(record)
-                _uiState.value = UiState.Success("记录已保存")
-            } catch (e: Exception) {
-                _uiState.value = UiState.Error("保存失败: ${e.message}")
-            }
-        }
     }
 
     fun updateRecord(original: MeterRecord, data: RecordData) {

@@ -56,9 +56,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.energyflow.ui.theme.DarkBackground
-import com.example.energyflow.ui.theme.DarkCard
-import com.example.energyflow.ui.theme.DarkSurface
+import com.example.energyflow.ui.theme.AppBackground
+import com.example.energyflow.ui.theme.AppCard
+import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricStart
 import com.example.energyflow.ui.theme.ErrorNeon
@@ -82,7 +82,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppBackground)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 跳过按钮
@@ -141,7 +141,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(
                                     if (isSelected) ElectricColor
-                                    else DarkSurface
+                                    else AppSurface
                                 )
                         )
                     }
@@ -165,7 +165,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                         .height(52.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = ElectricColor,
-                        contentColor = DarkBackground
+                        contentColor = AppBackground
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -232,7 +232,7 @@ private fun OnboardingPage1() {
             },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = ElectricColor,
-                unfocusedBorderColor = DarkSurface,
+                unfocusedBorderColor = AppSurface,
                 cursorColor = ElectricColor,
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary
@@ -343,7 +343,7 @@ private fun ExampleChip(text: String, label: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(DarkSurface)
+            .background(AppSurface)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -443,7 +443,7 @@ private fun MeterIntroCard(
         modifier = modifier
             .scale(scale)
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppCard)
             .border(1.dp, color.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally

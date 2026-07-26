@@ -38,7 +38,7 @@ import com.example.energyflow.data.UserPreferences
 import com.example.energyflow.ui.OnboardingScreen
 import com.example.energyflow.ui.SplashScreen
 import com.example.energyflow.ui.navigation.AppNavGraph
-import com.example.energyflow.ui.theme.DarkBackground
+import com.example.energyflow.ui.theme.AppBackground
 import com.example.energyflow.ui.theme.EnergyFlowTheme
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.LocalDateTime
@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
                 darkTheme = darkTheme,
                 dynamicColors = if (themeDistEnabled) themeColors else null
             ) {
-                Box(modifier = Modifier.fillMaxSize().background(DarkBackground)) {
+                Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
                     if (showSplash) {
                         SplashScreen(onFinished = { showSplash = false })
                     }
@@ -107,7 +107,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         Surface(
                             modifier = Modifier.fillMaxSize(),
-                            color = DarkBackground
+                            color = AppBackground
                         ) {
                             if (!isOnboardingComplete && !onboardingDismissed) {
                                 OnboardingScreen(

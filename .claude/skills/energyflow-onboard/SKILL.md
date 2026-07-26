@@ -1,101 +1,101 @@
 ---
 name: energyflow-onboard
-description: 新贡献者引导——从零到能提交第一个PR的完整路径
+description: New contributor onboarding — complete path from zero to first PR
 ---
 
-# EnergyFlow — 新贡献者引导
+# EnergyFlow — New Contributor Onboarding
 
-**用途**: 新人加入项目 / 第一次看代码 / 需要快速上手时使用。
+**Use when**: New member joins the project / first time looking at code / needs quick ramp-up.
 
-## 5分钟快速概览
+## 5-Minute Quick Overview
 
-EnergyFlow 是一个**家庭能耗记录 Android App**（Kotlin + Compose + Hilt + Room + KMP），用于：
-- 📝 记录电表/水表/燃气表读数（支持 11 种自然语言输入格式）
-- 💰 计算阶梯电价费用（峰谷分时 + 阶梯加价）
-- 📊 可视化能耗趋势 + 月度预测（双重指数平滑算法）
-- 🌱 碳足迹追踪 + 绿色徽章
-- 🤖 AI 智能分析（DeepSeek）+ 天气集成（Open-Meteo）
+EnergyFlow is a **household energy consumption tracking Android App** (Kotlin + Compose + Hilt + Room + KMP) for:
+- 📝 Recording electric/water/gas meter readings (supports 11 natural language input formats)
+- 💰 Calculating tiered electricity costs (peak/valley time-of-use + tiered surcharge)
+- 📊 Visualizing energy consumption trends + monthly predictions (double exponential smoothing algorithm)
+- 🌱 Carbon footprint tracking + green badges
+- 🤖 AI smart analysis (DeepSeek) + weather integration (Open-Meteo)
 
-## 第一小时：建立心智模型
+## First Hour: Build Mental Model
 
-### 1. 读核心文档（30分钟）
-按顺序：
-1. `.claude/docs/architecture/overview.md` — 项目全景图（10分钟）
-2. `.claude/docs/architecture/gotchas.md` — 必知的陷阱（10分钟）
-3. `.claude/docs/architecture/adr-001-tab-navigation.md` — 架构决策（5分钟）
-4. `.claude/docs/architecture/adr-002-hilt-wrapper-pattern.md` — 分层模式（5分钟）
+### 1. Read Core Documents (30 minutes)
+In order:
+1. `.claude/docs/architecture/overview.md` — Project panorama (10 minutes)
+2. `.claude/docs/architecture/gotchas.md` — Must-know pitfalls (10 minutes)
+3. `.claude/docs/architecture/adr-001-tab-navigation.md` — Architecture decisions (5 minutes)
+4. `.claude/docs/architecture/adr-002-hilt-wrapper-pattern.md` — Layering pattern (5 minutes)
 
-### 2. 理解数据流（15分钟）
+### 2. Understand Data Flow (15 minutes)
 ```
-用户输入 "7.15 14.30 16639 880"
-  → SmartInputParser (正则解析 + AI 降级)
-    → AnomalyDetector (单调递增 + 突增校验)
-      → MeterRepository → Room 数据库
-        → ChartViewModel (图表聚合 + 预测 + 账单 + 碳足迹)
+User inputs "7.15 14.30 16639 880"
+  → SmartInputParser (regex parsing + AI fallback)
+    → AnomalyDetector (monotonic increase + spike check)
+      → MeterRepository → Room database
+        → ChartViewModel (chart aggregation + prediction + billing + carbon footprint)
           → ChartScreen / MainScreen (Compose UI)
 ```
 
-### 3. 运行起来（15分钟）
+### 3. Get It Running (15 minutes)
 ```bash
-# 编译
+# Compile
 ./gradlew :app:compileDebugKotlin
 
-# 测试
+# Test
 ./gradlew :app:testDebugUnitTest
 
-# 构建 APK（需要 Android SDK）
+# Build APK (requires Android SDK)
 ./gradlew :app:assembleDebug
 ```
 
-## 第一个 PR：改一个简单的东西
+## First PR: Change Something Simple
 
-### 推荐入门任务
-1. **修复一个 "info" 级别的 code review finding** — 改动小，风险低
-2. **给一个已有函数加单元测试** — 熟悉测试模式
-3. **修复一个 `collectAsState()` → `collectAsStateWithLifecycle()`** — 学习 Compose 生命周期
-4. **给一个数据类加注释** — 理解数据模型
+### Recommended Starter Tasks
+1. **Fix an "info" level code review finding** — small change, low risk
+2. **Add unit tests for an existing function** — learn testing patterns
+3. **Fix a `collectAsState()` → `collectAsStateWithLifecycle()`** — learn Compose lifecycle
+4. **Add comments to a data class** — understand data model
 
-### 流程
+### Flow
 ```bash
-# 1. 建分支
+# 1. Create branch
 git checkout -b fix/simple-thing
 
-# 2. 改代码（读 CLAUDE.md + 对应 skill）
+# 2. Change code (read CLAUDE.md + corresponding skill)
 
-# 3. 验证
+# 3. Verify
 ./gradlew :app:compileDebugKotlin
 ./gradlew :app:testDebugUnitTest
 
-# 4. 提交
+# 4. Commit
 git commit -m "fix(ui): collectAsState → collectAsStateWithLifecycle in XxxScreen"
 
-# 5. Push & 创建 PR
+# 5. Push & create PR
 ```
 
-## 关键联系人/资源
+## Key Resources
 
-| 需要什么 | 去哪找 |
-|---------|--------|
-| 理解架构 | `.claude/docs/architecture/` |
-| 理解数据模型 | `.claude/docs/data-layer/meter-record.md` |
-| 理解 UI 组件 | `.claude/docs/ui-layer/` |
-| 知道怎么测试 | `.claude/docs/testing/` / `energyflow-test` skill |
-| 知道怎么提交 | `energyflow-commit` skill |
-| 提交前检查 | `energyflow-quick-scan` skill |
-| 遇到 Bug | `energyflow-diagnose` skill |
-| 要重构 | `energyflow-refactor` skill |
+| What You Need | Where to Find |
+|--------------|---------------|
+| Understand architecture | `.claude/docs/architecture/` |
+| Understand data model | `.claude/docs/data-layer/meter-record.md` |
+| Understand UI components | `.claude/docs/ui-layer/` |
+| Know how to test | `.claude/docs/testing/` / `energyflow-test` skill |
+| Know how to commit | `energyflow-commit` skill |
+| Pre-commit check | `energyflow-quick-scan` skill |
+| Encountered a bug | `energyflow-diagnose` skill |
+| Need to refactor | `energyflow-refactor` skill |
 
-## 常见新手陷阱
+## Common Newcomer Pitfalls
 
-| 陷阱 | 为什么容易犯错 | 正确做法 |
-|------|-------------|---------|
-| 用 `java.time` in shared | IDE 自动导入 | 只用 `kotlinx.datetime` |
-| 硬编码颜色 | 看起来方便 | 查主题色表 |
-| `electricPeak!!` 崩溃 | 以为一定有值 | 用 `?: 0.0` |
-| 减法方向反了 | 直觉是消费量 | 读数是累计值，大减小 |
-| 改了 shared 没编译检查 | 只编译了 app | `./gradlew :shared:compileDebugKotlinAndroid` |
-> 更多陷阱 → `.claude/docs/architecture/gotchas.md`
+| Pitfall | Why It's Easy to Make | Correct Approach |
+|---------|----------------------|------------------|
+| Using `java.time` in shared | IDE auto-import | Only use `kotlinx.datetime` |
+| Hardcoding colors | Looks convenient | Check theme color table |
+| `electricPeak!!` crash | Assumed value always exists | Use `?: 0.0` |
+| Subtraction direction reversed | Intuition is consumption | Readings are cumulative, larger minus smaller |
+| Changed shared without compile check | Only compiled app | `./gradlew :shared:compileDebugKotlinAndroid` |
+> More pitfalls → `.claude/docs/architecture/gotchas.md`
 
-## 相关 Skills
-- 认知引导: `energyflow-acknowledge` — 深度架构理解
-- 第一个PR: `energyflow-new-feature` — 从需求到验证的完整路径
+## Related Skills
+- Codebase understanding: `energyflow-acknowledge` — deep architecture understanding
+- First PR: `energyflow-new-feature` — complete path from requirement to verification
