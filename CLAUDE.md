@@ -272,6 +272,14 @@ Run commands from the repository root.
 ./gradlew :app:testDebugUnitTest
 ```
 
+### Run shared KMP module tests (commonTest)
+
+The shared module declares `jvm("desktop")`, so the JVM-side test task is `desktopTest` (`jvmTest` does not exist):
+
+```bash
+./gradlew :shared:desktopTest
+```
+
 ### Run a specific test class or test pattern
 
 ```bash
@@ -308,7 +316,7 @@ Minimum expectations by change type:
 | ------------------------- | ----------------------------------------------------------------------------- |
 | UI-only Compose change    | Compile `:app` and run relevant UI or ViewModel tests                         |
 | ViewModel or domain logic | Compile affected modules and run targeted unit tests                          |
-| Shared KMP code           | Compile `:shared:compileDebugKotlinAndroid` and test affected consumers       |
+| Shared KMP code           | Compile `:shared:compileDebugKotlinAndroid`, run `:shared:desktopTest`, and test affected consumers |
 | Hilt dependency graph     | Compile `:app`; use `--rerun-tasks` if generated-code caching causes failures |
 | Room schema or DAO        | Compile, run database tests, and verify migration behavior                    |
 | Refactor                  | Run tests covering preserved behavior                                         |

@@ -33,7 +33,7 @@ After reading, make sure you can answer:
 - **Layering**: shared = pure logic + kotlinx.datetime | app = Hilt DI + java.time + Android API
 - **Why AnimatedContent instead of NavHost?** ViewModel stays alive, instant switching, no destroy/recreate
 - **Why are meter readings cumulative?** Meter reading reads the meter number directly; the difference is consumption
-- **Why is NeonYellow blue?** Legacy naming, actually points to ElectricStart (#00A3FF)
+- **Why is NeonYellow blue?** Legacy naming, actually points to ElectricStart (#00A8FF)
 
 ## Step 3: Output Structured Understanding
 

@@ -84,6 +84,7 @@ coverage/
 # ── Claude / Agent System ──────────────────────────────────
 .claude/settings.local.json
 .claude/worktrees/
+.claude/archive/
 
 # ── Misc ───────────────────────────────────────────────────
 *.log

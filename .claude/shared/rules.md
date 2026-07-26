@@ -13,12 +13,13 @@
 4. **Data**: `MeterRecord` 字段全 nullable（`!!` 禁止，用 `?: 0.0`）| 读数是累计值(大减小=消耗) | `null`≠`0.0`
 5. **Room**: `fallbackToDestructiveMigration()` — schema变更=数据全清（开发阶段有意）
 
-## 已知忽略（4条 — 不要再报告）
+## 已知忽略（3条 — 不要再报告）
 
-- `ChartScreen.collectAsState()` — 遗留不一致
-- `NeonYellow = #00A3FF` — 遗留命名（实际是蓝色）
+- `NeonYellow = #00A8FF` — 遗留命名（实际是蓝色，Color.kt 别名指向 ElectricStart）
 - `fallbackToDestructiveMigration()` — 有意为之
 - `SmartInputParser` 年份假设 — 已知限制
+
+> 历史条目 `ChartScreen.collectAsState()` 已于 2026-07-26（commit eba3f4b）修复——全 UI 已无 collectAsState()，不再豁免任何文件。
 
 ## 验证命令
 
@@ -26,9 +27,10 @@
 ./gradlew :app:compileDebugKotlin                          # 编译
 ./gradlew :shared:compileDebugKotlinAndroid                # KMP编译
 ./gradlew :app:testDebugUnitTest                           # 全量测试
+./gradlew :shared:desktopTest                              # shared 测试 (commonTest/SharedEnginesTest)
 grep -rn "java\.time\|android\." shared/src/commonMain/    # KMP边界
 grep -rn "Color(0x" <ui files> | grep -v "Color.kt"        # 硬编码颜色
-grep -rn "collectAsState()" <ui files> | grep -v ChartScreen # 状态收集
+grep -rn "collectAsState()" <ui files>                      # 状态收集 (应为 0，无豁免)
 grep -rn "!!" <changed files>                               # 空安全
 ```
 
@@ -58,6 +60,6 @@ Verify:
 3. ./gradlew :app:testDebugUnitTest
 4. grep -rn "java\.time\|java\.util\|android\." shared/src/commonMain/ --include="*.kt" → must be 0
 5. grep -rn "Color(0x" app/src/.../ui/ --include="*.kt" | grep -v "Color.kt"
-6. grep -rn "collectAsState()" app/src/.../ui/ --include="*.kt" | grep -v ChartScreen
+6. grep -rn "collectAsState()" app/src/.../ui/ --include="*.kt" → must be 0 (no exemptions)
 7. grep -rn "!!" <changed files>
 ```

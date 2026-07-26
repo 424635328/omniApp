@@ -18,8 +18,7 @@ const RULES = `CRITICAL RULES:
 7. Minimal: no abstractions for single use
 8. Surgical: don't modify unrelated adjacent code
 KNOWN IGNORES (do not report):
-- ChartScreen.collectAsState() — legacy inconsistency
-- NeonYellow = #00A3FF — legacy naming (actually blue)
+- NeonYellow = #00A8FF — legacy naming (actually blue, alias of ElectricStart)
 - fallbackToDestructiveMigration() — intentional during development
 - SmartInputParser year assumption — known limitation`
 
@@ -34,6 +33,7 @@ Then output the list of changed files, categorized by module:
 - test files
 - build/config files`,
   { label: 'scope-changes',
+    effort: 'low',
     schema: {
       type: 'object',
       properties: {
@@ -66,6 +66,10 @@ if (totalChanged === 0) {
 
 const scopeContext = `Changed files to review:
 ${allChanged.map(f => `  - ${f}`).join('\n')}
+
+READ-ONLY review: use grep/read/git only. Do NOT run Gradle builds or tests — the
+other review agents run concurrently and concurrent Gradle invocations in the same
+working tree deadlock on the project lock.
 
 ${RULES}`
 

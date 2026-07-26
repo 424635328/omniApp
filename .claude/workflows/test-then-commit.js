@@ -28,7 +28,8 @@ Then categorize each changed file:
 Also determine:
 - Is this a feat (new capability), fix (bug fix), refactor (structure only), test (tests only), docs, or chore?
 - Which test files are relevant to run first?`,
-    { schema: {
+    { label: 'scan-changes',
+      schema: {
       type: 'object',
       properties: {
         changedFiles: { type: 'array', items: { type: 'string' } },
@@ -39,8 +40,7 @@ Also determine:
         description: { type: 'string' }
       },
       required: ['changedFiles', 'type', 'description']
-    }},
-    { label: 'scan-changes' }
+    }}
   ),
 
   // Track 2: Run full test suite
@@ -57,7 +57,7 @@ Also determine:
    ./gradlew :app:testDebugUnitTest
 
 Report: PASS/FAIL for each step. If any FAIL, show the error output.`,
-    { label: 'run-tests' }
+    { label: 'run-tests', effort: 'low' }
   )
 ])
 

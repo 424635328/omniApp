@@ -63,8 +63,12 @@ fun `water price follows configured tiers`() {
 ### 2. 运行测试
 
 ```bash
-# 全部测试
+# 全部测试（app 模块）
 ./gradlew :app:testDebugUnitTest
+
+# 共享模块 commonTest（SharedEnginesTest）
+# 注意：shared/build.gradle.kts 声明的是 jvm("desktop")，任务名是 desktopTest，不是 jvmTest
+./gradlew :shared:desktopTest
 
 # 单个测试类
 ./gradlew :app:testDebugUnitTest --tests "com.example.energyflow.data.CostEngineTest"
@@ -79,6 +83,8 @@ fun `water price follows configured tiers`() {
 ./gradlew :app:testDebugUnitTest
 # 报告位置: app/build/reports/tests/testDebugUnitTest/index.html
 ```
+
+> 涉及 `shared/src/commonMain` 的改动，除 app 测试外还必须运行 `./gradlew :shared:desktopTest`。
 
 ### 3. 调试测试失败
 

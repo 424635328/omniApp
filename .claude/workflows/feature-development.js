@@ -55,8 +55,9 @@ Output: which test files exist, what they cover, and what the behavior contracts
   }
 ]
 
+// Doc summarization is mechanical — low effort keeps this phase fast and cheap
 const docsParallel = await parallel(
-  DOC_SETS.map(d => () => agent(d.prompt, { label: `read:${d.key}`, phase: 'Understand' }))
+  DOC_SETS.map(d => () => agent(d.prompt, { label: `read:${d.key}`, phase: 'Understand', effort: 'low' }))
 )
 
 const core = docsParallel[0] || ''
@@ -155,6 +156,7 @@ Output a JSON array of phases. Each phase has:
 Steps that can run in parallel (marked [PARALLEL] or touch independent files) go in the SAME phase.
 Steps that depend on previous steps (marked [SEQ]) each get their OWN phase.`,
   { label: 'parallelize-plan',
+    effort: 'low',
     schema: {
       type: 'object',
       properties: {
@@ -180,6 +182,9 @@ for (let i = 0; i < (planAnalysis?.phases?.length || 0); i++) {
   const phaseData = planAnalysis.phases[i]
   log(`Phase ${i + 1}/${planAnalysis.phases.length}: ${phaseData.steps.length} step(s) ${phaseData.steps.length > 1 ? '(PARALLEL)' : ''}`)
 
+  // Parallel step agents EDIT ONLY — no Gradle. Concurrent Gradle invocations
+  // in the same working tree deadlock on the project lock and spawn one 2GB
+  // daemon each. The single compile-check agent below builds once per phase.
   await parallel(
     phaseData.steps.map((step, j) => () => agent(
       `IMPLEMENT this step for feature "${feature}":
@@ -188,18 +193,18 @@ ${step}
 
 ${RULES}
 
-After editing, run: ./gradlew :app:compileDebugKotlin
-If it fails, fix the errors before reporting done.`,
+EDIT ONLY: do NOT run Gradle — other implementation agents run concurrently and
+concurrent Gradle builds deadlock. A separate compile step runs after this phase.`,
       { label: `impl-p${i + 1}-s${j + 1}`, phase: 'Implement', agentType: 'bug-fixer' }
     ))
   )
 
-  // Quick compile check after each phase
-  if (phaseData.steps.length > 1 || i === planAnalysis.phases.length - 1) {
+  // Single serialized compile check after every phase
+  {
     const compileCheck = await agent(
       `Run: ./gradlew :app:compileDebugKotlin
 Report: PASS/FAIL. If FAIL, show the error and suggest fix.`,
-      { label: `compile-p${i + 1}` }
+      { label: `compile-p${i + 1}`, phase: 'Implement', effort: 'low' }
     )
 
     if (compileCheck && compileCheck.toLowerCase().includes('fail')) {
@@ -220,33 +225,32 @@ log('Implementation complete')
 
 phase('Verify')
 
-// Step 4: PARALLEL VERIFICATION — compile, test, and boundary scan run simultaneously
+// Step 4: verification — ONE agent owns all Gradle invocations (serial inside),
+// while the grep-only boundary scan runs alongside it. Never run two Gradle
+// builds concurrently in the same working tree.
 const verifyResults = await parallel([
   () => agent(
-    `Run: ./gradlew :app:testDebugUnitTest
-Report: PASS/FAIL. If FAIL, show which tests failed and the error output.`,
-    { label: 'run-tests', phase: 'Verify' }
-  ),
-  () => agent(
-    `Run: ./gradlew :shared:compileDebugKotlinAndroid 2>/dev/null || echo "shared not changed or compile skipped"
-Report: PASS/FAIL.`,
-    { label: 'compile-shared', phase: 'Verify' }
+    `Run these IN ORDER (never in parallel):
+1. ./gradlew :app:testDebugUnitTest
+2. ./gradlew :shared:compileDebugKotlinAndroid
+Report: PASS/FAIL for each. If FAIL, show which tests failed and the error output.`,
+    { label: 'gradle-verify', phase: 'Verify', effort: 'low' }
   ),
   () => agent(
     `Run all boundary checks in sequence:
 1. KMP: grep -rn "java\\.time\\|android\\." shared/src/commonMain/ --include="*.kt" → should be 0
 2. Colors: grep -rn "Color(0x" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "Color.kt"
-3. State: grep -rn "collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v ChartScreen
+3. State: grep -rn "collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt"
 4. Null: grep -rn "!!" app/src/main/java/com/example/energyflow/ --include="*.kt"
 
 Report: PASS/FAIL for each check. If any FAIL, show the violations.`,
-    { label: 'boundary-scan', phase: 'Verify' }
+    { label: 'boundary-scan', phase: 'Verify', effort: 'low' }
   )
 ])
 
 const testResult = verifyResults[0] || ''
-const sharedCompile = verifyResults[1] || ''
-const boundaryResult = verifyResults[2] || ''
+const sharedCompile = testResult
+const boundaryResult = verifyResults[1] || ''
 
 const allPassed = testResult && !testResult.toLowerCase().includes('fail')
 

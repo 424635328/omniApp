@@ -15,7 +15,7 @@
 
 ### 计费迁移
 `UserPreferences.billingRules` 带版本号迁移:
-- `CURRENT_BILLING_VERSION = 2`
+- `CURRENT_BILLING_VERSION = 3`
 - 版本低于当前 → 自动重置为南京默认值并写入 DataStore
 
 ---

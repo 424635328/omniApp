@@ -6,6 +6,8 @@ import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.media.Image
+import android.annotation.SuppressLint
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
 import java.io.ByteArrayOutputStream
@@ -21,6 +23,7 @@ import java.nio.ByteBuffer
  * 4. ROI 裁剪（取景框区域）
  * 5. 输出 InputImage 供 ML Kit 消费
  */
+@SuppressLint("UnsafeOptInUsageError")
 object ImagePreprocessor {
 
     private const val CONTRAST_CLIP_PERCENT = 2.0
@@ -44,6 +47,7 @@ object ImagePreprocessor {
     /**
      * YUV_420_888 → Bitmap 转换。
      */
+    @OptIn(ExperimentalGetImage::class)
     private fun ImageProxy.toBitmap(): Bitmap {
         val image = image ?: return fallbackBitmap()
         return when (format) {

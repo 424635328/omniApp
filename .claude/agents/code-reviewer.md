@@ -38,8 +38,7 @@ Run `git diff main...HEAD --name-only` to scope review to changed files.
 - Colors: theme colors ONLY (`ElectricColor`, `DarkBackground`, `DarkCard`, etc.) — NO `Color(0xFFXXXXXX)`
   - Exception: color definitions in `Color.kt` and `ThemeState` are allowed
 - State: `collectAsStateWithLifecycle()` (NOT `collectAsState()`)
-  - Known exception: ChartScreen currently uses `collectAsState()` — don't re-report
-- Verify: `grep -rn "\.collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v ChartScreen`
+- Verify: `grep -rn "\.collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt"` → must be 0 (no exemptions since commit eba3f4b)
 
 ### 5. Room Safety (warning)
 - DAO queries returning `Flow` — caller must collect on IO dispatcher

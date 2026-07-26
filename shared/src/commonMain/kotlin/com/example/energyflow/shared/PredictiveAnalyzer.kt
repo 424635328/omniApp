@@ -93,6 +93,10 @@ object PredictiveAnalyzerShared {
 
         val monthRecords = clean.filter { it.timestamp >= monthStart }
 
+        // ── 零消耗提前返回 ──
+        val totalConsumption = (clean.last().electricTotal ?: 0.0) - (clean.first().electricTotal ?: 0.0)
+        if (totalConsumption <= 0) return null
+
         // ── 多模型预测 ──
         val predictions = mutableListOf<ModelPrediction>()
 

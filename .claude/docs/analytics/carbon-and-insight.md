@@ -11,7 +11,7 @@
 electricKgCO2 = kwh × electricFactor (默认 0.583 kg/kWh，中国电网平均)
 gasKgCO2 = gasM3 × gasFactor (默认 2.02 kg/m³)
 totalKgCO2 = electricKgCO2 + gasKgCO2
-treeDays = totalKgCO2 / (treeKgPerYear / 365)  // 等效植树天数
+treeDays = round(totalKgCO2 / (treeKgPerYear / 365)).toInt()  // 等效植树天数；treeKgPerYear <= 0 时为 0
 ```
 
 ### 绿色徽章 (GreenBadge)
@@ -29,6 +29,8 @@ treeDays = totalKgCO2 / (treeKgPerYear / 365)  // 等效植树天数
 - `carbonElectricFactor` (默认 0.583)
 - `carbonGasFactor` (默认 2.02)
 - `carbonTreeKgPerYear` (默认 20.0)
+
+注意：GREEN_MONTH 徽章的碳排放比较在 `badgesFromRecords` 中硬编码了因子 0.583/2.02（shared CarbonFootprint.kt:132,135），用户自定义因子不影响徽章评定，只影响 `calculate()` 的碳排放展示。
 
 ---
 
@@ -49,12 +51,16 @@ data class Insight(
     val emoji: String,
     val title: String,
     val detail: String,
-    val level: Level  // INFO, WARNING, CRITICAL
+    val level: Level = Level.INFO  // 嵌套枚举: INFO, WARNING, CRITICAL
 )
 ```
 
 ### 触发方式
-`MainViewModel` 中通过 `allRecords.map { InsightGenerator.generate(records) }` 声明式计算，stateIn 缓存。
+`MainViewModel.kt:129-131` 中通过 `allRecords.map { InsightGenerator.generate(records) }` 声明式计算，stateIn 缓存。
+
+注意：该调用未传 weather 和 rules 参数，两个后果：
+- **高温影响洞察在生产中不可达** — `generate` 的 weather 默认空列表，InsightGenerator.kt:71 遇空天气直接返回 null
+- **阶梯预警使用默认 BillingRules**（electricTier2Limit=400），不是用户配置的计费规则
 
 ---
 

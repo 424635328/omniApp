@@ -97,10 +97,14 @@ docs: update gotchas with color system details
 # 1. 编译检查
 ./gradlew :app:compileDebugKotlin
 
-# 2. 单元测试
+# 2. 单元测试（app 模块）
 ./gradlew :app:testDebugUnitTest
 
-# 3. 构建 APK
+# 3. 共享模块 commonTest（SharedEnginesTest）
+#    任务名是 desktopTest（shared/build.gradle.kts 声明 jvm("desktop")），不是 jvmTest
+./gradlew :shared:desktopTest
+
+# 4. 构建 APK
 ./gradlew :app:assembleDebug
 ```
 

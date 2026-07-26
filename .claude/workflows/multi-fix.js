@@ -64,6 +64,7 @@ Check: Hilt modules, @Inject/@Provides, build cache issues, Gradle configuration
   const layerDiags = await parallel(
     LAYERS.map(l => () => agent(
       `${l.prompt}
+READ-ONLY analysis: use grep/read only. Do NOT edit files. Do NOT run Gradle (other diagnosis agents run concurrently — concurrent Gradle deadlocks on the project lock).
 Output: root cause hypothesis with file:line reference, or "NOT IN THIS LAYER" if the bug isn't here.`,
       { label: `diag:${l.key}`, phase: 'Diagnose' }
     ))
@@ -113,7 +114,7 @@ After fixing, output:
 4. Boundary checks: null values, zero values, empty lists, edge cases
 
 Report: PASS/FAIL for each.`,
-    { label: 'final-verify', phase: 'Synthesize' }
+    { label: 'final-verify', phase: 'Synthesize', effort: 'low' }
   )
 
   log(verify?.substring(0, 500) || 'verification complete')
@@ -126,16 +127,18 @@ Report: PASS/FAIL for each.`,
   }
 }
 
-// ── Multi-bug pipeline: diagnose → fix → verify, no barrier between bugs ──
+// ── Multi-bug: diagnose all in parallel (read-only) → fix sequentially ──
+// Fixes are SERIAL on purpose: concurrent agents editing the same working tree
+// and running Gradle at the same time contend on Gradle's project lock (deadlock)
+// and spawn one 2GB daemon each. Only one Gradle process per working tree.
 
 phase('Diagnose')
 
-const results = await pipeline(
-  bugs,
-  // Stage 1: Diagnose
-  async (bug) => {
-    const diag = await agent(
-      `Diagnose this bug: "${bug.description}"
+const diagnoses = await parallel(
+  bugs.map(bug => () => agent(
+    `Diagnose this bug: "${bug.description}"
+
+READ-ONLY analysis: use grep/read only. Do NOT edit files. Do NOT run Gradle.
 
 Check ALL layers:
 1. Data layer: null safety, cumulative readings, Room/DataStore
@@ -147,42 +150,33 @@ Output:
 - ROOT CAUSE: file:line — what's wrong
 - FIX LOCATION: which file(s) need changes
 - APPROACH: what specific change to make`,
-      { label: `diag-bug-${bug.id}`, phase: 'Diagnose' }
-    )
-    return { bug, diagnosis: diag }
-  },
+    { label: `diag-bug-${bug.id}`, phase: 'Diagnose' }
+  ))
+)
 
-  // Stage 2: Fix
-  async (result) => {
-    if (!result || !result.diagnosis) return null
-    const fix = await agent(
-      `Apply the MINIMAL fix for this diagnosed bug:
+phase('Fix')
 
-BUG: ${result.bug.description}
-DIAGNOSIS: ${result.diagnosis}
+const results = []
+for (let i = 0; i < bugs.length; i++) {
+  const bug = bugs[i]
+  const diagnosis = diagnoses[i]
+  if (!diagnosis) { results.push(null); continue }
+  const fix = await agent(
+    `Apply the MINIMAL fix for this diagnosed bug:
+
+BUG: ${bug.description}
+DIAGNOSIS: ${diagnosis}
 
 ${RULES}
 
 After fixing, run: ./gradlew :app:compileDebugKotlin
-Output: FIXED: file:line — what was changed, and COMPILE: PASS/FAIL`,
-      { label: `fix-bug-${result.bug.id}`, phase: 'Fix', agentType: 'bug-fixer' }
-    )
-    return { ...result, fix }
-  },
-
-  // Stage 3: Quick verify
-  async (result) => {
-    if (!result || !result.fix) return null
-    const testVerify = await agent(
-      `Quick verify fix for bug #${result.bug.id}: "${result.bug.description}"
-1. ./gradlew :app:compileDebugKotlin
-2. Run the most relevant test for the changed area
-Report: PASS/FAIL`,
-      { label: `verify-bug-${result.bug.id}`, phase: 'Fix' }
-    )
-    return { ...result, quickVerify: testVerify }
-  }
-)
+Then run the most relevant test for the changed area.
+Output: FIXED: file:line — what was changed, COMPILE: PASS/FAIL, TEST: PASS/FAIL`,
+    { label: `fix-bug-${bug.id}`, phase: 'Fix', agentType: 'bug-fixer' }
+  )
+  results.push({ bug, diagnosis, fix, quickVerify: fix })
+  log(`Bug #${bug.id}: ${fix ? 'fix applied' : 'fix agent returned nothing'}`)
+}
 
 phase('Synthesize')
 
@@ -199,7 +193,7 @@ const fullTest = await agent(
 3. ./gradlew :app:testDebugUnitTest
 
 Report: PASS/FAIL with any failure details.`,
-  { label: 'full-suite', phase: 'Synthesize' }
+  { label: 'full-suite', phase: 'Synthesize', effort: 'low' }
 )
 
 const allPassed = fullTest && !fullTest.toLowerCase().includes('fail')
@@ -210,11 +204,11 @@ const boundaryScan = await agent(
   `Run quick boundary checks on fixed code:
 1. grep -rn "java\\.time\\|android\\." shared/src/commonMain/ --include="*.kt" → should be 0
 2. grep -rn "Color(0x" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "Color.kt" → check for new hardcoded colors
-3. grep -rn "collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v ChartScreen → check for state collection issues
+3. grep -rn "collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" → check for state collection issues
 4. grep -rn "!!" app/src/main/java/com/example/energyflow/ --include="*.kt" → check for new non-null assertions
 
 Report scan results.`,
-  { label: 'boundary-scan', phase: 'Synthesize' }
+  { label: 'boundary-scan', phase: 'Synthesize', effort: 'low' }
 )
 
 log(boundaryScan?.substring(0, 400) || 'boundary scan complete')

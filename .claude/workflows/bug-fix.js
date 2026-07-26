@@ -25,7 +25,7 @@ const VERIFY = `./gradlew :app:compileDebugKotlin
 ./gradlew :app:testDebugUnitTest
 grep -rn "java\\.time\\|java\\.util\\|android\\." shared/src/commonMain/ --include="*.kt" → must be 0
 grep -rn "Color(0x" app/src/.../ui/ --include="*.kt" | grep -v "Color.kt"
-grep -rn "collectAsState()" app/src/.../ui/ --include="*.kt" | grep -v ChartScreen
+grep -rn "collectAsState()" app/src/.../ui/ --include="*.kt"
 grep -rn "!!" <changed files>`
 
 const bug = args?.bug || args?.description || 'the reported bug'
@@ -94,6 +94,7 @@ Check:
 const layerDiags = await parallel(
   LAYERS.map(l => () => agent(
     `${l.prompt}
+READ-ONLY analysis: use grep/read only. Do NOT edit files. Do NOT run Gradle (other diagnosis agents run concurrently — concurrent Gradle deadlocks on the project lock).
 Output: root cause hypothesis with file:line reference, or "NOT IN THIS LAYER" if the bug isn't here.`,
     { label: `diag:${l.key}`, phase: 'Diagnose' }
   ))
@@ -149,7 +150,7 @@ const verify = await agent(
 3. Full test suite: ./gradlew :app:testDebugUnitTest
 4. KMP boundary: grep -rn "java\\.time\\|android\\." shared/src/commonMain/ --include="*.kt" → should be 0
 5. Color check: grep -rn "Color(0x" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "Color.kt"
-6. State check: grep -rn "collectAsState()" <new ui files> | grep -v ChartScreen
+6. State check: grep -rn "collectAsState()" <new ui files>
 7. Null safety: grep -rn "!!" <changed files>
 
 Boundary check — edge cases:
@@ -157,7 +158,7 @@ Boundary check — edge cases:
 - Cross-month / cross-year boundaries?
 
 Report: PASS/FAIL for each check. If all PASS, the fix is verified.`,
-  { label: 'full-verify' }
+  { label: 'full-verify', effort: 'low' }
 )
 
 log(verify?.substring(0, 500) || 'verification complete')

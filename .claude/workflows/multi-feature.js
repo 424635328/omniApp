@@ -74,7 +74,7 @@ Output: domain-specific knowledge, algorithms, data models, and constraints.`
   ]
 
   const docsParallel = await parallel(
-    DOC_SETS.map(d => () => agent(d.prompt, { label: `read:${d.key}`, phase: 'Analyze' }))
+    DOC_SETS.map(d => () => agent(d.prompt, { label: `read:${d.key}`, phase: 'Analyze', effort: 'low' }))
   )
 
   const core = docsParallel[0] || ''
@@ -112,7 +112,7 @@ If it fails, fix the errors before reporting done.`,
 4. Boundary checks: grep for java.time in shared, Color(0x in ui, collectAsState() issues
 
 Report: PASS/FAIL for each.`,
-    { label: 'verify', phase: 'Verify' }
+    { label: 'verify', phase: 'Verify', effort: 'low' }
   )
 
   const allPassed = verify && !verify.toLowerCase().includes('fail')
@@ -132,6 +132,7 @@ phase('Analyze')
 const featureContexts = await parallel(
   features.map(f => () => agent(
     `For feature: "${f.description}"
+READ-ONLY scouting: use grep/read only. Do NOT edit files. Do NOT run Gradle.
 Quick-scout:
 1. Which module(s) will this touch? (shared/data/ui/di)
 2. Which doc files are relevant? (list specific paths)
@@ -146,12 +147,14 @@ log(`Scouted ${features.length} features`)
 
 phase('Implement')
 
-const results = await pipeline(
-  features.map((f, i) => ({ ...f, context: featureContexts[i] || '' })),
-  // Stage 1: Implement
-  async (item) => {
-    const impl = await agent(
-      `IMPLEMENT this feature: "${item.description}"
+// Implementations are SERIAL on purpose: concurrent agents editing the same
+// working tree and running Gradle at the same time contend on Gradle's project
+// lock (deadlock) and spawn one 2GB daemon each. One Gradle process at a time.
+const results = []
+for (let i = 0; i < features.length; i++) {
+  const item = { ...features[i], context: featureContexts[i] || '' }
+  const impl = await agent(
+    `IMPLEMENT this feature: "${item.description}"
 
 ## Scout Report
 ${item.context?.substring(0, 500) || 'No scout data'}
@@ -159,36 +162,14 @@ ${item.context?.substring(0, 500) || 'No scout data'}
 ${RULES}
 
 After editing, run: ./gradlew :app:compileDebugKotlin
-If FAIL, fix before reporting done.`,
-      { label: `impl-f${item.id}`, phase: 'Implement', agentType: 'bug-fixer' }
-    )
-    return { feature: item, implementation: impl }
-  },
-
-  // Stage 2: Quick compile verify
-  async (result) => {
-    if (!result || !result.implementation) return null
-    const compileCheck = await agent(
-      `Run: ./gradlew :app:compileDebugKotlin
-Report: PASS/FAIL. If FAIL, show the error.`,
-      { label: `compile-f${result.feature.id}`, phase: 'Implement' }
-    )
-    const passed = compileCheck && !compileCheck.toLowerCase().includes('fail')
-    if (!passed) {
-      log(`⚠️ Feature #${result.feature.id} compile FAILED — attempting fix`)
-      const fix = await agent(
-        `Compile failed for feature: "${result.feature.description}"
-Errors: ${compileCheck}
-
-${RULES}
-Fix the compile errors (minimum changes) and run ./gradlew :app:compileDebugKotlin again.`,
-        { label: `fix-compile-f${result.feature.id}`, phase: 'Implement', agentType: 'bug-fixer' }
-      )
-      return { ...result, compileCheck, compileFixed: fix, compilePassed: fix && !fix.toLowerCase().includes('fail') }
-    }
-    return { ...result, compileCheck, compilePassed: true }
-  }
-)
+If FAIL, fix before reporting done.
+Output must end with: COMPILE: PASS or COMPILE: FAIL`,
+    { label: `impl-f${item.id}`, phase: 'Implement', agentType: 'bug-fixer' }
+  )
+  const compilePassed = !!impl && !impl.toLowerCase().includes('compile: fail')
+  if (!compilePassed) log(`⚠️ Feature #${item.id} compile FAILED — see agent output`)
+  results.push({ feature: item, implementation: impl, compilePassed })
+}
 
 phase('Verify')
 
@@ -204,7 +185,7 @@ const fullTest = await agent(
 3. ./gradlew :app:testDebugUnitTest
 
 Report: PASS/FAIL with any failure details.`,
-  { label: 'full-suite', phase: 'Verify' }
+  { label: 'full-suite', phase: 'Verify', effort: 'low' }
 )
 
 const allPassed = fullTest && !fullTest.toLowerCase().includes('fail')
@@ -214,22 +195,22 @@ const boundaryScan = await parallel([
   () => agent(
     `Run: grep -rn "java\\.time\\|android\\." shared/src/commonMain/ --include="*.kt"
 Should be 0 results. Report findings.`,
-    { label: 'check-kmp', phase: 'Verify' }
+    { label: 'check-kmp', phase: 'Verify', effort: 'low' }
   ),
   () => agent(
     `Run: grep -rn "Color(0x" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v "Color.kt"
 Check for new hardcoded colors. Report findings.`,
-    { label: 'check-colors', phase: 'Verify' }
+    { label: 'check-colors', phase: 'Verify', effort: 'low' }
   ),
   () => agent(
-    `Run: grep -rn "collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt" | grep -v ChartScreen
+    `Run: grep -rn "collectAsState()" app/src/main/java/com/example/energyflow/ui/ --include="*.kt"
 Check for state collection issues. Report findings.`,
-    { label: 'check-state', phase: 'Verify' }
+    { label: 'check-state', phase: 'Verify', effort: 'low' }
   ),
   () => agent(
     `Run: grep -rn "!!" app/src/main/java/com/example/energyflow/ --include="*.kt"
 Check for new non-null assertions. Report findings.`,
-    { label: 'check-null', phase: 'Verify' }
+    { label: 'check-null', phase: 'Verify', effort: 'low' }
   )
 ])
 

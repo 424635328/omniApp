@@ -1,6 +1,7 @@
 package com.example.energyflow.ui.camera
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.util.Log
 import android.view.ViewGroup
@@ -8,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
@@ -293,6 +295,7 @@ private fun CameraPreviewSection(
                             imageCapture.takePicture(
                                 ContextCompat.getMainExecutor(context),
                                 object : ImageCapture.OnImageCapturedCallback() {
+                                    @SuppressLint("UnsafeOptInUsageError")
                                     override fun onCaptureSuccess(image: ImageProxy) {
                                         val mediaImage = image.image
                                         if (mediaImage == null) {

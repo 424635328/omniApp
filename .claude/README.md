@@ -17,7 +17,7 @@ CLAUDE.md (自动加载，每次对话)
     │  触发条件 + 文档索引 + 检查清单 + 验证步骤
     ↓
  Docs                             ← Skill 指令指向时按需读取
-    │  .claude/docs/  (18个)
+    │  .claude/docs/  (26个)
     │  架构细节 · 算法说明 · 数据模型 · 已知陷阱 · ADR
     ↓
  Agents                           ← Workflow 调用的专业子 Agent
@@ -29,9 +29,8 @@ CLAUDE.md (自动加载，每次对话)
     │  多 Agent 编排: pipeline / parallel / phase
     ↓
  Hooks                            ← 确定性规则自动执行
-       .claude/settings.json
-       PreToolUse: KMP 边界自动检查
-       Stop: 任务闭环提醒
+       .claude/settings.json + .claude/hooks/
+       PreToolUse (Edit|Write): KMP 边界自动拦截
 ```
 
 **五层协作：**
@@ -82,15 +81,20 @@ CLAUDE.md (自动加载，每次对话)
 │   ├── ui-reviewer.md              # Compose UI 审查（Read+Grep+Glob+Bash）— 只读
 │   └── bug-fixer.md                # Bug 修复（+Edit）— 可修改代码
 │
-├── docs/                           # 深度参考（18个）
+├── hooks/                          # PreToolUse 钩子脚本
+│   └── kmp-boundary-guard.py       # 拦截 commonMain 平台依赖写入
+│
+├── docs/                           # 深度参考（26个）
 │   ├── agents/
-│   │   └── protocol.md             # 统一 Agent 协议
-│   ├── architecture/               # 架构概览 · 构建 · 陷阱 · ADR (6个)
-│   ├── data-layer/                 # 数据模型 · 解析 · 计费 · 外部 API (5个)
+│   │   └── protocol.md             # 统一 Agent 协议 + 并发纪律
+│   ├── architecture/               # 架构概览 · 构建 · 陷阱 · ADR (8个)
+│   ├── data-layer/                 # 数据模型 · 解析 · 计费 · 外部 API (6个)
 │   ├── analytics/                  # 预测 · 碳足迹 · 洞察 (2个)
 │   ├── shared-kmp/                 # KMP 模块设计 (1个)
-│   ├── ui-layer/                   # 主题 · 导航 · 图表 · 设置 (3个)
+│   ├── ui-layer/                   # 主题 · 导航 · 图表 · 设置 · 入口/扫描/年报 (4个)
 │   └── testing/                    # 测试策略 · 用例 · 流程 (4个)
+│
+├── archive/                        # 历史 agent 工作成果归档（gitignored）
 │
 └── workflows/                      # 多 Agent 编排（7个）
     ├── full-review.js              # 4 维度并行审查（code+arch+analytics+ui）
@@ -175,14 +179,13 @@ Skills 支持三种触发方式，无需手动 `Read()`：
 
 ## Hooks 系统
 
-在 `.claude/settings.json` 中配置，自动执行确定性检查：
+在 `.claude/settings.json` 中配置，脚本位于 `.claude/hooks/`：
 
 | Hook | 触发时机 | 行为 |
 |------|---------|------|
-| **PreToolUse (Edit)** | 每次 `Edit` 工具调用前 | 若目标在 `shared/src/commonMain/` → 扫描 `java.time` / `java.util.*` / `android.*` 违规 |
-| **Stop** | 每次对话结束 | 提醒检查：编译 + KMP 边界 + 颜色 + 字体 + 状态收集 |
+| **PreToolUse (Edit\|Write)** | 每次写入前 | 若目标在 `shared/src/commonMain/` 且新内容含 `import java.* / javax.* / android.* / androidx.*` → **拦截该次写入**（exit 2），脚本 `kmp-boundary-guard.py` |
 
-> **设计原则**: PreToolUse 只做单文件快速静态检查（<1秒）；全量构建和测试留给 Workflow 验证阶段或 CI。
+> **设计原则**: PreToolUse 只做单文件快速静态检查（<1秒），hook 自身异常时放行（fail-open）；全量构建和测试留给 Workflow 验证阶段或 CI。
 
 ---
 

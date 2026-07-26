@@ -20,8 +20,8 @@
 # 运行单个测试类
 ./gradlew :app:testDebugUnitTest --tests "com.example.energyflow.data.CostEngineTest"
 
-# 运行 shared module 测试
-./gradlew :shared:jvmTest
+# 运行 shared module 测试（KMP 目标名为 jvm("desktop")，故任务是 desktopTest 而非 jvmTest）
+./gradlew :shared:desktopTest
 ```
 
 ## Test Files
@@ -40,6 +40,7 @@
 | app | `WeatherInterpolatorTest.kt` | 天气数据线性插值 |
 | app | `WeatherRepositoryTest.kt` | Open-Meteo API 解析 |
 | app | `ChartViewModelTest.kt` | 图表数据聚合 |
+| shared | `commonTest/.../SharedEnginesTest.kt` | 共享引擎跨平台测试（`:shared:desktopTest` 运行） |
 
 ## Environment
 - **Android SDK**: `C:/Users/George/AppData/Local/Android/Sdk`

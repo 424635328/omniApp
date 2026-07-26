@@ -19,25 +19,34 @@
 
 | 模块 | 测试文件 | 测试数 | 覆盖维度 |
 |------|---------|--------|---------|
-| SmartInputParser | SmartInputParserTest.kt | 35+ | 全部11种模式 + 极端输入 + 自适应阈值 |
+| SmartInputParser | SmartInputParserTest.kt | 54 | 全部11种模式 + 极端输入 + 自适应阈值 |
 | CostEngine | CostEngineTest.kt | 4 | 峰谷分时 + 阶梯加价 + 水价阶梯 |
-| PredictiveAnalyzer | PredictiveAnalyzerTest.kt | 15+ | 边界 + 递减过滤 + 本月推算 + 历史回退 + 天气 |
+| PredictiveAnalyzer | PredictiveAnalyzerTest.kt | 20 | 边界 + 递减过滤 + 本月推算 + 历史回退 + 天气 |
 | AnomalyDetector | AnomalyDetectorTest.kt | 3 | 单调递增 + 突增检测 + 正常接受 |
-| AdaptiveClassifier | AdaptiveClassifierTest.kt | 7 | 空记录 + 纯电 + 纯水 + 混合 + 缓存 + 重学 |
-| EventImpactAnalyzer | EventImpactAnalyzerTest.kt | 8 | 事件窗口 + 标签检测 + 多事件 + 边界 |
-| WeatherInterpolator | WeatherInterpolatorTest.kt | 12+ | 插值 + 外推 + 无效过滤 + 降水 + 大跨度 |
-| WeatherRepository | WeatherRepositoryTest.kt | — | JSON 解析 + WMO 码映射 |
-| MeterRepository | MeterRepositoryTest.kt | — | CRUD + 智能插入 |
-| UserPreferences | UserPreferencesTest.kt | — | DataStore 持久化 |
-| ThemeDistRepository | ThemeDistRepositoryTest.kt | — | CSS 变量解析 |
-| DeepSeekRepository | DeepSeekRepositoryTest.kt | — | API 调用 + 降级 |
-| ChartViewModel | ChartViewModelTest.kt | — | 数据聚合 |
+| AdaptiveClassifier | AdaptiveClassifierTest.kt | 8 | 空记录 + 纯电 + 纯水 + 混合 + 缓存 + 重学 |
+| EventImpactAnalyzer | EventImpactAnalyzerTest.kt | 9 | 事件窗口 + 标签检测 + 多事件 + 边界 |
+| WeatherInterpolator | WeatherInterpolatorTest.kt | 17 | 插值 + 外推 + 无效过滤 + 降水 + 大跨度 |
+| WeatherRepository | WeatherRepositoryTest.kt | 20 | JSON 解析 + WMO 码映射 |
+| MeterRepository | MeterRepositoryTest.kt | 17 | CRUD + 智能插入 |
+| UserPreferences | UserPreferencesTest.kt | 13 | DataStore 持久化 |
+| ThemeDistRepository | ThemeDistRepositoryTest.kt | 10 | CSS 变量解析 |
+| DeepSeekRepository | DeepSeekRepositoryTest.kt | 8 | API 调用 + 降级 |
+| ChartViewModel | ChartViewModelTest.kt | 8 | 数据聚合 |
+
+### 共享模块 (KMP commonTest)
+
+| 模块 | 测试文件 | 测试数 | 覆盖维度 |
+|------|---------|--------|---------|
+| Shared 引擎 | shared/src/commonTest/.../SharedEnginesTest.kt | 3 | CostEngine 零用量 + 碳徽章跨年连胜 + Wrapped 零天数均值 |
+
+> 共享模块测试通过 `./gradlew :shared:desktopTest` 运行（`shared/build.gradle.kts` 声明的是 `jvm("desktop")`，任务名为 `desktopTest` 而非 `jvmTest`）。
 
 ## 质量门禁 (Quality Gates)
 
 ### 必须通过（阻塞发布）
 - [ ] `./gradlew :app:compileDebugKotlin` — 编译成功
 - [ ] `./gradlew :app:testDebugUnitTest` — 全部单元测试通过
+- [ ] `./gradlew :shared:desktopTest` — 共享模块 commonTest 通过（SharedEnginesTest）
 - [ ] 无 `critical` 级别的 code review findings
 
 ### 应该通过（警告但不阻塞）

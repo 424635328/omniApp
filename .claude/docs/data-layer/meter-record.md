@@ -5,6 +5,7 @@
 
 ```kotlin
 @Entity(tableName = "meter_records", indices = [Index(value = ["timestamp"])])
+@Immutable  // Compose 稳定性标注，避免不必要重组
 data class MeterRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: LocalDateTime,
@@ -36,7 +37,7 @@ data class MeterRecord(
 
 核心查询：
 - `getAllRecords()` → Flow, timestamp DESC + id DESC
-- `getRecordsLimited(limit)` → 分页加载 (首页 150 条)
+- `getRecordsLimited(limit)` → 分页加载（DAO/Repository 默认 limit=200；首屏 150 条是 MainViewModel.kt:57 `_loadLimit` 传入的值）
 - `getElectricRecords()` / `getWaterRecords()` / `getGasRecords()` → 按类型筛选
 - `getPreviousRecord(currentTime)` → 找到当前时间之前的最近记录
 
@@ -47,9 +48,9 @@ data class MeterRecord(
 1. **smartInsert(input, force)** — 单条智能插入
    - SmartInputParser 解析 → AnomalyDetector 校验 → 去重检查 → Room insert → reLearnDebounced
 2. **batchInsert(input, force)** — 批量导入
-   - 批内去重 → 历史去重 → 日期缺口插值 → 批量 insert
+   - 日期缺口插值 (interpolateGaps, MeterRepository.kt:145) → 批内去重 → 历史去重 → 批量 insert
 3. **interpolateGaps(records)** — 电表/水表独立插值填补日期缺口
-4. **calculateConsumption(currentRecord)** — 计算与前一记录的消耗差值
+4. **calculateConsumption(currentRecord)** — 计算与前一记录的消耗差值，返回 `ConsumptionResult`
 5. **reLearnDebounced()** — 5分钟节流触发 AdaptiveClassifier.reLearn()
 
 ## InsertResult / BatchInsertResult
@@ -64,6 +65,21 @@ sealed class BatchInsertResult {
     data class Success(val count: Int)
     data class Warning(val warnings: List<String>)
     data class PartialSuccess(val successCount: Int, val errors: List<String>)
+}
+```
+
+## ConsumptionResult
+`calculateConsumption()` 的返回类型（MeterRepository.kt:428-438）：
+```kotlin
+sealed class ConsumptionResult {
+    data class Success(
+        val electricConsumption: Double?,
+        val waterConsumption: Double?,
+        val daysBetween: Long,
+        val dailyElectricConsumption: Double?,
+        val dailyWaterConsumption: Double?
+    )
+    object NoPreviousRecord
 }
 ```
 

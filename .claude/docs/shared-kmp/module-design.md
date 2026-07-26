@@ -1,12 +1,14 @@
 # KMP Shared Module 设计
 
 ## 目标
-将纯计算逻辑抽取到 `shared` 模块，实现跨平台复用（Android + JVM）。
+将纯计算逻辑抽取到 `shared` 模块，实现跨平台复用（Android + Desktop/JVM）。
 
 ## 平台目标
+> Gradle 目标声明为 `jvm("desktop")`（`shared/build.gradle.kts`），因此任务名均为 `desktop*`。
 - `commonMain` — 纯 Kotlin 逻辑，无 Android 依赖
 - `androidMain` — Android 平台实现 (actual)
-- `jvmMain` — JVM 平台实现 (actual)
+- `desktopMain` — Desktop/JVM 平台实现 (actual)
+- `commonTest` — 跨平台测试（`SharedEnginesTest.kt`，JVM 侧由 `:shared:desktopTest` 运行）
 
 ## 依赖
 - `kotlinx.datetime` — 跨平台日期时间
@@ -40,6 +42,10 @@
 ### WrappedReportBuilder (`shared/WrappedReport.kt`)
 - `WrappedReportData` — 年度报告数据
 - `WrappedReportBuilder.build()` — 构建报告
+
+### Platform (`shared/Platform.kt`)
+- `expect fun platformName(): String` — 本模块唯一的 expect/actual
+- actual 实现：androidMain 返回 `"Android"`，desktopMain 返回 `"Desktop"`
 
 ## Android 包装模式
 ```kotlin

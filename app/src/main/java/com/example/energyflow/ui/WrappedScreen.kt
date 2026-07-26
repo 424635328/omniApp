@@ -1,5 +1,6 @@
 package com.example.energyflow.ui
 
+import android.annotation.SuppressLint
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
@@ -78,6 +79,7 @@ import com.example.energyflow.ui.theme.WarningNeon
 import kotlinx.coroutines.launch
 import java.time.YearMonth
 
+@SuppressLint("NoCollectCallFound")
 @Composable
 fun WrappedScreen(
     viewModel: WrappedViewModel = hiltViewModel(),

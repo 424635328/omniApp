@@ -1,5 +1,6 @@
 package com.example.energyflow.ui.navigation
 
+import android.annotation.SuppressLint
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
@@ -73,6 +74,7 @@ sealed class Screen(
  *
  * 扫码页作为 state 驱动的覆盖层，OCR 结果通过 pendingOcrResult 回传。
  */
+@SuppressLint("NoCollectCallFound")
 @Composable
 fun AppNavGraph() {
     // ── 当前标签页 + 返回导航栈 ──

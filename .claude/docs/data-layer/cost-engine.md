@@ -18,7 +18,8 @@ data class BillingRules(
     val waterTier2Limit: Double = 22.5,       // 水二档上限 吨
     val waterTier1Price: Double = 3.42,       // 水一档单价 ¥/吨
     val waterTier2Price: Double = 4.32,       // 水二档单价 ¥/吨
-    val waterTier3Price: Double = 7.02        // 水三档单价 ¥/吨
+    val waterTier3Price: Double = 7.02,       // 水三档单价 ¥/吨
+    val gasUnitPrice: Double = 2.8            // 燃气单价 ¥/m³
 )
 ```
 默认值为南京建邺区 2026 年标准。
@@ -34,7 +35,7 @@ data class BillingRules(
    - tier1 * price1 + tier2 * price2 + tier3 * price3
 
 ## UserPreferences 计费迁移
-- `CURRENT_BILLING_VERSION = 2`
+- `CURRENT_BILLING_VERSION = 3`
 - 首次启动或版本低于当前 → 自动重置为南京默认值并写入 DataStore
 - 迁移只触发一次，避免 Compose 重组循环
 
@@ -58,7 +59,7 @@ data class BillResult(
     val peakPrice: Double,           // 峰电实际单价 (含阶梯加价)
     val valleyPrice: Double,         // 谷电实际单价
     val flatPrice: Double,           // 平电实际单价
-    val waterPrice: Double,          // 水实际单价 (加权平均)
+    val waterPrice: Double,          // 水实际单价 (总水费/吨数；0 吨时取一档单价)
     // ... 更多分段明细
 )
 ```

@@ -43,7 +43,7 @@ java -version
 | `Cannot find symbol class Hilt_*` | Hilt annotation processor not running | Confirm `@HiltAndroidApp` / `@AndroidEntryPoint` exists |
 | `Duplicate class` | Dependency conflict | `./gradlew :app:dependencies` to check conflicts |
 | `java.time not found` | KMP shared module | Use `kotlinx.datetime` instead |
-| `expect/actual mismatch` | KMP platform implementation missing | Check androidMain/jvmMain has corresponding actual |
+| `expect/actual mismatch` | KMP platform implementation missing | Check androidMain/desktopMain has corresponding actual |
 
 ## Run/Debug
 

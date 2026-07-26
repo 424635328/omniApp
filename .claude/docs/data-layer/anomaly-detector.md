@@ -8,12 +8,14 @@
 
 ### 1. 单调递增校验 (checkElectricMonotonic / checkWaterMonotonic)
 - 新读数 < 该时间戳之前的最近一条记录的读数 → 警告
-- 比较对象：`electricHistoryBefore(timestamp).lastOrNull()`，即时间上最近的前一条记录，不是历史最大值
+- 电表路径：`electricHistoryBefore(timestamp).lastOrNull()`（先过滤+排序再取末条）
+- 水表路径：`dao.getWaterRecords()` + `maxByOrNull { it.timestamp }`（机制不同，语义相同：都取时间上最近的前一条记录，不是历史最大值）
 - 用于检测：抄表错误、换表后未标记
 
 ### 2. 突增检测 (checkElectricSpike)
-- 计算候选记录的日均用电 vs 最近 4 段历史日均
-- ratio >= 5.0 → 警告
+- 基线：最近 4 条历史记录两两相邻构成的至多 3 段区间日均（`previous.takeLast(4).windowed(2)`，AnomalyDetector.kt:49-50），取平均
+- 候选记录的日均用电 / 基线 → ratio >= 5.0 → 警告
+- 跳过条件（line 55）：有效历史区间 < 2 段、候选日均 <= 0、或 newTotal < latestTotal（递减读数交给单调校验处理）
 - 用于检测：大功率设备异常运行、输入错误
 
 ### 3. 批量导入递减检测 (MeterRepository.findBatchDropWarning)

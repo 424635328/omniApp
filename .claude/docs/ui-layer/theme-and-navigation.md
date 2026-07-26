@@ -31,28 +31,28 @@
 #### 动态语义色（跟随 ThemeState）
 | 色彩 | 默认值 | 用途 |
 |------|--------|------|
-| `ElectricColor` | ElectricStart (#00A3FF) | 主色调，电表/强调，可被天气主题覆盖 |
-| `ElectricPeakColor` | StaticPeakColor (#FF8800) | 峰电柱状图 |
-| `ElectricValleyColor` | StaticValleyColor (#8866DD) | 谷电柱状图 |
-| `WaterColor` | WaterStart (#00D4AA) | 水表 |
-| `GasColor` | GasStart (#FF8C42) | 燃气 |
+| `ElectricColor` | ElectricStart (#00A8FF) | 主色调，电表/强调，可被天气主题覆盖 |
+| `ElectricPeakColor` | StaticPeakColor (#FF9922) | 峰电柱状图 |
+| `ElectricValleyColor` | StaticValleyColor (#9977EE) | 谷电柱状图 |
+| `WaterColor` | WaterStart (#00DDBB) | 水表 |
+| `GasColor` | GasStart (#FF8844) | 燃气 |
 
 #### 静态色（不跟随主题）
 | 色彩 | 值 | 用途 |
 |------|-----|------|
-| `ErrorNeon` | #FF3366 | 错误/三档/偏高 |
-| `WarningNeon` | #FFB020 | 警告/二档 |
-| `SuccessGreen` | #00E676 | 成功/降序/偏低 |
-| `StaticPeakColor` | #FF8800 | 峰电静态色 |
-| `StaticValleyColor` | #8866DD | 谷电静态色 |
+| `ErrorNeon` | #FF4466 | 错误/三档/偏高 |
+| `WarningNeon` | #FFBB33 | 警告/二档 |
+| `SuccessGreen` | #00DD99 | 成功/降序/偏低 |
+| `StaticPeakColor` | #FF9922 | 峰电静态色 |
+| `StaticValleyColor` | #9977EE | 谷电静态色 |
 
 #### 向后兼容别名（自动跟随暗/亮模式）
 | 别名 | 暗色值 | 用途 |
 |------|--------|------|
-| `DarkBackground` | BackgroundDark (#0C0E14) | 背景 |
-| `DarkSurface` | SurfaceDark (#171A26) | 表面 |
-| `DarkCard` | SurfaceVariant (#212538) | 卡片 |
-| `OutlineDark` | #30364B | 边框/平电柱状图 |
+| `DarkBackground` | BackgroundDark (#080A12) | 背景 |
+| `DarkSurface` | SurfaceDark (#111425) | 表面 |
+| `DarkCard` | SurfaceVariant (#1B2035) | 卡片 |
+| `OutlineDark` | #2A304A | 边框/平电柱状图 |
 | `TextPrimary` | #E2E8F0 (暗) / #0F172A (亮) | 主文本 |
 | `TextSecondary` | #94A3B8 (暗) / #475569 (亮) | 次文本 |
 | `TextTertiary` | #64748B | 三级文本 |
@@ -60,19 +60,19 @@
 #### 遗留别名（向后兼容）
 | 别名 | 实际指向 | 说明 |
 |------|---------|------|
-| `NeonYellow` | ElectricStart (#00A3FF) | 原名青绿，现为荧光蓝 |
-| `NeonBlue` | WaterStart (#00D4AA) | 实际是碧波青 |
-| `NeonOrange` | StaticPeakColor (#FF8800) | |
-| `NeonCyan` | #4488FF | |
-| `NeonRed` | GasStart (#FF8C42) | |
+| `NeonYellow` | ElectricStart (#00A8FF) | 原名青绿，现为电光蓝 |
+| `NeonBlue` | WaterStart (#00DDBB) | 实际是碧波青 |
+| `NeonOrange` | StaticPeakColor (#FF9922) | |
+| `NeonCyan` | #4499FF | |
+| `NeonRed` | GasStart (#FF8844) | |
 
 #### 天气主题覆盖 (ThemeState.applyWeatherTheme)
 ```
 tempMax > 38°C → ElectricColor = #FF4500 (酷暑红)
 tempMax > 32°C → ElectricColor = #FF8800 (炎热橙)
-tempMax > 20°C → ElectricColor = #00A3FF (常温荧光蓝)
-tempMax > 10°C → ElectricColor = #0055FF (偏冷深蓝)
-else           → ElectricColor = #8866DD (寒冷蓝紫)
+tempMax > 20°C → ElectricColor = ElectricStart (#00A8FF 常温电光蓝)
+tempMax > 10°C → ElectricColor = ElectricEnd (#0058DD 偏冷深蓝)
+else           → ElectricColor = ElectricValleyColor (#9977EE 寒冷蓝紫)
 ```
 
 ### 字体

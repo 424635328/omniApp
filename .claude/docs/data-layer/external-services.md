@@ -51,6 +51,26 @@ ChartViewModel.triggerAiAnalysis() → DeepSeekRepository.analyze(prompt)
 
 ---
 
+## DeepSeekCredentialStore — API Key 加密存储
+`app/src/main/java/com/example/energyflow/data/DeepSeekCredentialStore.kt`
+
+### 存什么
+仅存 DeepSeek API Key 一项，通过 `apiKey: StateFlow<String>` 暴露（空字符串 = 未配置）。
+
+### 机制
+- `@Singleton` + 构造注入；**普通 SharedPreferences**（`encrypted_credentials`）存密文，非 EncryptedSharedPreferences
+- 加密：AndroidKeyStore 生成的 AES 密钥（alias `energyflow.deepseek.api-key`）+ `AES/GCM/NoPadding`；密文 = `Base64(IV(12B) + ciphertext)`（DeepSeekCredentialStore.kt:46-51）
+- `setApiKey("")` 或空白 → 删除条目；解密失败（如 Keystore 密钥丢失）→ 静默清除条目并返回空串（DeepSeekCredentialStore.kt:37-44）
+
+### 消费方
+- `DeepSeekRepository` — 请求时读 `credentialStore.apiKey.value`
+- `BillingSettingsViewModel` — 设置页读写（`deepSeekApiKeyFlow` / `setApiKey`）
+
+### 安全规则
+**绝不在日志、异常信息、UI 明文回显或提交内容中暴露 API Key**；新增消费方只通过 StateFlow 读取，不要另存明文副本。
+
+---
+
 ## ThemeDistRepository — 每日主题分发
 `app/src/main/java/com/example/energyflow/data/ThemeDistRepository.kt`
 

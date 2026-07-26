@@ -20,7 +20,7 @@ description: Test running and debugging — quick execution, result interpretati
 ./gradlew :app:testDebugUnitTest --tests "com.example.energyflow.data.CostEngineTest.electric tiers apply additive surcharge"
 
 # KMP shared module
-./gradlew :shared:jvmTest
+./gradlew :shared:desktopTest
 
 # Compile check (faster than running tests)
 ./gradlew :app:compileDebugKotlin

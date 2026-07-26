@@ -69,7 +69,7 @@ avgSurcharge = (tier2 * surcharge2 + tier3 * surcharge3) / totalKwh
 This means each kWh gets the same average surcharge, regardless of peak/valley.
 
 ### Billing Version Migration
-`UserPreferences.billingRules` has a version counter (`CURRENT_BILLING_VERSION = 2`). When the version increments, ALL billing settings reset to Nanjing defaults. This is intentional — it ensures users get correct prices after policy changes.
+`UserPreferences.billingRules` has a version counter (`CURRENT_BILLING_VERSION = 3`). When the version increments, ALL billing settings reset to Nanjing defaults. This is intentional — it ensures users get correct prices after policy changes.
 
 ## ChartViewModel
 
@@ -88,10 +88,10 @@ Prediction snapshots are saved at most once per day (`now.dayOfMonth - cachedSna
 `AppNavGraph` does NOT use NavHost. It uses `when(tab)` with `AnimatedContent`. ViewModels are cached at the Activity level via `hiltViewModel()`. Switching tabs doesn't destroy/recreate ViewModels.
 
 ### NeonYellow Is NOT Yellow
-`NeonYellow` is an alias for `ElectricStart` (#00A3FF, blue). `NeonBlue` is an alias for `WaterStart` (#00D4AA, cyan). These are legacy names from an earlier color scheme.
+`NeonYellow` is an alias for `ElectricStart` (#00A8FF, blue). `NeonBlue` is an alias for `WaterStart` (#00DDBB, cyan). These are legacy names from an earlier color scheme.
 
-### ChartScreen Uses collectAsState()
-`ChartScreen` uses `collectAsState()` while `MainScreen` uses `collectAsStateWithLifecycle()`. The former doesn't respect lifecycle — this is a known inconsistency.
+### collectAsState() Inconsistency (Fixed)
+`ChartScreen` previously used `collectAsState()`; it was fully migrated to `collectAsStateWithLifecycle()` (2026-07-26, commit eba3f4b). There are now NO `collectAsState()` exemptions anywhere in `ui/`.
 
 ### renderHeavy Delay
 ChartScreen delays heavy panel rendering by 50ms (`delay(50)`) to avoid first-frame JIT compilation jank.
@@ -104,7 +104,7 @@ ChartScreen delays heavy panel rendering by 50ms (`delay(50)`) to avoid first-fr
 - Conversion happens in Android wrapper classes (e.g., `PredictiveAnalyzer.kt` has `toKtDateTime()` extension)
 
 ### Shared Module Has No Android Dependencies
-`shared/src/commonMain/` must NEVER import `android.*` or `java.*`. Use `kotlinx.*` only. Platform-specific code goes in `androidMain/` or `jvmMain/`.
+`shared/src/commonMain/` must NEVER import `android.*` or `java.*`. Use `kotlinx.*` only. Platform-specific code goes in `androidMain/` or `desktopMain/`.
 
 ## External APIs
 

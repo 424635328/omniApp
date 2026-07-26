@@ -1,6 +1,6 @@
 # 测试用例目录 (Test Case Catalog)
 
-## SmartInputParserTest (35+ cases)
+## SmartInputParserTest (54 cases)
 
 ### 模式覆盖
 | 模式 | 测试数 | 关键用例 |
@@ -63,7 +63,7 @@
 
 ---
 
-## PredictiveAnalyzerTest (15+ cases)
+## PredictiveAnalyzerTest (20 cases)
 
 ### 边界条件
 | 用例 | 预期 |
@@ -119,7 +119,7 @@
 
 ---
 
-## AdaptiveClassifierTest (7 cases)
+## AdaptiveClassifierTest (8 cases)
 
 | 用例 | 预期 |
 |------|------|
@@ -134,7 +134,7 @@
 
 ---
 
-## EventImpactAnalyzerTest (8 cases)
+## EventImpactAnalyzerTest (9 cases)
 
 | 用例 | 预期 |
 |------|------|
@@ -146,10 +146,11 @@
 | #hashtag 检测 | 提取标签名 |
 | 已知电器词 | 匹配电器名 |
 | 多事件不同标签 | 返回2个影响 |
+| 全空备注 | 空列表 |
 
 ---
 
-## WeatherInterpolatorTest (12+ cases)
+## WeatherInterpolatorTest (17 cases)
 
 | 用例 | 预期 |
 |------|------|
@@ -174,13 +175,15 @@
 ## 测试覆盖缺口 (Coverage Gaps)
 
 ### 当前未覆盖
-- [ ] MeterRepository.batchInsert 完整流程
 - [ ] MeterRepository.interpolateGaps
 - [ ] MainViewModel.validateAndSave 异常对话框流程
-- [ ] ChartViewModel 三表切换
-- [ ] DeepSeekRepository API 调用（需要 Mock HTTP）
-- [ ] ThemeDistRepository CSS 解析
-- [ ] UserPreferences 计费迁移
+
+### 已补齐覆盖
+- [x] MeterRepository.batchInsert 完整流程（MeterRepositoryTest, 17 cases）
+- [x] ChartViewModel 三表切换（ChartViewModelTest, 8 cases）
+- [x] DeepSeekRepository API 调用（DeepSeekRepositoryTest, 8 cases）
+- [x] ThemeDistRepository CSS 解析（ThemeDistRepositoryTest, 10 cases）
+- [x] UserPreferences 计费迁移（UserPreferencesTest, 13 cases）
 
 ### 建议新增
 - [ ] MeterRepository 批量导入去重测试

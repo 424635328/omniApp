@@ -12,7 +12,7 @@
 ./gradlew :app:testDebugUnitTest --tests "com.example.energyflow.data.CostEngineTest.test tiered pricing"
 
 # Shared module 测试
-./gradlew :shared:jvmTest
+./gradlew :shared:desktopTest
 ```
 
 ## 测试文件清单
