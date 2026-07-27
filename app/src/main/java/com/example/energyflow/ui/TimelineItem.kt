@@ -56,13 +56,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.energyflow.data.MeterRecord
-import com.example.energyflow.ui.theme.AppBackground
 import com.example.energyflow.ui.theme.AppCard
 import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
-import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.ElectricPeakColor
 import com.example.energyflow.ui.theme.ElectricValleyColor
+import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.GasColor
 import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
@@ -88,6 +87,8 @@ fun TimelineItem(
     gasDelta: Double? = null,
     onDelete: ((MeterRecord) -> Unit)? = null,
     onEdit: ((MeterRecord) -> Unit)? = null,
+    // 非 null 时：单击回调 onClick（打开详情等）；null 时保留展开行内操作按钮的旧行为
+    onClick: ((MeterRecord) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showActions by remember { mutableStateOf(false) }
@@ -101,24 +102,45 @@ fun TimelineItem(
             titleContentColor = TextPrimary,
             textContentColor = TextSecondary,
             title = {
-                Text("确认删除", color = TextPrimary, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
+                Text(
+                    "确认删除",
+                    color = TextPrimary,
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Bold
+                )
             },
             text = {
                 Column {
                     Text(
-                        record.timestamp.format(DateDotFmt) + " " + record.timestamp.format(TimeFmt),
-                        color = TextSecondary, fontFamily = MonoFontFamily,
+                        record.timestamp.format(
+                            DateDotFmt
+                        ) + " " + record.timestamp.format(TimeFmt),
+                        color = TextSecondary,
+                        fontFamily = MonoFontFamily,
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     if (record.isElectricRecorded && record.electricTotal != null) {
-                        Text("电量 ${Formatters.formatElectric(record.electricTotal)} 度", color = ElectricColor, fontFamily = MonoFontFamily)
+                        Text(
+                            "电量 ${Formatters.formatElectric(record.electricTotal)} 度",
+                            color = ElectricColor,
+                            fontFamily = MonoFontFamily
+                        )
                     }
                     if (record.isWaterRecorded && record.waterTotal != null) {
-                        Text("水表 ${Formatters.formatWater(record.waterTotal)} 吨", color = WaterColor, fontFamily = MonoFontFamily)
+                        Text(
+                            "水表 ${Formatters.formatWater(record.waterTotal)} 吨",
+                            color = WaterColor,
+                            fontFamily = MonoFontFamily
+                        )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("删除后可通过下方「撤销」按钮恢复", color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 12.sp)
+                    Text(
+                        "删除后可通过下方「撤销」按钮恢复",
+                        color = TextTertiary,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 12.sp
+                    )
                 }
             },
             confirmButton = {
@@ -137,9 +159,13 @@ fun TimelineItem(
         )
     }
 
-    val cardGlowColor = if (record.isElectricRecorded) ElectricColor
-        else if (record.isWaterRecorded) WaterColor
-        else GasColor
+    val cardGlowColor = if (record.isElectricRecorded) {
+        ElectricColor
+    } else if (record.isWaterRecorded) {
+        WaterColor
+    } else {
+        GasColor
+    }
 
     Card(
         modifier = modifier
@@ -169,224 +195,223 @@ fun TimelineItem(
         colors = CardDefaults.cardColors(containerColor = AppCard),
         shape = RoundedCornerShape(16.dp)
     ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(
-                        onClick = { showActions = !showActions },
-                        onLongClick = { showDeleteDialog = true }
-                    )
-                    .padding(16.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = {
+                        if (onClick != null) onClick(record) else showActions = !showActions
+                    },
+                    onLongClick = { showDeleteDialog = true }
+                )
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
             ) {
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top
+                // ── 时间线指示器 ──
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.width(52.dp)
                 ) {
-                    // ── 时间线指示器 ──
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.width(52.dp)
-                    ) {
-                        Text(
-                            text = record.timestamp.format(DateDotFmt),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = MonoFontFamily
-                        )
+                    Text(
+                        text = record.timestamp.format(DateDotFmt),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = MonoFontFamily
+                    )
 
-                        Box(
-                            modifier = Modifier
-                                .padding(vertical = 6.dp)
-                                .size(10.dp)
-                                .shadow(
-                                    elevation = 4.dp,
-                                    shape = CircleShape,
-                                    ambientColor = (if (record.isElectricRecorded) ElectricColor else WaterColor)
-                                        .copy(alpha = 0.3f),
-                                    spotColor = (if (record.isElectricRecorded) ElectricColor else WaterColor)
-                                        .copy(alpha = 0.3f)
-                                )
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(
-                                        colors = listOf(
-                                            if (record.isElectricRecorded) ElectricColor else WaterColor,
-                                            (if (record.isElectricRecorded) ElectricColor else WaterColor)
-                                                .copy(alpha = 0.6f)
-                                        )
+                    val dotColor = if (record.isElectricRecorded) ElectricColor else WaterColor
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 6.dp)
+                            .size(10.dp)
+                            .shadow(
+                                elevation = 4.dp,
+                                shape = CircleShape,
+                                ambientColor = dotColor.copy(alpha = 0.3f),
+                                spotColor = dotColor.copy(alpha = 0.3f)
+                            )
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        dotColor,
+                                        dotColor.copy(alpha = 0.6f)
                                     )
                                 )
-                        )
+                            )
+                    )
 
-                        Text(
-                            text = record.timestamp.format(TimeFmt),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary,
-                            fontFamily = MonoFontFamily
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    // ── 内容区域 ──
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            if (record.isElectricRecorded && record.electricTotal != null) {
-                                MeterValueCard(
-                                    icon = Icons.Default.Bolt,
-                                    iconColor = ElectricColor,
-                                    label = "电量",
-                                    value = Formatters.formatElecDisplay(record.electricTotal),
-                                    unit = "度",
-                                    delta = electricDelta,
-                                    peak = record.electricPeak,
-                                    valley = record.electricValley,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            if (record.isWaterRecorded && record.waterTotal != null) {
-                                MeterValueCard(
-                                    icon = Icons.Default.WaterDrop,
-                                    iconColor = WaterColor,
-                                    label = "水表",
-                                    value = Formatters.formatWaterDisplay(record.waterTotal),
-                                    unit = "吨",
-                                    delta = waterDelta,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            if (record.isGasRecorded && record.gasTotal != null) {
-                                MeterValueCard(
-                                    icon = Icons.Default.Bolt,
-                                    iconColor = GasColor,
-                                    label = "燃气",
-                                    value = Formatters.formatGasDisplay(record.gasTotal),
-                                    unit = "m³",
-                                    delta = gasDelta,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-
-                        // ── 峰谷独立消耗差值（仅在电表有峰谷时额外展示） ──
-                        if (peakDelta != null || valleyDelta != null) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                peakDelta?.let {
-                                    val sign = if (it >= 0) "+" else ""
-                                    Text(
-                                        text = "峰 $sign${Formatters.formatDecimal2(it)} 度",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = ElectricPeakColor.copy(alpha = 0.6f),
-                                        fontFamily = MonoFontFamily,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                                valleyDelta?.let {
-                                    val sign = if (it >= 0) "+" else ""
-                                    Text(
-                                        text = "谷 $sign${Formatters.formatDecimal2(it)} 度",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = ElectricValleyColor.copy(alpha = 0.6f),
-                                        fontFamily = MonoFontFamily,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
-                        }
-
-                        if (!record.note.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colors = listOf(
-                                                NeonBlue.copy(alpha = 0.1f),
-                                                AppSurface
-                                            )
-                                        )
-                                    )
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = record.note,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = NeonBlue,
-                                    fontFamily = MonoFontFamily
-                                )
-                            }
-                        }
-                    }
+                    Text(
+                        text = record.timestamp.format(TimeFmt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary,
+                        fontFamily = MonoFontFamily
+                    )
                 }
 
-                // ── 行内操作按钮（点击展开/收起） ──
-                AnimatedVisibility(
-                    visible = showActions,
-                    enter = expandVertically(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow
-                        )
-                    ) + fadeIn(tween(200)),
-                    exit = shrinkVertically(tween(200)) + fadeOut(tween(150))
-                ) {
-                    Column {
-                        Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
+                // ── 内容区域 ──
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (record.isElectricRecorded && record.electricTotal != null) {
+                            MeterValueCard(
+                                icon = Icons.Default.Bolt,
+                                iconColor = ElectricColor,
+                                label = "电量",
+                                value = Formatters.formatElecDisplay(record.electricTotal),
+                                unit = "度",
+                                delta = electricDelta,
+                                peak = record.electricPeak,
+                                valley = record.electricValley,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (record.isWaterRecorded && record.waterTotal != null) {
+                            MeterValueCard(
+                                icon = Icons.Default.WaterDrop,
+                                iconColor = WaterColor,
+                                label = "水表",
+                                value = Formatters.formatWaterDisplay(record.waterTotal),
+                                unit = "吨",
+                                delta = waterDelta,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (record.isGasRecorded && record.gasTotal != null) {
+                            MeterValueCard(
+                                icon = Icons.Default.Bolt,
+                                iconColor = GasColor,
+                                label = "燃气",
+                                value = Formatters.formatGasDisplay(record.gasTotal),
+                                unit = "m³",
+                                delta = gasDelta,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // ── 峰谷独立消耗差值（仅在电表有峰谷时额外展示） ──
+                    if (peakDelta != null || valleyDelta != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            peakDelta?.let {
+                                val sign = if (it >= 0) "+" else ""
+                                Text(
+                                    text = "峰 $sign${Formatters.formatDecimal2(it)} 度",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ElectricPeakColor.copy(alpha = 0.6f),
+                                    fontFamily = MonoFontFamily,
+                                    fontSize = 10.sp
+                                )
+                            }
+                            valleyDelta?.let {
+                                val sign = if (it >= 0) "+" else ""
+                                Text(
+                                    text = "谷 $sign${Formatters.formatDecimal2(it)} 度",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ElectricValleyColor.copy(alpha = 0.6f),
+                                    fontFamily = MonoFontFamily,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+
+                    if (!record.note.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(1.dp)
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(
                                     Brush.horizontalGradient(
-                                        listOf(
-                                            Color.Transparent,
-                                            ElectricColor.copy(alpha = 0.15f),
-                                            Color.Transparent
+                                        colors = listOf(
+                                            NeonBlue.copy(alpha = 0.1f),
+                                            AppSurface
                                         )
                                     )
                                 )
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            ActionChip(
-                                icon = Icons.Default.Edit,
-                                label = "编辑",
-                                color = ElectricColor,
-                                onClick = {
-                                    showActions = false
-                                    onEdit?.invoke(record)
-                                }
-                            )
-                            ActionChip(
-                                icon = Icons.Default.Delete,
-                                label = "删除",
-                                color = ErrorNeon,
-                                onClick = {
-                                    showActions = false
-                                    showDeleteDialog = true
-                                }
+                            Text(
+                                text = record.note.orEmpty(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NeonBlue,
+                                fontFamily = MonoFontFamily
                             )
                         }
                     }
                 }
             }
+
+            // ── 行内操作按钮（点击展开/收起） ──
+            AnimatedVisibility(
+                visible = showActions,
+                enter = expandVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                ) + fadeIn(tween(200)),
+                exit = shrinkVertically(tween(200)) + fadeOut(tween(150))
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        ElectricColor.copy(alpha = 0.15f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        ActionChip(
+                            icon = Icons.Default.Edit,
+                            label = "编辑",
+                            color = ElectricColor,
+                            onClick = {
+                                showActions = false
+                                onEdit?.invoke(record)
+                            }
+                        )
+                        ActionChip(
+                            icon = Icons.Default.Delete,
+                            label = "删除",
+                            color = ErrorNeon,
+                            onClick = {
+                                showActions = false
+                                showDeleteDialog = true
+                            }
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -461,7 +486,12 @@ private fun MeterValueCard(
                     .background(iconColor.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = label, tint = iconColor, modifier = Modifier.size(12.dp))
+                Icon(
+                    icon,
+                    contentDescription = label,
+                    tint = iconColor,
+                    modifier = Modifier.size(12.dp)
+                )
             }
             Spacer(modifier = Modifier.width(5.dp))
             Text(
@@ -548,4 +578,3 @@ private fun MeterValueCard(
         }
     }
 }
-

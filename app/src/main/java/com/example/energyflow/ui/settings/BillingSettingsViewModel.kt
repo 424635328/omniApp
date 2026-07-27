@@ -2,27 +2,28 @@ package com.example.energyflow.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.energyflow.data.BillReportGenerator
 import com.example.energyflow.data.BatchInsertResult
+import com.example.energyflow.data.BillReportGenerator
 import com.example.energyflow.data.BillingRules
 import com.example.energyflow.data.CarbonFootprint
+import com.example.energyflow.data.CsvExporter
 import com.example.energyflow.data.DeepSeekCredentialStore
 import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.data.MeterRepository
 import com.example.energyflow.data.ReportExporter
 import com.example.energyflow.data.UserPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.YearMonth
+import java.util.Locale
+import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
-import java.time.YearMonth
-import java.util.Locale
-import javax.inject.Inject
+import kotlinx.serialization.json.Json
 
 @HiltViewModel
 class BillingSettingsViewModel @Inject constructor(
@@ -44,6 +45,9 @@ class BillingSettingsViewModel @Inject constructor(
     val peakValleyExpandedFlow: Flow<Boolean> = userPreferences.peakValleyExpanded
     val themeDistEnabledFlow: Flow<Boolean> = userPreferences.themeDistEnabled
 
+    // ── AI 助手人设 ──
+    val aiPersonaFlow: Flow<String> = userPreferences.aiPersona
+
     // ── 碳足迹因子 ──
     val carbonElectricFactorFlow: Flow<Double> = userPreferences.carbonElectricFactor
     val carbonGasFactorFlow: Flow<Double> = userPreferences.carbonGasFactor
@@ -58,22 +62,46 @@ class BillingSettingsViewModel @Inject constructor(
     }
 
     // ── 电价 ──
-    fun updatePeakPrice(value: Double) { draft = draft.copy(peakPrice = value) }
-    fun updateValleyPrice(value: Double) { draft = draft.copy(valleyPrice = value) }
-    fun updateFlatPrice(value: Double) { draft = draft.copy(flatPrice = value) }
+    fun updatePeakPrice(value: Double) {
+        draft = draft.copy(peakPrice = value)
+    }
+    fun updateValleyPrice(value: Double) {
+        draft = draft.copy(valleyPrice = value)
+    }
+    fun updateFlatPrice(value: Double) {
+        draft = draft.copy(flatPrice = value)
+    }
 
     // ── 用电阶梯 ──
-    fun updateElecTier1Limit(value: Double) { draft = draft.copy(electricTier1Limit = value) }
-    fun updateElecTier2Limit(value: Double) { draft = draft.copy(electricTier2Limit = value) }
-    fun updateElecTier2Surcharge(value: Double) { draft = draft.copy(electricTier2Surcharge = value) }
-    fun updateElecTier3Surcharge(value: Double) { draft = draft.copy(electricTier3Surcharge = value) }
+    fun updateElecTier1Limit(value: Double) {
+        draft = draft.copy(electricTier1Limit = value)
+    }
+    fun updateElecTier2Limit(value: Double) {
+        draft = draft.copy(electricTier2Limit = value)
+    }
+    fun updateElecTier2Surcharge(value: Double) {
+        draft = draft.copy(electricTier2Surcharge = value)
+    }
+    fun updateElecTier3Surcharge(value: Double) {
+        draft = draft.copy(electricTier3Surcharge = value)
+    }
 
     // ── 水价阶梯 ──
-    fun updateWaterTier1Limit(value: Double) { draft = draft.copy(waterTier1Limit = value) }
-    fun updateWaterTier2Limit(value: Double) { draft = draft.copy(waterTier2Limit = value) }
-    fun updateWaterTier1Price(value: Double) { draft = draft.copy(waterTier1Price = value) }
-    fun updateWaterTier2Price(value: Double) { draft = draft.copy(waterTier2Price = value) }
-    fun updateWaterTier3Price(value: Double) { draft = draft.copy(waterTier3Price = value) }
+    fun updateWaterTier1Limit(value: Double) {
+        draft = draft.copy(waterTier1Limit = value)
+    }
+    fun updateWaterTier2Limit(value: Double) {
+        draft = draft.copy(waterTier2Limit = value)
+    }
+    fun updateWaterTier1Price(value: Double) {
+        draft = draft.copy(waterTier1Price = value)
+    }
+    fun updateWaterTier2Price(value: Double) {
+        draft = draft.copy(waterTier2Price = value)
+    }
+    fun updateWaterTier3Price(value: Double) {
+        draft = draft.copy(waterTier3Price = value)
+    }
 
     fun saveBillingRules() = viewModelScope.launch { userPreferences.setBillingRules(draft) }
     fun setTheme(dark: Boolean, followSystem: Boolean) = viewModelScope.launch {
@@ -87,6 +115,9 @@ class BillingSettingsViewModel @Inject constructor(
     }
     fun setThemeDistEnabled(enabled: Boolean) = viewModelScope.launch {
         userPreferences.setThemeDistEnabled(enabled)
+    }
+    fun setAiPersona(personaKey: String) = viewModelScope.launch {
+        userPreferences.setAiPersona(personaKey)
     }
 
     // ── 碳足迹因子更新（立即保存） ────────────────────────────
@@ -108,7 +139,10 @@ class BillingSettingsViewModel @Inject constructor(
     private val _reportExporting = MutableStateFlow(false)
     val reportExporting: StateFlow<Boolean> = _reportExporting.asStateFlow()
 
-    suspend fun generateReportImage(context: android.content.Context, yearMonth: YearMonth = YearMonth.now()): android.net.Uri? {
+    suspend fun generateReportImage(
+        context: android.content.Context,
+        yearMonth: YearMonth = YearMonth.now()
+    ): android.net.Uri? {
         _reportExporting.value = true
         try {
             val (data, _, isDark) = buildReportDataWithCarbon(yearMonth) ?: return null
@@ -127,6 +161,12 @@ class BillingSettingsViewModel @Inject constructor(
         repository.deleteAll()
     }
 
+    /** 导出全部记录为 CSV 到 Downloads/EnergyFlow，返回写入的 Uri（失败为 null）。 */
+    suspend fun exportRecordsToCsv(context: android.content.Context): android.net.Uri? {
+        val records = repository.getAllRecords().first()
+        return CsvExporter.export(context, records)
+    }
+
     // ── 计费规则模板 JSON 导入/导出 ─────────────────────────
 
     suspend fun exportRulesToJson(): String {
@@ -134,14 +174,12 @@ class BillingSettingsViewModel @Inject constructor(
         return jsonPretty.encodeToString(rules)
     }
 
-    suspend fun importRulesFromJson(json: String): String {
-        return try {
-            val rules = jsonLenient.decodeFromString<BillingRules>(json)
-            userPreferences.setBillingRules(rules)
-            "计费规则模板导入成功"
-        } catch (e: Exception) {
-            "导入失败: ${e.message}"
-        }
+    suspend fun importRulesFromJson(json: String): String = try {
+        val rules = jsonLenient.decodeFromString<BillingRules>(json)
+        userPreferences.setBillingRules(rules)
+        "计费规则模板导入成功"
+    } catch (e: Exception) {
+        "导入失败: ${e.message}"
     }
 
     // ── 账单分享 ──────────────────────────────────────────
@@ -150,7 +188,9 @@ class BillingSettingsViewModel @Inject constructor(
      * 构建报告数据（共享逻辑，避免重复查询数据库）。
      * 统一数据源：文本/HTML/图片报告都使用此方法。
      */
-    private suspend fun buildReportDataWithCarbon(yearMonth: YearMonth): Triple<BillReportGenerator.ReportData, BillReportGenerator.ComparisonData?, Boolean>? {
+    private suspend fun buildReportDataWithCarbon(
+        yearMonth: YearMonth
+    ): Triple<BillReportGenerator.ReportData, BillReportGenerator.ComparisonData?, Boolean>? {
         val electricRecords = repository.getElectricRecords().first()
         val waterRecords = repository.getWaterRecords().first()
         val gasRecords = repository.getAllRecords().first().filter { it.isGasRecorded }
@@ -159,14 +199,29 @@ class BillingSettingsViewModel @Inject constructor(
         val isDark = isDarkThemeFlow.first()
 
         val data = BillReportGenerator.buildReportData(
-            electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules, yearMonth
+            electricRecords,
+            waterRecords,
+            gasRecords,
+            notesRecords,
+            costEngine,
+            rules,
+            yearMonth
         ) ?: return null
 
         val carbonResult = carbonFootprint.calculate(data.electricKwh, data.gasM3)
-        val dataWithCarbon = data.copy(co2Kg = carbonResult.electricKgCO2, treeDays = carbonResult.treeDays)
+        val dataWithCarbon = data.copy(
+            co2Kg = carbonResult.electricKgCO2,
+            treeDays = carbonResult.treeDays
+        )
 
         val comparison = BillReportGenerator.buildComparison(
-            dataWithCarbon, electricRecords, waterRecords, gasRecords, notesRecords, costEngine, rules
+            dataWithCarbon,
+            electricRecords,
+            waterRecords,
+            gasRecords,
+            notesRecords,
+            costEngine,
+            rules
         )
 
         val prevMonth = yearMonth.minusMonths(1)
@@ -176,24 +231,44 @@ class BillingSettingsViewModel @Inject constructor(
         val previousCost: Double? = if (prevMonthRecords.size >= 2) {
             val pFirst = prevMonthRecords.first()
             val pLast = prevMonthRecords.last()
-            val pKwh = ((pLast.electricTotal ?: 0.0) - (pFirst.electricTotal ?: 0.0)).coerceAtLeast(0.0)
-            val pPeakKwh = if (pLast.electricPeak != null && pFirst.electricPeak != null)
-                ((pLast.electricPeak ?: 0.0) - (pFirst.electricPeak ?: 0.0)).coerceAtLeast(0.0) else 0.0
-            val pValleyKwh = if (pLast.electricValley != null && pFirst.electricValley != null)
-                ((pLast.electricValley ?: 0.0) - (pFirst.electricValley ?: 0.0)).coerceAtLeast(0.0) else 0.0
+            val pKwh = ((pLast.electricTotal ?: 0.0) - (pFirst.electricTotal ?: 0.0)).coerceAtLeast(
+                0.0
+            )
+            val pPeakKwh = if (pLast.electricPeak != null && pFirst.electricPeak != null) {
+                ((pLast.electricPeak ?: 0.0) - (pFirst.electricPeak ?: 0.0)).coerceAtLeast(0.0)
+            } else {
+                0.0
+            }
+            val pValleyKwh = if (pLast.electricValley != null && pFirst.electricValley != null) {
+                ((pLast.electricValley ?: 0.0) - (pFirst.electricValley ?: 0.0)).coerceAtLeast(0.0)
+            } else {
+                0.0
+            }
             val prevWaterMonth = waterRecords.filter {
                 it.waterTotal != null && YearMonth.from(it.timestamp) == prevMonth
             }.sortedBy { it.timestamp }
-            val prevWaterTons = if (prevWaterMonth.size >= 2)
-                ((prevWaterMonth.last().waterTotal ?: 0.0) - (prevWaterMonth.first().waterTotal ?: 0.0)).coerceAtLeast(0.0) else 0.0
+            val prevWaterTons = if (prevWaterMonth.size >= 2) {
+                (
+                    (prevWaterMonth.last().waterTotal ?: 0.0) -
+                        (prevWaterMonth.first().waterTotal ?: 0.0)
+                    ).coerceAtLeast(0.0)
+            } else {
+                0.0
+            }
             val prevGasMonth = gasRecords.filter {
                 it.gasTotal != null && YearMonth.from(it.timestamp) == prevMonth
             }.sortedBy { it.timestamp }
-            val prevGasM3 = if (prevGasMonth.size >= 2)
-                ((prevGasMonth.last().gasTotal ?: 0.0) - (prevGasMonth.first().gasTotal ?: 0.0)).coerceAtLeast(0.0) else 0.0
+            val prevGasM3 = if (prevGasMonth.size >= 2) {
+                ((prevGasMonth.last().gasTotal ?: 0.0) - (prevGasMonth.first().gasTotal ?: 0.0))
+                    .coerceAtLeast(0.0)
+            } else {
+                0.0
+            }
             val prevBill = costEngine.calculateBill(pKwh, pPeakKwh, pValleyKwh, prevWaterTons)
             prevBill.totalCost + prevGasM3 * rules.gasUnitPrice
-        } else null
+        } else {
+            null
+        }
 
         val dataWithPreviousCost = dataWithCarbon.copy(previousCost = previousCost)
 
@@ -221,8 +296,8 @@ class BillingSettingsViewModel @Inject constructor(
         return buildExportText(deduplicateRecords(records))
     }
 
-    suspend fun importRecordsFromText(text: String): String {
-        return when (val result = repository.batchInsert(text)) {
+    suspend fun importRecordsFromText(text: String): String =
+        when (val result = repository.batchInsert(text)) {
             is BatchInsertResult.Success ->
                 "成功导入 ${result.count} 条记录"
             is BatchInsertResult.Warning ->
@@ -230,14 +305,18 @@ class BillingSettingsViewModel @Inject constructor(
             is BatchInsertResult.PartialSuccess ->
                 "成功导入 ${result.successCount} 条，${result.errors.size} 条失败"
         }
-    }
 
     /** 去掉连续读数相同或同时间戳重复的记录（保留最新一条） */
     private fun deduplicateRecords(records: List<MeterRecord>): List<MeterRecord> {
-        val sorted = records.sortedWith(compareByDescending<MeterRecord> { it.timestamp }.thenByDescending { it.id })
+        val sorted = records.sortedWith(
+            compareByDescending<MeterRecord> {
+                it.timestamp
+            }.thenByDescending { it.id }
+        )
         return sorted.filterIndexed { index, record ->
             val prev = sorted.getOrNull(index - 1) ?: return@filterIndexed true
-            val hasAnyReading = record.isElectricRecorded || record.isWaterRecorded || record.isGasRecorded
+            val hasAnyReading =
+                record.isElectricRecorded || record.isWaterRecorded || record.isGasRecorded
             if (!hasAnyReading) return@filterIndexed true
             val eps = 0.1
             fun same(d1: Double?, d2: Double?): Boolean = when {
@@ -266,7 +345,10 @@ class BillingSettingsViewModel @Inject constructor(
             val latest = dailyRecords.maxBy { it.timestamp }
 
             sb.appendLine("${date.monthValue}.${date.dayOfMonth}")
-            val timeStr = "${latest.timestamp.hour.toString().padStart(2, '0')}.${latest.timestamp.minute.toString().padStart(2, '0')}"
+            val timeStr = "${latest.timestamp.hour.toString().padStart(
+                2,
+                '0'
+            )}.${latest.timestamp.minute.toString().padStart(2, '0')}"
 
             val electric = dailyRecords.firstOrNull { it.electricTotal != null }?.electricTotal
             val peak = dailyRecords.firstOrNull { it.electricPeak != null }?.electricPeak
@@ -305,12 +387,15 @@ class BillingSettingsViewModel @Inject constructor(
             .mapNotNull { it.electricValley }
 
         val sumLine = mutableListOf<String>()
-        if (allElectric.size >= 2)
+        if (allElectric.size >= 2) {
             sumLine.add("总电: ${formatExport(allElectric.last() - allElectric.first())} 度")
-        if (allPeaks.size >= 2)
+        }
+        if (allPeaks.size >= 2) {
             sumLine.add("峰电: ${formatExport(allPeaks.last() - allPeaks.first())} 度")
-        if (allValleys.size >= 2)
+        }
+        if (allValleys.size >= 2) {
             sumLine.add("谷电: ${formatExport(allValleys.last() - allValleys.first())} 度")
+        }
 
         if (sumLine.isNotEmpty()) {
             sb.appendLine()
@@ -320,11 +405,9 @@ class BillingSettingsViewModel @Inject constructor(
         return sb.toString()
     }
 
-    private fun formatExport(value: Double): String {
-        return if (value == value.toLong().toDouble()) {
-            value.toLong().toString()
-        } else {
-            String.format(Locale.US, "%.2f", value)
-        }
+    private fun formatExport(value: Double): String = if (value == value.toLong().toDouble()) {
+        value.toLong().toString()
+    } else {
+        String.format(Locale.US, "%.2f", value)
     }
 }

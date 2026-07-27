@@ -1,7 +1,7 @@
 package com.example.energyflow.ui.settings
 
-import android.content.Context
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.os.Environment
 import android.provider.MediaStore
@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,11 +28,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Palette
@@ -56,7 +58,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +71,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.energyflow.data.AiPersona
 import com.example.energyflow.data.BillingRules
 import com.example.energyflow.ui.theme.AppBackground
 import com.example.energyflow.ui.theme.AppCard
@@ -83,26 +86,39 @@ import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.NeonYellow
 import com.example.energyflow.ui.theme.SuccessGreen
-import com.example.energyflow.ui.theme.WarningNeon
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.theme.TextTertiary
+import com.example.energyflow.ui.theme.WarningNeon
 import com.example.energyflow.ui.theme.WaterColor
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.time.YearMonth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel()) {
-    val rules by viewModel.billingRulesFlow.collectAsStateWithLifecycle(initialValue = BillingRules())
-    val deepSeekApiKey by viewModel.deepSeekApiKeyFlow.collectAsStateWithLifecycle(initialValue = "")
+    val rules by viewModel.billingRulesFlow.collectAsStateWithLifecycle(
+        initialValue = BillingRules()
+    )
+    val deepSeekApiKey by viewModel.deepSeekApiKeyFlow.collectAsStateWithLifecycle(
+        initialValue = ""
+    )
     val isDark by viewModel.isDarkThemeFlow.collectAsStateWithLifecycle(initialValue = true)
-    val followSystem by viewModel.followSystemThemeFlow.collectAsStateWithLifecycle(initialValue = false)
-    val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsStateWithLifecycle(initialValue = false)
-    val themeDistEnabled by viewModel.themeDistEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
+    val followSystem by viewModel.followSystemThemeFlow.collectAsStateWithLifecycle(
+        initialValue = false
+    )
+    val peakValleyExpanded by viewModel.peakValleyExpandedFlow.collectAsStateWithLifecycle(
+        initialValue = false
+    )
+    val themeDistEnabled by viewModel.themeDistEnabledFlow.collectAsStateWithLifecycle(
+        initialValue = true
+    )
+    val aiPersona by viewModel.aiPersonaFlow.collectAsStateWithLifecycle(
+        initialValue = AiPersona.ANALYST.key
+    )
     val reportExporting by viewModel.reportExporting.collectAsStateWithLifecycle()
 
     var showClearDialog by remember { mutableStateOf(false) }
@@ -123,7 +139,8 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                         MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                         arrayOf(MediaStore.Downloads._ID),
                         "${MediaStore.Downloads.DISPLAY_NAME}=?",
-                        arrayOf(fileName), null
+                        arrayOf(fileName),
+                        null
                     )
                     existingUri?.use { cursor ->
                         if (cursor.moveToFirst()) {
@@ -141,11 +158,14 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                     }
                     val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                     uri?.let {
-                        resolver.openOutputStream(it)?.use { os -> os.write(text.toByteArray(Charsets.UTF_8)) }
+                        resolver.openOutputStream(it)?.use { os ->
+                            os.write(text.toByteArray(Charsets.UTF_8))
+                        }
                     }
                     // 3. 也存一份到 app 内部
                     val appDir = java.io.File(
-                        context.getExternalFilesDir(null), "Documents"
+                        context.getExternalFilesDir(null),
+                        "Documents"
                     )
                     appDir.mkdirs()
                     java.io.File(appDir, fileName).writeText(text, Charsets.UTF_8)
@@ -222,7 +242,12 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
             titleContentColor = TextPrimary,
             textContentColor = TextSecondary,
             title = {
-                Text("⚠️ 清除所有数据", color = ErrorNeon, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
+                Text(
+                    "⚠️ 清除所有数据",
+                    color = ErrorNeon,
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Bold
+                )
             },
             text = {
                 Text("此操作将删除所有能耗记录，且不可撤销。确定要清除吗？", fontFamily = MonoFontFamily)
@@ -273,11 +298,32 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         Spacer(Modifier.height(4.dp))
         SectionHint("峰谷分时电价（开通后一年内不得变更），按\"先峰谷、后阶梯\"计算")
         Spacer(Modifier.height(12.dp))
-        PriceInputRow("峰电", rules.peakPrice, viewModel::updatePeakPrice, ElectricPeakColor, "8:00-21:00", "元/度")
+        PriceInputRow(
+            "峰电",
+            rules.peakPrice,
+            viewModel::updatePeakPrice,
+            ElectricPeakColor,
+            "8:00-21:00",
+            "元/度"
+        )
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("谷电", rules.valleyPrice, viewModel::updateValleyPrice, ElectricValleyColor, "0:00-8:00 / 21:00-24:00", "元/度")
+        PriceInputRow(
+            "谷电",
+            rules.valleyPrice,
+            viewModel::updateValleyPrice,
+            ElectricValleyColor,
+            "0:00-8:00 / 21:00-24:00",
+            "元/度"
+        )
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("平电", rules.flatPrice, viewModel::updateFlatPrice, ElectricColor, "未开通峰谷时使用", "元/度")
+        PriceInputRow(
+            "平电",
+            rules.flatPrice,
+            viewModel::updateFlatPrice,
+            ElectricColor,
+            "未开通峰谷时使用",
+            "元/度"
+        )
 
         // ═══════════════════════════════════════════════
         // 用电阶梯
@@ -285,15 +331,45 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         Spacer(Modifier.height(28.dp))
         SectionHeader(Icons.Default.Bolt, "用电阶梯（年累计，按月估算）", ElectricColor)
         Spacer(Modifier.height(4.dp))
-        SectionHint("年用电 ≤${(rules.electricTier1Limit * 12).toInt()} 度为一档，≤${(rules.electricTier2Limit * 12).toInt()} 度为二档，超出为三档")
+        SectionHint(
+            "年用电 ≤${(rules.electricTier1Limit * 12).toInt()} 度为一档，≤${(rules.electricTier2Limit * 12).toInt()} 度为二档，超出为三档"
+        )
         Spacer(Modifier.height(12.dp))
-        PriceInputRow("一档上限", rules.electricTier1Limit, viewModel::updateElecTier1Limit, ElectricColor, "月均 度", "度/月")
+        PriceInputRow(
+            "一档上限",
+            rules.electricTier1Limit,
+            viewModel::updateElecTier1Limit,
+            ElectricColor,
+            "月均 度",
+            "度/月"
+        )
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("二档上限", rules.electricTier2Limit, viewModel::updateElecTier2Limit, ElectricColor, "月均 度", "度/月")
+        PriceInputRow(
+            "二档上限",
+            rules.electricTier2Limit,
+            viewModel::updateElecTier2Limit,
+            ElectricColor,
+            "月均 度",
+            "度/月"
+        )
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("二档加价", rules.electricTier2Surcharge, viewModel::updateElecTier2Surcharge, WarningNeon, "基础价+此值", "元/度")
+        PriceInputRow(
+            "二档加价",
+            rules.electricTier2Surcharge,
+            viewModel::updateElecTier2Surcharge,
+            WarningNeon,
+            "基础价+此值",
+            "元/度"
+        )
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("三档加价", rules.electricTier3Surcharge, viewModel::updateElecTier3Surcharge, ErrorNeon, "基础价+此值", "元/度")
+        PriceInputRow(
+            "三档加价",
+            rules.electricTier3Surcharge,
+            viewModel::updateElecTier3Surcharge,
+            ErrorNeon,
+            "基础价+此值",
+            "元/度"
+        )
 
         // ═══════════════════════════════════════════════
         // 阶梯水价
@@ -301,17 +377,54 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         Spacer(Modifier.height(28.dp))
         SectionHeader(Icons.Default.WaterDrop, "阶梯水价（年累计，按月估算）", WaterColor)
         Spacer(Modifier.height(4.dp))
-        SectionHint("年用水 ≤${(rules.waterTier1Limit * 12).toInt()} 吨为一档，≤${(rules.waterTier2Limit * 12).toInt()} 吨为二档，超出为三档（含供水价+水资源税+污水处理费）")
+        SectionHint(
+            "年用水 ≤${(rules.waterTier1Limit * 12).toInt()} 吨为一档，≤${(rules.waterTier2Limit * 12).toInt()} 吨为二档，超出为三档（含供水价+水资源税+污水处理费）"
+        )
         Spacer(Modifier.height(12.dp))
-        PriceInputRow("一档上限", rules.waterTier1Limit, viewModel::updateWaterTier1Limit, WaterColor, "月均 吨", "吨/月")
+        PriceInputRow(
+            "一档上限",
+            rules.waterTier1Limit,
+            viewModel::updateWaterTier1Limit,
+            WaterColor,
+            "月均 吨",
+            "吨/月"
+        )
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("二档上限", rules.waterTier2Limit, viewModel::updateWaterTier2Limit, WaterColor, "月均 吨", "吨/月")
+        PriceInputRow(
+            "二档上限",
+            rules.waterTier2Limit,
+            viewModel::updateWaterTier2Limit,
+            WaterColor,
+            "月均 吨",
+            "吨/月"
+        )
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("一档单价", rules.waterTier1Price, viewModel::updateWaterTier1Price, WaterColor, "≤一档上限", "元/吨")
+        PriceInputRow(
+            "一档单价",
+            rules.waterTier1Price,
+            viewModel::updateWaterTier1Price,
+            WaterColor,
+            "≤一档上限",
+            "元/吨"
+        )
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("二档单价", rules.waterTier2Price, viewModel::updateWaterTier2Price, WaterColor, "一二档之间", "元/吨")
+        PriceInputRow(
+            "二档单价",
+            rules.waterTier2Price,
+            viewModel::updateWaterTier2Price,
+            WaterColor,
+            "一二档之间",
+            "元/吨"
+        )
         Spacer(Modifier.height(8.dp))
-        PriceInputRow("三档单价", rules.waterTier3Price, viewModel::updateWaterTier3Price, WaterColor, ">二档上限", "元/吨")
+        PriceInputRow(
+            "三档单价",
+            rules.waterTier3Price,
+            viewModel::updateWaterTier3Price,
+            WaterColor,
+            ">二档上限",
+            "元/吨"
+        )
 
         // ── 保存按钮 ──
         Spacer(Modifier.height(16.dp))
@@ -321,7 +434,10 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                 toast(context, "计费规则已保存")
             },
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = ElectricColor, contentColor = AppBackground),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = ElectricColor,
+                contentColor = AppBackground
+            ),
             shape = RoundedCornerShape(12.dp)
         ) {
             Text("保存计费规则", fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold)
@@ -339,18 +455,33 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         // 已保存时显示脱敏 Key
         val displayHint = if (deepSeekApiKey.isNotBlank()) {
             "已配置: ${deepSeekApiKey.take(5)}...${deepSeekApiKey.takeLast(4)}"
-        } else "sk-..."
+        } else {
+            "sk-..."
+        }
         Column {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 OutlinedTextField(
                     value = apiKeyText,
                     onValueChange = { apiKeyText = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text(displayHint, color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 12.sp) },
+                    placeholder = {
+                        Text(
+                            displayHint,
+                            color = TextTertiary,
+                            fontFamily = MonoFontFamily,
+                            fontSize = 12.sp
+                        )
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     colors = fieldColors(ElectricColor),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary, fontFamily = MonoFontFamily)
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = TextPrimary,
+                        fontFamily = MonoFontFamily
+                    )
                 )
                 Spacer(Modifier.width(8.dp))
                 Button(
@@ -358,10 +489,18 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                         viewModel.saveDeepSeekApiKey(apiKeyText)
                         toast(context, "API Key 已保存")
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ElectricColor, contentColor = AppBackground),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ElectricColor,
+                        contentColor = AppBackground
+                    ),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("保存", fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(
+                        "保存",
+                        fontFamily = MonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
                 }
             }
             if (deepSeekApiKey.isNotBlank()) {
@@ -374,14 +513,52 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                     }
                 ) {
                     Icon(
-                        Icons.Default.Delete, null,
+                        Icons.Default.Delete,
+                        null,
                         tint = ErrorNeon.copy(alpha = 0.6f),
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("清除 Key", color = ErrorNeon.copy(alpha = 0.6f), fontFamily = MonoFontFamily, fontSize = 11.sp)
+                    Text(
+                        "清除 Key",
+                        color = ErrorNeon.copy(alpha = 0.6f),
+                        fontFamily = MonoFontFamily,
+                        fontSize = 11.sp
+                    )
                 }
             }
+        }
+
+        // ═══════════════════════════════════════════════
+        // AI 助手人设
+        // ═══════════════════════════════════════════════
+        Spacer(Modifier.height(20.dp))
+        SectionHeader(Icons.Default.Face, "AI 助手人设", ElectricColor)
+        Spacer(Modifier.height(4.dp))
+        SectionHint("选择 AI 分析的说话风格，选中即保存")
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PersonaChip(
+                label = "专业分析师",
+                selected = aiPersona == AiPersona.ANALYST.key,
+                modifier = Modifier.weight(1f),
+                onClick = { viewModel.setAiPersona(AiPersona.ANALYST.key) }
+            )
+            PersonaChip(
+                label = "毒舌管家",
+                selected = aiPersona == AiPersona.SASSY.key,
+                modifier = Modifier.weight(1f),
+                onClick = { viewModel.setAiPersona(AiPersona.SASSY.key) }
+            )
+            PersonaChip(
+                label = "温柔助手",
+                selected = aiPersona == AiPersona.GENTLE.key,
+                modifier = Modifier.weight(1f),
+                onClick = { viewModel.setAiPersona(AiPersona.GENTLE.key) }
+            )
         }
 
         // ═══════════════════════════════════════════════
@@ -409,7 +586,12 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 IconButton(onClick = { selectedMonth = selectedMonth.minusMonths(1) }) {
-                    Icon(Icons.Default.ChevronLeft, "上月", tint = ElectricColor, modifier = Modifier.size(32.dp))
+                    Icon(
+                        Icons.Default.ChevronLeft,
+                        "上月",
+                        tint = ElectricColor,
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
@@ -431,8 +613,16 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                     if (selectedMonth.isBefore(now)) selectedMonth = selectedMonth.plusMonths(1)
                 }) {
                     Icon(
-                        Icons.Default.ChevronRight, "下月",
-                        tint = if (selectedMonth.isBefore(YearMonth.now())) ElectricColor else TextTertiary,
+                        Icons.Default.ChevronRight,
+                        "下月",
+                        tint = if (selectedMonth.isBefore(
+                                YearMonth.now()
+                            )
+                        ) {
+                            ElectricColor
+                        } else {
+                            TextTertiary
+                        },
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -455,7 +645,12 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                     strokeWidth = 2.dp
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("正在生成报告...", color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 13.sp)
+                Text(
+                    "正在生成报告...",
+                    color = TextSecondary,
+                    fontFamily = MonoFontFamily,
+                    fontSize = 13.sp
+                )
             }
         }
 
@@ -481,7 +676,12 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                                         type = "text/plain"
                                         putExtra(Intent.EXTRA_TEXT, report)
                                     }
-                                    context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            intent,
+                                            "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"
+                                        )
+                                    )
                                 } else {
                                     toast(context, "该月数据不足，至少需要 2 条电表读数")
                                 }
@@ -507,7 +707,12 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                                         putExtra(Intent.EXTRA_TEXT, html)
                                         putExtra(Intent.EXTRA_HTML_TEXT, html)
                                     }
-                                    context.startActivity(Intent.createChooser(intent, "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"))
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            intent,
+                                            "分享 ${selectedMonth.year}年${selectedMonth.monthValue}月账单"
+                                        )
+                                    )
                                 } else {
                                     toast(context, "该月数据不足，至少需要 2 条电表读数")
                                 }
@@ -555,7 +760,10 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
                             try {
                                 val uri = viewModel.generateReportImage(context, selectedMonth)
                                 if (uri != null) {
-                                    com.example.energyflow.data.ShareUtils.shareImageToWeChat(context, uri)
+                                    com.example.energyflow.data.ShareUtils.shareImageToWeChat(
+                                        context,
+                                        uri
+                                    )
                                 } else {
                                     toast(context, "该月数据不足，至少需要 2 条电表读数")
                                 }
@@ -657,6 +865,27 @@ fun BillingSettingsScreen(viewModel: BillingSettingsViewModel = hiltViewModel())
         )
         Spacer(Modifier.height(8.dp))
         DataActionButton(
+            icon = Icons.Default.FileDownload,
+            label = "导出 CSV",
+            desc = "全部记录导出至 Downloads/EnergyFlow，Excel 可打开",
+            color = WaterColor,
+            onClick = {
+                scope.launch {
+                    try {
+                        val uri = viewModel.exportRecordsToCsv(context)
+                        if (uri != null) {
+                            toast(context, "CSV 已导出到 Downloads/EnergyFlow")
+                        } else {
+                            toast(context, "CSV 导出失败")
+                        }
+                    } catch (e: Exception) {
+                        toast(context, "CSV 导出失败: ${e.message}")
+                    }
+                }
+            }
+        )
+        Spacer(Modifier.height(8.dp))
+        DataActionButton(
             icon = Icons.Default.FileUpload,
             label = "从文件导入数据",
             desc = "选择之前导出的 .txt 文件恢复数据",
@@ -749,9 +978,40 @@ private fun ShareActionButton(
         ) {
             Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
             Spacer(Modifier.height(4.dp))
-            Text(label, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = color)
+            Text(
+                label,
+                fontFamily = MonoFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = color
+            )
             Text(desc, fontFamily = MonoFontFamily, fontSize = 9.sp, color = TextSecondary)
         }
+    }
+}
+
+@Composable
+private fun PersonaChip(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) ElectricColor.copy(alpha = 0.2f) else AppCard)
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            color = if (selected) ElectricColor else TextSecondary,
+            fontFamily = MonoFontFamily,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            fontSize = 12.sp
+        )
     }
 }
 
@@ -773,7 +1033,13 @@ private fun DataActionButton(
             Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(label, fontFamily = MonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = color)
+                Text(
+                    label,
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = color
+                )
                 Text(desc, fontFamily = MonoFontFamily, fontSize = 10.sp, color = TextSecondary)
             }
         }
@@ -822,13 +1088,20 @@ private fun PriceInputRow(
                 }
             },
             modifier = Modifier.weight(1f),
-            placeholder = { Text(hint, color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 11.sp) },
-            suffix = { Text(unit, color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 12.sp) },
+            placeholder = {
+                Text(hint, color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 11.sp)
+            },
+            suffix = {
+                Text(unit, color = TextSecondary, fontFamily = MonoFontFamily, fontSize = 12.sp)
+            },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             shape = RoundedCornerShape(10.dp),
             colors = fieldColors(color),
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary, fontFamily = MonoFontFamily)
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = TextPrimary,
+                fontFamily = MonoFontFamily
+            )
         )
     }
 }
@@ -844,7 +1117,12 @@ private fun PreferenceSwitch(label: String, checked: Boolean, onCheckedChange: (
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label, color = TextPrimary, fontFamily = MonoFontFamily, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            label,
+            color = TextPrimary,
+            fontFamily = MonoFontFamily,
+            style = MaterialTheme.typography.bodyMedium
+        )
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,

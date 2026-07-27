@@ -8,18 +8,16 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.emitAll
-import javax.inject.Inject
-import javax.inject.Singleton
 
 @Singleton
-class UserPreferences @Inject constructor(
-    private val dataStore: DataStore<Preferences>
-) {
+class UserPreferences @Inject constructor(private val dataStore: DataStore<Preferences>) {
     companion object {
         // ── 计费规则版本号（递增即触发迁移，重置为南京最新默认值） ──
         private const val CURRENT_BILLING_VERSION = 3
@@ -62,6 +60,9 @@ class UserPreferences @Inject constructor(
         private val WEATHER_API_KEY = stringPreferencesKey("weather_api_key")
         private val WEATHER_CITY_ID = stringPreferencesKey("weather_city_id")
 
+        // ── AI 助手人设 ──
+        private val AI_PERSONA = stringPreferencesKey("ai_persona")
+
         // ── 碳足迹因子 ──
         private val CARBON_ELECTRIC_FACTOR = doublePreferencesKey("carbon_electric_factor")
         private val CARBON_GAS_FACTOR = doublePreferencesKey("carbon_gas_factor")
@@ -69,7 +70,9 @@ class UserPreferences @Inject constructor(
         private val GAS_UNIT_PRICE = doublePreferencesKey("gas_unit_price")
     }
 
-    val isOnboardingComplete: Flow<Boolean> = dataStore.data.map { it[ONBOARDING_COMPLETE] ?: false }
+    val isOnboardingComplete: Flow<Boolean> = dataStore.data.map {
+        it[ONBOARDING_COMPLETE] ?: false
+    }
     val isFilterDuplicates: Flow<Boolean> = dataStore.data.map { it[FILTER_DUPLICATES] ?: false }
 
     suspend fun setFilterDuplicates(enabled: Boolean) {
@@ -99,7 +102,10 @@ class UserPreferences @Inject constructor(
         val savedVersion = initial[BILLING_VERSION] ?: 0
 
         if (savedVersion < CURRENT_BILLING_VERSION) {
-            Log.i("UserPreferences", "Billing rules migration v$savedVersion → v$CURRENT_BILLING_VERSION — using Nanjing defaults")
+            Log.i(
+                "UserPreferences",
+                "Billing rules migration v$savedVersion → v$CURRENT_BILLING_VERSION — using Nanjing defaults"
+            )
             // ═══ 写入版本号 + 默认值，确保后继不再触发迁移 ═══
             dataStore.edit {
                 it[BILLING_VERSION] = CURRENT_BILLING_VERSION
@@ -126,23 +132,21 @@ class UserPreferences @Inject constructor(
     }
 
     /** 从 Preferences 读取计费规则（假设版本已是最新） */
-    private fun collectBillingRules(prefs: Preferences): BillingRules {
-        return BillingRules(
-            peakPrice = prefs[PEAK_PRICE] ?: 0.5583,
-            valleyPrice = prefs[VALLEY_PRICE] ?: 0.3583,
-            flatPrice = prefs[FLAT_PRICE] ?: 0.5283,
-            electricTier1Limit = prefs[ELEC_TIER1_LIMIT] ?: 230.0,
-            electricTier2Limit = prefs[ELEC_TIER2_LIMIT] ?: 400.0,
-            electricTier2Surcharge = prefs[ELEC_TIER2_SURCHARGE] ?: 0.05,
-            electricTier3Surcharge = prefs[ELEC_TIER3_SURCHARGE] ?: 0.30,
-            waterTier1Limit = prefs[WATER_TIER_1_LIMIT] ?: 16.67,
-            waterTier2Limit = prefs[WATER_TIER_2_LIMIT] ?: 22.5,
-            waterTier1Price = prefs[WATER_PRICE] ?: 3.42,
-            waterTier2Price = prefs[WATER_TIER_2_PRICE] ?: 4.32,
-            waterTier3Price = prefs[WATER_TIER_3_PRICE] ?: 7.02,
-            gasUnitPrice = prefs[GAS_UNIT_PRICE] ?: 2.8
-        )
-    }
+    private fun collectBillingRules(prefs: Preferences): BillingRules = BillingRules(
+        peakPrice = prefs[PEAK_PRICE] ?: 0.5583,
+        valleyPrice = prefs[VALLEY_PRICE] ?: 0.3583,
+        flatPrice = prefs[FLAT_PRICE] ?: 0.5283,
+        electricTier1Limit = prefs[ELEC_TIER1_LIMIT] ?: 230.0,
+        electricTier2Limit = prefs[ELEC_TIER2_LIMIT] ?: 400.0,
+        electricTier2Surcharge = prefs[ELEC_TIER2_SURCHARGE] ?: 0.05,
+        electricTier3Surcharge = prefs[ELEC_TIER3_SURCHARGE] ?: 0.30,
+        waterTier1Limit = prefs[WATER_TIER_1_LIMIT] ?: 16.67,
+        waterTier2Limit = prefs[WATER_TIER_2_LIMIT] ?: 22.5,
+        waterTier1Price = prefs[WATER_PRICE] ?: 3.42,
+        waterTier2Price = prefs[WATER_TIER_2_PRICE] ?: 4.32,
+        waterTier3Price = prefs[WATER_TIER_3_PRICE] ?: 7.02,
+        gasUnitPrice = prefs[GAS_UNIT_PRICE] ?: 2.8
+    )
     val peakPrice: Flow<Double> = billingRules.map { it.peakPrice }
     val valleyPrice: Flow<Double> = billingRules.map { it.valleyPrice }
     val flatPrice: Flow<Double> = billingRules.map { it.flatPrice }
@@ -168,13 +172,26 @@ class UserPreferences @Inject constructor(
     /** Kept for callers compiled against the first settings screen. */
     suspend fun setPricing(peak: Double, valley: Double, flat: Double, water: Double) {
         val current = billingRules.first()
-        setBillingRules(current.copy(peakPrice = peak, valleyPrice = valley, flatPrice = flat, waterTier1Price = water))
+        setBillingRules(
+            current.copy(
+                peakPrice = peak,
+                valleyPrice = valley,
+                flatPrice = flat,
+                waterTier1Price = water
+            )
+        )
     }
 
     val chartShowCost: Flow<Boolean> = dataStore.data.map { it[CHART_SHOW_COST] ?: false }
     val peakValleyExpanded: Flow<Boolean> = dataStore.data.map { it[PEAK_VALLEY_EXPANDED] ?: false }
-    suspend fun setChartShowCost(showCost: Boolean) = dataStore.edit { it[CHART_SHOW_COST] = showCost }
-    suspend fun setPeakValleyExpanded(expanded: Boolean) = dataStore.edit { it[PEAK_VALLEY_EXPANDED] = expanded }
+    suspend fun setChartShowCost(showCost: Boolean) = dataStore.edit {
+        it[CHART_SHOW_COST] =
+            showCost
+    }
+    suspend fun setPeakValleyExpanded(expanded: Boolean) = dataStore.edit {
+        it[PEAK_VALLEY_EXPANDED] =
+            expanded
+    }
 
     val weatherApiKey: Flow<String> = dataStore.data.map { it[WEATHER_API_KEY] ?: "" }
     val weatherCityId: Flow<String> = dataStore.data.map { it[WEATHER_CITY_ID] ?: "" }
@@ -183,17 +200,18 @@ class UserPreferences @Inject constructor(
         it[WEATHER_CITY_ID] = cityId.trim()
     }
 
-    suspend fun getCachedThresholds(): ClassificationThresholds? = dataStore.data.first().let { prefs ->
-        val total = prefs[TH_TOTAL_ELECTRIC_MIN] ?: return@let null
-        ClassificationThresholds(
-            totalElectricMin = total,
-            peakMin = prefs[TH_PEAK_MIN] ?: return@let null,
-            peakMax = prefs[TH_PEAK_MAX] ?: return@let null,
-            valleyMin = prefs[TH_VALLEY_MIN] ?: return@let null,
-            valleyMax = prefs[TH_VALLEY_MAX] ?: return@let null,
-            waterMax = prefs[TH_WATER_MAX] ?: return@let null
-        )
-    }
+    suspend fun getCachedThresholds(): ClassificationThresholds? =
+        dataStore.data.first().let { prefs ->
+            val total = prefs[TH_TOTAL_ELECTRIC_MIN] ?: return@let null
+            ClassificationThresholds(
+                totalElectricMin = total,
+                peakMin = prefs[TH_PEAK_MIN] ?: return@let null,
+                peakMax = prefs[TH_PEAK_MAX] ?: return@let null,
+                valleyMin = prefs[TH_VALLEY_MIN] ?: return@let null,
+                valleyMax = prefs[TH_VALLEY_MAX] ?: return@let null,
+                waterMax = prefs[TH_WATER_MAX] ?: return@let null
+            )
+        }
 
     suspend fun cacheThresholds(t: ClassificationThresholds) = dataStore.edit {
         it[TH_TOTAL_ELECTRIC_MIN] = t.totalElectricMin
@@ -210,11 +228,17 @@ class UserPreferences @Inject constructor(
 
     // ── 主题应用开关 ──────────────────────────────────────────
     val themeDistEnabled: Flow<Boolean> = dataStore.data.map { it[THEME_DIST_ENABLED] ?: true }
-    suspend fun setThemeDistEnabled(enabled: Boolean) = dataStore.edit { it[THEME_DIST_ENABLED] = enabled }
+    suspend fun setThemeDistEnabled(enabled: Boolean) = dataStore.edit {
+        it[THEME_DIST_ENABLED] =
+            enabled
+    }
 
     // ── 月度预测快照 ──────────────────────────────────────────
     val predictionSnapshot: Flow<String?> = dataStore.data.map { it[PREDICTION_SNAPSHOT] }
-    suspend fun savePredictionSnapshot(json: String) = dataStore.edit { it[PREDICTION_SNAPSHOT] = json }
+    suspend fun savePredictionSnapshot(json: String) = dataStore.edit {
+        it[PREDICTION_SNAPSHOT] =
+            json
+    }
 
     // ── 天气预报缓存 ──────────────────────────────────────────
     val weatherForecastCache: Flow<String?> = dataStore.data.map { it[WEATHER_FORECAST_CACHE] }
@@ -224,11 +248,20 @@ class UserPreferences @Inject constructor(
         it[WEATHER_FORECAST_DATE] = date
     }
 
+    // ── AI 助手人设 ──────────────────────────────────────────
+    val aiPersona: Flow<String> = dataStore.data.map { it[AI_PERSONA] ?: "analyst" }
+    suspend fun setAiPersona(persona: String) = dataStore.edit { it[AI_PERSONA] = persona }
+
     // ── 碳足迹因子 ───────────────────────────────────────────
 
-    val carbonElectricFactor: Flow<Double> = dataStore.data.map { it[CARBON_ELECTRIC_FACTOR] ?: 0.583 }
+    val carbonElectricFactor: Flow<Double> = dataStore.data.map {
+        it[CARBON_ELECTRIC_FACTOR]
+            ?: 0.583
+    }
     val carbonGasFactor: Flow<Double> = dataStore.data.map { it[CARBON_GAS_FACTOR] ?: 2.02 }
-    val carbonTreeKgPerYear: Flow<Double> = dataStore.data.map { it[CARBON_TREE_KG_PER_YEAR] ?: 20.0 }
+    val carbonTreeKgPerYear: Flow<Double> = dataStore.data.map {
+        it[CARBON_TREE_KG_PER_YEAR] ?: 20.0
+    }
 
     suspend fun setCarbonElectricFactor(value: Double) = dataStore.edit {
         it[CARBON_ELECTRIC_FACTOR] = value

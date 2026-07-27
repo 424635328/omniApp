@@ -6,8 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.energyflow.data.BillingRules
 import com.example.energyflow.data.CarbonFootprint
 import com.example.energyflow.data.CostEngine
-import com.example.energyflow.shared.CarbonResult
-import com.example.energyflow.shared.CostEngineShared
 import com.example.energyflow.data.DailyWeather
 import com.example.energyflow.data.EventImpact
 import com.example.energyflow.data.EventImpactAnalyzer
@@ -19,23 +17,27 @@ import com.example.energyflow.data.PredictiveAnalyzer
 import com.example.energyflow.data.UserPreferences
 import com.example.energyflow.data.WeatherRepository
 import com.example.energyflow.data.WeatherResult
+import com.example.energyflow.shared.CarbonResult
+import com.example.energyflow.shared.CostEngineShared
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 
+// MVI 单一 uiState 聚合后，_xxx 内部状态不再有一一配对的公开属性
+@Suppress("ktlint:standard:backing-property-naming")
 @HiltViewModel
 class ChartViewModel @Inject constructor(
     private val repository: MeterRepository,
@@ -52,93 +54,150 @@ class ChartViewModel @Inject constructor(
     enum class MeterType { ELECTRIC, WATER, GAS }
 
     private val _selectedMeterType = MutableStateFlow(MeterType.ELECTRIC)
-    val selectedMeterType: StateFlow<MeterType> = _selectedMeterType.asStateFlow()
 
-    fun setMeterType(type: MeterType) {
+    private fun setMeterType(type: MeterType) {
         _selectedMeterType.value = type
         recalculateForCurrentType()
     }
 
-    val electricRecords: StateFlow<List<MeterRecord>> = repository.getElectricRecords()
+    private val electricRecords: StateFlow<List<MeterRecord>> = repository.getElectricRecords()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val waterRecords: StateFlow<List<MeterRecord>> = repository.getWaterRecords()
+    private val waterRecords: StateFlow<List<MeterRecord>> = repository.getWaterRecords()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val gasRecords: StateFlow<List<MeterRecord>> = repository.getGasRecords()
+    private val gasRecords: StateFlow<List<MeterRecord>> = repository.getGasRecords()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val notesRecords: StateFlow<List<MeterRecord>> = repository.getRecordsWithNotes()
+    private val notesRecords: StateFlow<List<MeterRecord>> = repository.getRecordsWithNotes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // ── 近 365 天逐日消耗（热力图数据源，跟随表类型切换） ──
+    private val heatmapData: StateFlow<Map<LocalDate, Double>> = combine(
+        _selectedMeterType,
+        electricRecords,
+        waterRecords,
+        gasRecords
+    ) { type, electric, water, gas ->
+        val records = when (type) {
+            MeterType.ELECTRIC -> electric
+            MeterType.WATER -> water
+            MeterType.GAS -> gas
+        }
+        val windowStart = LocalDate.now().minusDays(364)
+        buildDailyConsumptionMap(records, type).filterKeys { !it.isBefore(windowStart) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     private val _chartData = MutableStateFlow<ChartData>(ChartData.Empty)
-    val chartData: StateFlow<ChartData> = _chartData.asStateFlow()
 
     private val _timeRange = MutableStateFlow(TimeRange.MONTH)
-    val timeRange: StateFlow<TimeRange> = _timeRange.asStateFlow()
 
     // ── 计费/预测/事件 — UI 重算 ──────────────────────────
 
     private val _billResult = MutableStateFlow<BillData?>(null)
-    val billResult: StateFlow<BillData?> = _billResult.asStateFlow()
 
     private val _prediction = MutableStateFlow<MonthPrediction?>(null)
-    val prediction: StateFlow<MonthPrediction?> = _prediction.asStateFlow()
 
     private val _predictedBill = MutableStateFlow<PredictedBill?>(null)
-    val predictedBill: StateFlow<PredictedBill?> = _predictedBill.asStateFlow()
 
     private val _predictionTracking = MutableStateFlow<PredictionTracking?>(null)
-    val predictionTracking: StateFlow<PredictionTracking?> = _predictionTracking.asStateFlow()
 
     private val _eventImpacts = MutableStateFlow<List<EventImpact>>(emptyList())
-    val eventImpacts: StateFlow<List<EventImpact>> = _eventImpacts.asStateFlow()
 
     // ── AI 分析 ───────────────────────────────────────────
 
     private val _aiAnalysis = MutableStateFlow<String?>(null)
-    val aiAnalysis: StateFlow<String?> = _aiAnalysis.asStateFlow()
 
     private val _aiLoading = MutableStateFlow(false)
-    val aiLoading: StateFlow<Boolean> = _aiLoading.asStateFlow()
 
     // ── kWh / ¥ 切换 ─────────────────────────────────────
 
     private val _showCost = MutableStateFlow(false)
-    val showCost: StateFlow<Boolean> = _showCost.asStateFlow()
 
     // ── 天气 ──────────────────────────────────────────────
 
     private val _weatherData = MutableStateFlow<List<DailyWeather>>(emptyList())
-    val weatherData: StateFlow<List<DailyWeather>> = _weatherData.asStateFlow()
 
     private val _weatherLoading = MutableStateFlow(false)
-    val weatherLoading: StateFlow<Boolean> = _weatherLoading.asStateFlow()
 
     private val _weatherError = MutableStateFlow<String?>(null)
-    val weatherError: StateFlow<String?> = _weatherError.asStateFlow()
 
     // ── 水表专用状态 ──
     private val _waterChartData = MutableStateFlow<ChartData>(ChartData.Empty)
-    val waterChartData: StateFlow<ChartData> = _waterChartData.asStateFlow()
 
     private val _waterBillResult = MutableStateFlow<WaterBillData?>(null)
-    val waterBillResult: StateFlow<WaterBillData?> = _waterBillResult.asStateFlow()
 
     private val _waterPrediction = MutableStateFlow<MonthPrediction?>(null)
-    val waterPrediction: StateFlow<MonthPrediction?> = _waterPrediction.asStateFlow()
 
     // ── 气表专用状态 ──
     private val _gasChartData = MutableStateFlow<ChartData>(ChartData.Empty)
-    val gasChartData: StateFlow<ChartData> = _gasChartData.asStateFlow()
 
     // ── 碳足迹状态 ──
     private val _carbonData = MutableStateFlow<CarbonResult?>(null)
-    val carbonData: StateFlow<CarbonResult?> = _carbonData.asStateFlow()
 
     // ── 缓存 billingRules ──
     private val billingRules: StateFlow<BillingRules> = userPreferences.billingRules
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BillingRules())
+
+    // ── 单一 UI 状态（UDF/MVI） ───────────────────────────
+
+    @Suppress("UNCHECKED_CAST")
+    val uiState: StateFlow<ChartUiState> = combine(
+        _selectedMeterType,
+        _chartData,
+        _timeRange,
+        _showCost,
+        _billResult,
+        _prediction,
+        _predictedBill,
+        _predictionTracking,
+        _eventImpacts,
+        _aiAnalysis,
+        _aiLoading,
+        _weatherData,
+        _weatherLoading,
+        _weatherError,
+        _waterChartData,
+        _waterBillResult,
+        _waterPrediction,
+        _gasChartData,
+        _carbonData,
+        heatmapData
+    ) { values ->
+        ChartUiState(
+            selectedMeterType = values[0] as MeterType,
+            chartData = values[1] as ChartData,
+            timeRange = values[2] as TimeRange,
+            showCost = values[3] as Boolean,
+            billResult = values[4] as BillData?,
+            prediction = values[5] as MonthPrediction?,
+            predictedBill = values[6] as PredictedBill?,
+            predictionTracking = values[7] as PredictionTracking?,
+            eventImpacts = values[8] as List<EventImpact>,
+            aiAnalysis = values[9] as String?,
+            aiLoading = values[10] as Boolean,
+            weatherData = values[11] as List<DailyWeather>,
+            weatherLoading = values[12] as Boolean,
+            weatherError = values[13] as String?,
+            waterChartData = values[14] as ChartData,
+            waterBillResult = values[15] as WaterBillData?,
+            waterPrediction = values[16] as MonthPrediction?,
+            gasChartData = values[17] as ChartData,
+            carbonData = values[18] as CarbonResult?,
+            heatmapData = values[19] as Map<LocalDate, Double>
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartUiState())
+
+    /** 唯一的 UI 事件入口（MVI Intent 分发）。 */
+    fun onIntent(intent: ChartIntent) {
+        when (intent) {
+            is ChartIntent.SetMeterType -> setMeterType(intent.type)
+            is ChartIntent.SetTimeRange -> setTimeRange(intent.range)
+            ChartIntent.ToggleShowCost -> toggleShowCost()
+            ChartIntent.TriggerAiAnalysis -> triggerAiAnalysis()
+            ChartIntent.RefreshWeather -> refreshWeather()
+        }
+    }
 
     init {
         // 电表分析
@@ -206,7 +265,7 @@ class ChartViewModel @Inject constructor(
         }
     }
 
-    fun toggleShowCost() {
+    private fun toggleShowCost() {
         val newValue = !_showCost.value
         _showCost.value = newValue
         viewModelScope.launch {
@@ -214,7 +273,7 @@ class ChartViewModel @Inject constructor(
         }
     }
 
-    fun setTimeRange(range: TimeRange) {
+    private fun setTimeRange(range: TimeRange) {
         _timeRange.value = range
         recalculateForCurrentType()
     }
@@ -231,10 +290,10 @@ class ChartViewModel @Inject constructor(
 
         val today = LocalDate.now()
         val windowStart = when (_timeRange.value) {
-            TimeRange.WEEK  -> today.minusDays(6)   // 最近 7 天（含今天）
-            TimeRange.MONTH -> today.minusDays(29)  // 最近 30 天
-            TimeRange.YEAR  -> today.minusDays(364) // 最近 365 天
-            TimeRange.ALL   -> null
+            TimeRange.WEEK -> today.minusDays(6) // 最近 7 天（含今天）
+            TimeRange.MONTH -> today.minusDays(29) // 最近 30 天
+            TimeRange.YEAR -> today.minusDays(364) // 最近 365 天
+            TimeRange.ALL -> null
         }
 
         // 窗口内的记录（给 KPI / TopBar 用）
@@ -281,10 +340,10 @@ class ChartViewModel @Inject constructor(
         }
         val today = LocalDate.now()
         val windowStart = when (_timeRange.value) {
-            TimeRange.WEEK  -> today.minusDays(6)   // 最近 7 天（含今天）
-            TimeRange.MONTH -> today.minusDays(29)  // 最近 30 天
-            TimeRange.YEAR  -> today.minusDays(364) // 最近 365 天
-            TimeRange.ALL   -> null
+            TimeRange.WEEK -> today.minusDays(6) // 最近 7 天（含今天）
+            TimeRange.MONTH -> today.minusDays(29) // 最近 30 天
+            TimeRange.YEAR -> today.minusDays(364) // 最近 365 天
+            TimeRange.ALL -> null
         }
 
         // 窗口内的记录（给账单/KPI 用）
@@ -321,7 +380,9 @@ class ChartViewModel @Inject constructor(
             val lastPeak = last.electricPeak ?: firstPeak
             val lastValley = last.electricValley ?: firstValley
             val peakKwh = (lastPeak - firstPeak).coerceAtLeast(0.0).coerceAtMost(totalKwh)
-            val valleyKwh = (lastValley - firstValley).coerceAtLeast(0.0).coerceAtMost(totalKwh - peakKwh)
+            val valleyKwh = (lastValley - firstValley).coerceAtLeast(0.0).coerceAtMost(
+                totalKwh - peakKwh
+            )
 
             // 水量增量：用独立的水表记录计算，避免锚定电表时间戳导致基线缺失产生虚高值
             val waterTons = calculateWaterConsumptionInWindow(waterRecords.value, windowStart)
@@ -358,8 +419,20 @@ class ChartViewModel @Inject constructor(
         )
         if (pred != null) {
             val totalInRange = _billResult.value?.totalKwh ?: 0.0
-            val peakRatio = if (totalInRange > 0.0) (_billResult.value?.peakKwh ?: 0.0) / totalInRange else 0.0
-            val valleyRatio = if (totalInRange > 0.0) (_billResult.value?.valleyKwh ?: 0.0) / totalInRange else 0.0
+            val peakRatio = if (totalInRange >
+                0.0
+            ) {
+                (_billResult.value?.peakKwh ?: 0.0) / totalInRange
+            } else {
+                0.0
+            }
+            val valleyRatio = if (totalInRange >
+                0.0
+            ) {
+                (_billResult.value?.valleyKwh ?: 0.0) / totalInRange
+            } else {
+                0.0
+            }
             val predictedPeak = pred.predictedTotalKwh * peakRatio
             val predictedValley = pred.predictedTotalKwh * valleyRatio
             val predBill = costEngine.calculateBill(
@@ -378,10 +451,19 @@ class ChartViewModel @Inject constructor(
             val ym = "${now.year}-${now.monthValue.toString().padStart(2, '0')}"
             val cachedJson = userPreferences.predictionSnapshot.first()
             val cachedSnapshot = if (cachedJson != null) {
-                try { kotlinx.serialization.json.Json.decodeFromString<PredictionSnapshot>(cachedJson) }
-                catch (_: Exception) { null }
-            } else null
-            if (cachedSnapshot?.savedYearMonth != ym || now.dayOfMonth - (cachedSnapshot?.savedDayOfMonth ?: 0) >= 1) {
+                try {
+                    kotlinx.serialization.json.Json.decodeFromString<PredictionSnapshot>(cachedJson)
+                } catch (
+                    _: Exception
+                ) {
+                    null
+                }
+            } else {
+                null
+            }
+            if (cachedSnapshot?.savedYearMonth != ym ||
+                now.dayOfMonth - (cachedSnapshot?.savedDayOfMonth ?: 0) >= 1
+            ) {
                 val snapshot = PredictionSnapshot(
                     savedYearMonth = ym,
                     savedDayOfMonth = now.dayOfMonth,
@@ -390,7 +472,10 @@ class ChartViewModel @Inject constructor(
                     consumedSoFarAtSave = pred.consumedSoFarKwh
                 )
                 userPreferences.savePredictionSnapshot(
-                    kotlinx.serialization.json.Json.encodeToString(PredictionSnapshot.serializer(), snapshot)
+                    kotlinx.serialization.json.Json.encodeToString(
+                        PredictionSnapshot.serializer(),
+                        snapshot
+                    )
                 )
             }
 
@@ -410,7 +495,9 @@ class ChartViewModel @Inject constructor(
         // ── 预报消耗点（从明天到月底，供图表虚线投影） ──
         val forecastPoints = if (pred != null && _timeRange.value == TimeRange.MONTH) {
             computeForecastConsumptions(pred, _weatherData.value)
-        } else emptyList()
+        } else {
+            emptyList()
+        }
 
         updateChartData(records, effectiveCostPerKwh, forecastConsumptions = forecastPoints)
 
@@ -435,10 +522,10 @@ class ChartViewModel @Inject constructor(
         }
         val today = LocalDate.now()
         val windowStart = when (_timeRange.value) {
-            TimeRange.WEEK  -> today.minusDays(6)
+            TimeRange.WEEK -> today.minusDays(6)
             TimeRange.MONTH -> today.minusDays(29)
-            TimeRange.YEAR  -> today.minusDays(364)
-            TimeRange.ALL   -> null
+            TimeRange.YEAR -> today.minusDays(364)
+            TimeRange.ALL -> null
         }
 
         val inWindowRecords = if (windowStart != null) {
@@ -464,7 +551,9 @@ class ChartViewModel @Inject constructor(
         _waterChartData.value = ChartData(
             records = inWindowRecords,
             dailyConsumptions = dailies,
-            annotations = notesRecords.value.filter { nr -> inWindowRecords.any { it.id == nr.id } },
+            annotations = notesRecords.value.filter { nr ->
+                inWindowRecords.any { it.id == nr.id }
+            },
             timeRange = _timeRange.value
         )
 
@@ -495,8 +584,9 @@ class ChartViewModel @Inject constructor(
         val today = LocalDate.now()
         val now = YearMonth.now()
         val thisMonth = records.filter {
-            it.isWaterRecorded && it.waterTotal != null &&
-            YearMonth.from(it.timestamp) == now
+            it.isWaterRecorded &&
+                it.waterTotal != null &&
+                YearMonth.from(it.timestamp) == now
         }.sortedBy { it.timestamp }
 
         if (thisMonth.size < 2) return null
@@ -507,7 +597,8 @@ class ChartViewModel @Inject constructor(
         if (consumed <= 0) return null
 
         val daysElapsed = ChronoUnit.DAYS.between(
-            first.timestamp.toLocalDate(), last.timestamp.toLocalDate()
+            first.timestamp.toLocalDate(),
+            last.timestamp.toLocalDate()
         ).coerceAtLeast(1)
         var dailyRate = consumed / daysElapsed
         val totalMonthDays = now.lengthOfMonth()
@@ -548,19 +639,26 @@ class ChartViewModel @Inject constructor(
 
         val inWindow = if (windowStart != null) {
             sorted.filter { !it.timestamp.toLocalDate().isBefore(windowStart) }
-        } else sorted
+        } else {
+            sorted
+        }
         if (inWindow.size < 2) return 0.0
 
         val firstWR = inWindow.first()
         val lastWR = inWindow.last()
 
         // 如果窗口内首条记录晚于窗口起点，补入窗口前最近的一条水量基线
-        val effectiveFirst = if (windowStart != null && firstWR.timestamp.toLocalDate() > windowStart) {
+        val effectiveFirst = if (windowStart != null &&
+            firstWR.timestamp.toLocalDate() > windowStart
+        ) {
             sorted.filter { it.timestamp < firstWR.timestamp }
                 .maxByOrNull { it.timestamp } ?: firstWR
-        } else firstWR
+        } else {
+            firstWR
+        }
 
-        val totalTons = ((lastWR.waterTotal ?: 0.0) - (effectiveFirst.waterTotal ?: 0.0)).coerceAtLeast(0.0)
+        val totalTons = ((lastWR.waterTotal ?: 0.0) - (effectiveFirst.waterTotal ?: 0.0))
+            .coerceAtLeast(0.0)
         // 当窗口内第一 / 末条数据与补入基线完全相同时返回 0（基线未更新）
         return if (effectiveFirst.id == lastWR.id) 0.0 else totalTons
     }
@@ -574,12 +672,18 @@ class ChartViewModel @Inject constructor(
         val firstInWindow = inWindow.first()
         if (firstInWindow.timestamp.toLocalDate().isBefore(windowStart)) return inWindow
         val baseline = allRecords
-            .filter { it.timestamp.toLocalDate().isBefore(windowStart) && it.isWaterRecorded && it.waterTotal != null }
+            .filter {
+                it.timestamp.toLocalDate().isBefore(windowStart) &&
+                    it.isWaterRecorded &&
+                    it.waterTotal != null
+            }
             .maxByOrNull { it.timestamp }
         return if (baseline != null) listOf(baseline) + inWindow else inWindow
     }
 
-    private fun calculateWaterDailyConsumptions(records: List<MeterRecord>): List<DailyConsumption> {
+    private fun calculateWaterDailyConsumptions(
+        records: List<MeterRecord>
+    ): List<DailyConsumption> {
         if (records.size < 2) return emptyList()
         val sorted = records.sortedBy { it.timestamp }
         val result = mutableListOf<DailyConsumption>()
@@ -594,16 +698,39 @@ class ChartViewModel @Inject constructor(
             )
             val baseDate = prev.timestamp.toLocalDate()
             if (rawDays == 0L) {
-                result.add(DailyConsumption(baseDate.atTime(12, 0), totalConsumption, totalConsumption, 1))
+                result.add(
+                    DailyConsumption(baseDate.atTime(12, 0), totalConsumption, totalConsumption, 1)
+                )
                 continue
             }
             val dailyAvg = totalConsumption / rawDays
             for (d in 1..rawDays) {
                 val pointDate = baseDate.plusDays(d).atTime(12, 0)
-                result.add(DailyConsumption(pointDate, if (d == rawDays) totalConsumption else dailyAvg, dailyAvg, if (d == rawDays) rawDays else 1))
+                result.add(
+                    DailyConsumption(
+                        pointDate,
+                        if (d ==
+                            rawDays
+                        ) {
+                            totalConsumption
+                        } else {
+                            dailyAvg
+                        },
+                        dailyAvg,
+                        if (d ==
+                            rawDays
+                        ) {
+                            rawDays
+                        } else {
+                            1
+                        }
+                    )
+                )
             }
         }
-        return result.groupBy { it.date.toLocalDate() }.map { (_, list) -> list.last() }.sortedBy { it.date }
+        return result.groupBy {
+            it.date.toLocalDate()
+        }.map { (_, list) -> list.last() }.sortedBy { it.date }
     }
 
     // ══════════════════════════════════════════════════════════
@@ -618,13 +745,15 @@ class ChartViewModel @Inject constructor(
         }
         val today = LocalDate.now()
         val windowStart = when (_timeRange.value) {
-            TimeRange.WEEK  -> today.minusDays(6)
+            TimeRange.WEEK -> today.minusDays(6)
             TimeRange.MONTH -> today.minusDays(29)
-            TimeRange.YEAR  -> today.minusDays(364)
-            TimeRange.ALL   -> null
+            TimeRange.YEAR -> today.minusDays(364)
+            TimeRange.ALL -> null
         }
         val inWindowRecords = if (windowStart != null) {
-            gasOnly.filter { !it.timestamp.toLocalDate().isBefore(windowStart) }.sortedBy { it.timestamp }
+            gasOnly.filter {
+                !it.timestamp.toLocalDate().isBefore(windowStart)
+            }.sortedBy { it.timestamp }
         } else {
             gasOnly.sortedBy { it.timestamp }
         }
@@ -656,20 +785,43 @@ class ChartViewModel @Inject constructor(
             )
             val baseDate = prev.timestamp.toLocalDate()
             if (rawDays == 0L) {
-                result.add(DailyConsumption(baseDate.atTime(12, 0), totalConsumption, totalConsumption, 1))
+                result.add(
+                    DailyConsumption(baseDate.atTime(12, 0), totalConsumption, totalConsumption, 1)
+                )
                 continue
             }
             val dailyAvg = totalConsumption / rawDays
             for (d in 1..rawDays) {
                 val pointDate = baseDate.plusDays(d).atTime(12, 0)
-                result.add(DailyConsumption(pointDate, if (d == rawDays) totalConsumption else dailyAvg, dailyAvg, if (d == rawDays) rawDays else 1))
+                result.add(
+                    DailyConsumption(
+                        pointDate,
+                        if (d ==
+                            rawDays
+                        ) {
+                            totalConsumption
+                        } else {
+                            dailyAvg
+                        },
+                        dailyAvg,
+                        if (d ==
+                            rawDays
+                        ) {
+                            rawDays
+                        } else {
+                            1
+                        }
+                    )
+                )
             }
         }
-        return result.groupBy { it.date.toLocalDate() }.map { (_, list) -> list.last() }.sortedBy { it.date }
+        return result.groupBy {
+            it.date.toLocalDate()
+        }.map { (_, list) -> list.last() }.sortedBy { it.date }
     }
 
     /** 用户手动触发 AI 全局能耗分析。 */
-    fun triggerAiAnalysis() {
+    private fun triggerAiAnalysis() {
         val chart = _chartData.value
         if (chart.dailyConsumptions.isEmpty()) return
 
@@ -686,7 +838,10 @@ class ChartViewModel @Inject constructor(
                     weather = _weatherData.value,
                     events = _eventImpacts.value
                 )
-                val result = deepSeekRepository.analyze(prompt)
+                val persona = com.example.energyflow.data.AiPersona.fromKey(
+                    userPreferences.aiPersona.first()
+                )
+                val result = deepSeekRepository.analyze(prompt, persona)
                 _aiAnalysis.value = result
             } catch (_: Exception) {
                 _aiAnalysis.value = null
@@ -712,7 +867,7 @@ class ChartViewModel @Inject constructor(
         val firstDate = dailies.first().date.toLocalDate()
         val lastDate = dailies.last().date.toLocalDate()
         appendLine("## 数据概览")
-        appendLine("- 时间范围：${firstDate} 至 ${lastDate}（${dailies.size} 天）")
+        appendLine("- 时间范围：$firstDate 至 $lastDate（${dailies.size} 天）")
 
         // 总览
         val totalKwh = dailies.sumOf { it.dailyConsumption }
@@ -727,20 +882,47 @@ class ChartViewModel @Inject constructor(
         // 趋势
         val firstHalf = dailies.take(dailies.size / 2)
         val secondHalf = dailies.drop(dailies.size / 2)
-        val firstAvg = if (firstHalf.isNotEmpty()) firstHalf.sumOf { it.dailyConsumption } / firstHalf.size else 0.0
-        val secondAvg = if (secondHalf.isNotEmpty()) secondHalf.sumOf { it.dailyConsumption } / secondHalf.size else 0.0
+        val firstAvg = if (firstHalf.isNotEmpty()) {
+            firstHalf.sumOf { it.dailyConsumption } /
+                firstHalf.size
+        } else {
+            0.0
+        }
+        val secondAvg = if (secondHalf.isNotEmpty()) {
+            secondHalf.sumOf { it.dailyConsumption } /
+                secondHalf.size
+        } else {
+            0.0
+        }
         appendLine("- 前半段日均：${"%.1f".format(firstAvg)} 度")
         appendLine("- 后半段日均：${"%.1f".format(secondAvg)} 度")
-        appendLine("- 趋势：${if (secondAvg > firstAvg * 1.05) "上升" else if (secondAvg < firstAvg * 0.95) "下降" else "平稳"}")
+        appendLine(
+            "- 趋势：${if (secondAvg > firstAvg * 1.05) {
+                "上升"
+            } else if (secondAvg < firstAvg * 0.95) {
+                "下降"
+            } else {
+                "平稳"
+            }}"
+        )
 
         // 异常检测
-        val stdDev = kotlin.math.sqrt(dailies.map { (it.dailyConsumption - avgKwh).let { d -> d * d } }.average())
-        val anomalies = dailies.filter { kotlin.math.abs(it.dailyConsumption - avgKwh) > stdDev * 1.5 }
+        val stdDev = kotlin.math.sqrt(
+            dailies.map {
+                (it.dailyConsumption - avgKwh).let { d -> d * d }
+            }.average()
+        )
+        val anomalies = dailies.filter {
+            kotlin.math.abs(it.dailyConsumption - avgKwh) >
+                stdDev * 1.5
+        }
         if (anomalies.isNotEmpty()) {
             appendLine("- 异常日（偏离均值 >1.5σ）：${anomalies.size} 天")
             anomalies.take(5).forEach {
-                appendLine("  · ${it.date.toLocalDate()} ${"%.1f".format(it.dailyConsumption)} 度 " +
-                    "(${if (it.dailyConsumption > avgKwh) "↑偏高" else "↓偏低"})")
+                appendLine(
+                    "  · ${it.date.toLocalDate()} ${"%.1f".format(it.dailyConsumption)} 度 " +
+                        "(${if (it.dailyConsumption > avgKwh) "↑偏高" else "↓偏低"})"
+                )
             }
         }
 
@@ -757,22 +939,37 @@ class ChartViewModel @Inject constructor(
                     val w = weatherByDate[d.date.toLocalDate()]
                     w != null && w.tempMax <= 32
                 }
-                val coolAvg = if (coolDays.isNotEmpty()) coolDays.sumOf { it.dailyConsumption } / coolDays.size else 0.0
-                appendLine("- 高温日(>32°C)日均：${"%.1f".format(hotAvg)} 度 vs 非高温日均：${"%.1f".format(coolAvg)} 度")
+                val coolAvg = if (coolDays.isNotEmpty()) {
+                    coolDays.sumOf { it.dailyConsumption } /
+                        coolDays.size
+                } else {
+                    0.0
+                }
+                appendLine(
+                    "- 高温日(>32°C)日均：${"%.1f".format(hotAvg)} 度 vs 非高温日均：${"%.1f".format(coolAvg)} 度"
+                )
             }
         }
 
         // 账单
         if (bill != null) {
-            appendLine("- 预估电费：¥${"%.2f".format(bill.electricCost)}（${"%.1f".format(bill.totalKwh)} 度）")
+            appendLine(
+                "- 预估电费：¥${"%.2f".format(bill.electricCost)}（${"%.1f".format(bill.totalKwh)} 度）"
+            )
             if (bill.peakKwh > 0 || bill.valleyKwh > 0) {
-                appendLine("  峰 ${"%.1f".format(bill.peakKwh)} 度 / 谷 ${"%.1f".format(bill.valleyKwh)} 度")
+                appendLine(
+                    "  峰 ${"%.1f".format(bill.peakKwh)} 度 / 谷 ${"%.1f".format(bill.valleyKwh)} 度"
+                )
             }
         }
 
         // 预测
         if (prediction != null && predictedBill != null) {
-            appendLine("- 本月预计全月：${"%.1f".format(prediction.predictedTotalKwh)} 度 / ¥${"%.2f".format(predictedBill.predictedCost)}")
+            appendLine(
+                "- 本月预计全月：${"%.1f".format(
+                    prediction.predictedTotalKwh
+                )} 度 / ¥${"%.2f".format(predictedBill.predictedCost)}"
+            )
         }
 
         // 事件
@@ -780,7 +977,11 @@ class ChartViewModel @Inject constructor(
             appendLine("## 事件影响")
             events.forEach { e ->
                 val sign = if (e.deltaKwh > 0) "多耗" else "少耗"
-                appendLine("- ${e.tag}：${sign} ${"%.1f".format(kotlin.math.abs(e.deltaKwh))} 度/天（${e.eventDays.toInt()}天 vs ${e.nonEventDays.toInt()}天）")
+                appendLine(
+                    "- ${e.tag}：$sign ${"%.1f".format(
+                        kotlin.math.abs(e.deltaKwh)
+                    )} 度/天（${e.eventDays.toInt()}天 vs ${e.nonEventDays.toInt()}天）"
+                )
             }
         }
 
@@ -789,13 +990,17 @@ class ChartViewModel @Inject constructor(
     }
 
     /** 用户手动刷新天气（由按钮触发）。 */
-    fun refreshWeather() {
+    private fun refreshWeather() {
         val currentTimeRange = _timeRange.value
         if (currentTimeRange != TimeRange.WEEK && currentTimeRange != TimeRange.MONTH) return
         val today = LocalDate.now()
         val records = when (currentTimeRange) {
-            TimeRange.WEEK  -> electricRecords.value.filter { !it.timestamp.toLocalDate().isBefore(today.minusDays(6)) }
-            TimeRange.MONTH -> electricRecords.value.filter { !it.timestamp.toLocalDate().isBefore(today.minusDays(29)) }
+            TimeRange.WEEK -> electricRecords.value.filter {
+                !it.timestamp.toLocalDate().isBefore(today.minusDays(6))
+            }
+            TimeRange.MONTH -> electricRecords.value.filter {
+                !it.timestamp.toLocalDate().isBefore(today.minusDays(29))
+            }
             else -> return
         }.sortedBy { it.timestamp }
         loadWeather(records)
@@ -912,7 +1117,9 @@ class ChartViewModel @Inject constructor(
             // If we have per-day weather, amplify the daily rate further for hot days
             val dayMultiplier = if (weather != null && weather.tempMax >= 35.0) {
                 1.0 + (weather.tempMax - 35.0) * 0.02 // ~10% boost per 5°C above 35
-            } else 1.0
+            } else {
+                1.0
+            }
             val dailyVal = pred.dailyRateKwh * dayMultiplier
             result.add(
                 DailyConsumption(
@@ -999,6 +1206,88 @@ class ChartViewModel @Inject constructor(
             .map { (_, list) -> list.last() }
             .sortedBy { it.date }
     }
+
+    companion object {
+
+        /**
+         * 逐日消耗纯函数（热力图数据源）。
+         *
+         * 相邻两次读数的差值均摊到间隔天数（归属到旧读数之后的每一天）；
+         * 负差（换表/回绕）该区间按 0 处理；同一天多条记录的消耗累加到当天。
+         */
+        fun buildDailyConsumptionMap(
+            records: List<MeterRecord>,
+            meterType: MeterType
+        ): Map<LocalDate, Double> {
+            val sorted = records
+                .filter { readingOf(it, meterType) != null }
+                .sortedBy { it.timestamp }
+            if (sorted.size < 2) return emptyMap()
+
+            val result = mutableMapOf<LocalDate, Double>()
+            for (i in 0 until sorted.size - 1) {
+                val prev = sorted[i]
+                val current = sorted[i + 1]
+                val diff =
+                    (readingOf(current, meterType) ?: 0.0) - (readingOf(prev, meterType) ?: 0.0)
+                val consumption = if (diff < 0.0) 0.0 else diff
+                val prevDate = prev.timestamp.toLocalDate()
+                val days = ChronoUnit.DAYS.between(prevDate, current.timestamp.toLocalDate())
+                if (days == 0L) {
+                    result.merge(prevDate, consumption, Double::plus)
+                } else {
+                    val dailyAvg = consumption / days
+                    for (d in 1..days) {
+                        result.merge(prevDate.plusDays(d), dailyAvg, Double::plus)
+                    }
+                }
+            }
+            return result
+        }
+
+        private fun readingOf(record: MeterRecord, meterType: MeterType): Double? =
+            when (meterType) {
+                MeterType.ELECTRIC -> record.electricTotal
+                MeterType.WATER -> record.waterTotal
+                MeterType.GAS -> record.gasTotal
+            }
+    }
+}
+
+// ── MVI 契约 ──────────────────────────────────────────────
+
+/** 分析页单一 UI 状态（严格 UDF：UI 只读该状态渲染）。 */
+@Immutable
+data class ChartUiState(
+    val selectedMeterType: ChartViewModel.MeterType = ChartViewModel.MeterType.ELECTRIC,
+    val chartData: ChartData = ChartData.Empty,
+    val timeRange: TimeRange = TimeRange.MONTH,
+    val showCost: Boolean = false,
+    val billResult: BillData? = null,
+    val prediction: MonthPrediction? = null,
+    val predictedBill: PredictedBill? = null,
+    val predictionTracking: PredictionTracking? = null,
+    val eventImpacts: List<EventImpact> = emptyList(),
+    val aiAnalysis: String? = null,
+    val aiLoading: Boolean = false,
+    val weatherData: List<DailyWeather> = emptyList(),
+    val weatherLoading: Boolean = false,
+    val weatherError: String? = null,
+    val waterChartData: ChartData = ChartData.Empty,
+    val waterBillResult: WaterBillData? = null,
+    val waterPrediction: MonthPrediction? = null,
+    val gasChartData: ChartData = ChartData.Empty,
+    val carbonData: CarbonResult? = null,
+    val heatmapData: Map<LocalDate, Double> = emptyMap()
+)
+
+/** 分析页 UI 事件（严格 UDF：UI 只经 onIntent 上报事件）。 */
+sealed interface ChartIntent {
+    data class SetMeterType(val type: ChartViewModel.MeterType) : ChartIntent
+    data class SetTimeRange(val range: TimeRange) : ChartIntent
+    data object ToggleShowCost : ChartIntent
+    data object TriggerAiAnalysis : ChartIntent
+    data object RefreshWeather : ChartIntent
 }
 
 // ── Data 📊 ───────────────────────────────────────────────
@@ -1043,10 +1332,7 @@ data class BillData(
 )
 
 @Immutable
-data class PredictedBill(
-    val totalKwh: Double,
-    val predictedCost: Double
-)
+data class PredictedBill(val totalKwh: Double, val predictedCost: Double)
 
 /** 预测跟踪——对比已保存的预测 vs 实际进度。 */
 @Immutable

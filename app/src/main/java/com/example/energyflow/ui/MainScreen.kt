@@ -1,11 +1,10 @@
 package com.example.energyflow.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -13,11 +12,15 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -45,9 +48,10 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.SwipeUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -58,10 +62,10 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,46 +78,41 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.energyflow.data.AnomalyWarning
+import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.ui.components.AddRecordSheet
 import com.example.energyflow.ui.components.BatchImportSheet
 import com.example.energyflow.ui.components.EditRecordSheet
-import com.example.energyflow.data.MeterRecord
 import com.example.energyflow.ui.theme.AppBackground
 import com.example.energyflow.ui.theme.AppCard
 import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ErrorNeon
 import com.example.energyflow.ui.theme.GasColor
+import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.SuccessGreen
-import com.example.energyflow.ui.theme.WaterColor
-import com.example.energyflow.ui.theme.WarningNeon
-import com.example.energyflow.ui.theme.MonoFontFamily
 import com.example.energyflow.ui.theme.TextPrimary
 import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.theme.TextTertiary
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.example.energyflow.ui.theme.WarningNeon
+import com.example.energyflow.ui.theme.WaterColor
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class RecordFilter { ALL, ELECTRIC, WATER, GAS, WITH_NOTES }
 
@@ -129,12 +128,9 @@ private data class RecordDeltas(
 // ── 缓存 DateTimeFormatter ──
 private val DateDotFmt = java.time.format.DateTimeFormatter.ofPattern("MM.dd")
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
-fun MainScreen(
-    viewModel: MainViewModel = hiltViewModel(),
-    onScan: (() -> Unit)? = null
-) {
+fun MainScreen(viewModel: MainViewModel = hiltViewModel(), onScan: (() -> Unit)? = null) {
     val records by viewModel.allRecords.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val anomalyWarnings by viewModel.anomalyWarnings.collectAsStateWithLifecycle()
@@ -176,9 +172,11 @@ fun MainScreen(
             typeFiltered.filter { record ->
                 val date = record.timestamp.toLocalDate()
                 (filterStartDate == null || !date.isBefore(filterStartDate)) &&
-                (filterEndDate == null || !date.isAfter(filterEndDate))
+                    (filterEndDate == null || !date.isAfter(filterEndDate))
             }
-        } else typeFiltered
+        } else {
+            typeFiltered
+        }
 
         // DAO 已按 timestamp DESC、id DESC 返回数据；保留原顺序，避免每次筛选再排序。
         dateFiltered.filterIndexed { index, record ->
@@ -192,11 +190,33 @@ fun MainScreen(
                 d1 == null || d2 == null -> false
                 else -> kotlin.math.abs(d1 - d2) < 0.1
             }
-            !(same(record.electricTotal, prev.electricTotal) &&
-                same(record.electricPeak, prev.electricPeak) &&
-                same(record.electricValley, prev.electricValley) &&
-                same(record.waterTotal, prev.waterTotal) &&
-                same(record.gasTotal, prev.gasTotal))
+            !(
+                same(record.electricTotal, prev.electricTotal) &&
+                    same(record.electricPeak, prev.electricPeak) &&
+                    same(record.electricValley, prev.electricValley) &&
+                    same(record.waterTotal, prev.waterTotal) &&
+                    same(record.gasTotal, prev.gasTotal)
+                )
+        }
+    }
+
+    // ── 预计算 delta（含总电 + 峰谷独立差值），避免每帧重算；列表与详情覆盖层共用 ──
+    val recordDeltas = remember(filteredRecords) {
+        filteredRecords.mapIndexed { index, record ->
+            val prev = filteredRecords.getOrNull(index + 1)
+            val elecD = record.electricTotal?.let { rt ->
+                prev?.electricTotal?.let { pt -> rt - pt }
+            }
+            val peakD = record.electricPeak?.let { rp -> prev?.electricPeak?.let { pp -> rp - pp } }
+            val valleyD = record.electricValley?.let { rv ->
+                prev?.electricValley?.let { pv ->
+                    rv -
+                        pv
+                }
+            }
+            val waterD = record.waterTotal?.let { rw -> prev?.waterTotal?.let { pw -> rw - pw } }
+            val gasD = record.gasTotal?.let { rg -> prev?.gasTotal?.let { pg -> rg - pg } }
+            RecordDeltas(elecD, peakD, valleyD, waterD, gasD)
         }
     }
 
@@ -218,9 +238,33 @@ fun MainScreen(
     var showBatchImport by remember { mutableStateOf(false) }
     var pendingBatchImport by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<com.example.energyflow.data.MeterRecord?>(null) }
+    var detailRecord by remember { mutableStateOf<MeterRecord?>(null) }
     val filterCounts by viewModel.filterCounts.collectAsStateWithLifecycle()
 
-    // ── 返回键拦截：有底部表单打开时 → 关闭表单而不是退出应用 ──
+    // ── 软删除 + Snackbar 撤销（时间线卡片与详情覆盖层共用同一路径） ──
+    val deleteWithUndo = remember {
+        { deleted: MeterRecord ->
+            viewModel.softDelete(deleted)
+            coroutineScope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "已删除 · 点击撤销",
+                    actionLabel = "撤销",
+                    withDismissAction = true
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    viewModel.undoDelete()
+                } else {
+                    viewModel.finalizeDelete()
+                }
+            }
+            Unit
+        }
+    }
+
+    // ── 返回键拦截：详情覆盖层/底部表单打开时 → 先关闭它们而不是退出应用 ──
+    androidx.activity.compose.BackHandler(enabled = detailRecord != null) {
+        detailRecord = null
+    }
     androidx.activity.compose.BackHandler(enabled = editingRecord != null) {
         editingRecord = null
     }
@@ -297,12 +341,17 @@ fun MainScreen(
             }
         },
         floatingActionButton = {
-            if (!showAddSheet && !showBatchImport) {
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (!showAddSheet && !showBatchImport && detailRecord == null) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     // 回到顶部（列表滚动超过3项时显示）
                     AnimatedVisibility(
                         visible = isPastFirstPage,
-                        enter = expandVertically(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow)),
+                        enter = expandVertically(
+                            spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow)
+                        ),
                         exit = shrinkVertically(tween(200))
                     ) {
                         Box(
@@ -311,17 +360,27 @@ fun MainScreen(
                                 .scale(
                                     animateFloatAsState(
                                         targetValue = if (isPastFirstPage) 1f else 0f,
-                                        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
+                                        animationSpec = spring(
+                                            Spring.DampingRatioMediumBouncy,
+                                            Spring.StiffnessLow
+                                        ),
                                         label = "top_scale"
                                     ).value
                                 )
                                 .shadow(6.dp, CircleShape, ambientColor = ElectricColor.copy(0.3f))
                                 .clip(CircleShape)
                                 .background(AppCard)
-                                .clickable { coroutineScope.launch { listState.animateScrollToItem(0) } },
+                                .clickable {
+                                    coroutineScope.launch { listState.animateScrollToItem(0) }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.KeyboardArrowUp, "回到顶部", tint = ElectricColor, modifier = Modifier.size(24.dp))
+                            Icon(
+                                Icons.Default.KeyboardArrowUp,
+                                "回到顶部",
+                                tint = ElectricColor,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
                     FABColumn(
@@ -340,121 +399,161 @@ fun MainScreen(
                 .background(AppBackground)
                 .padding(paddingValues)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                HomeTopBar(recordCount = records.size, collapsed = isCollapsed)
-
-                AnimatedVisibility(
-                    visible = insight != null && !isCollapsed,
-                    enter = expandVertically(tween(250)) + fadeIn(tween(250)),
-                    exit = shrinkVertically(tween(250)) + fadeOut(tween(250))
-                ) {
-                    insight?.let { InsightPill(insight = it) }
-                }
-
-                AnimatedVisibility(
-                    visible = records.isNotEmpty() && tierProgress.currentMonthKwh > 0 && !isCollapsed,
-                    enter = expandVertically(tween(250)) + fadeIn(tween(250)),
-                    exit = shrinkVertically(tween(250)) + fadeOut(tween(250))
-                ) {
-                    TierProgressBar(tierProgress = tierProgress)
-                }
-
-                if (records.isNotEmpty()) {
-                    val counts = remember(records, filterCounts) {
-                        RecordFilter.entries.associateWith { f ->
-                            when (f) {
-                                RecordFilter.ALL -> filterCounts["total"] ?: records.size
-                                RecordFilter.ELECTRIC -> filterCounts["electric"] ?: 0
-                                RecordFilter.WATER -> filterCounts["water"] ?: 0
-                                RecordFilter.GAS -> filterCounts["gas"] ?: 0
-                                RecordFilter.WITH_NOTES -> filterCounts["notes"] ?: 0
+            SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+                val sharedTransitionScope = this
+                AnimatedContent(
+                    targetState = detailRecord,
+                    modifier = Modifier.fillMaxSize(),
+                    label = "record_detail_transition"
+                ) { targetRecord ->
+                    val animatedContentScope = this
+                    if (targetRecord != null) {
+                        val detailIndex = filteredRecords.indexOfFirst { it.id == targetRecord.id }
+                        val deltas = recordDeltas.getOrNull(detailIndex) ?: RecordDeltas()
+                        RecordDetailOverlay(
+                            record = targetRecord,
+                            electricDelta = deltas.electric,
+                            peakDelta = deltas.peak,
+                            valleyDelta = deltas.valley,
+                            waterDelta = deltas.water,
+                            gasDelta = deltas.gas,
+                            onEdit = {
+                                editingRecord = it
+                                detailRecord = null
+                            },
+                            onDelete = {
+                                deleteWithUndo(it)
+                                detailRecord = null
+                            },
+                            onClose = { detailRecord = null },
+                            modifier = with(sharedTransitionScope) {
+                                Modifier.sharedBounds(
+                                    rememberSharedContentState(key = targetRecord.id),
+                                    animatedVisibilityScope = animatedContentScope
+                                )
                             }
-                        }
-                    }
-                    FilterBar(
-                        currentFilter = currentFilter,
-                        onFilterChange = { currentFilter = it },
-                        counts = counts
-                    )
-                    DateFilterBar(
-                        startDate = filterStartDate,
-                        endDate = filterEndDate,
-                        onStartClick = { showStartDatePicker = true },
-                        onEndClick = { showEndDatePicker = true },
-                        onClear = { filterStartDate = null; filterEndDate = null }
-                    )
-                }
+                        )
+                    } else {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            HomeTopBar(recordCount = records.size, collapsed = isCollapsed)
 
-                if (records.isEmpty() && !showAddSheet && !showBatchImport) {
-                    HomeEmptyState(
-                        onAddClick = { showAddSheet = true },
-                        onBatchImport = { showBatchImport = true }
-                    )
-                } else {
-                    // ── 预计算 delta（含总电 + 峰谷独立差值），避免每帧重算 ──
-                    val recordDeltas = remember(filteredRecords) {
-                        filteredRecords.mapIndexed { index, record ->
-                            val prev = filteredRecords.getOrNull(index + 1)
-                            val elecD = record.electricTotal?.let { rt -> prev?.electricTotal?.let { pt -> rt - pt } }
-                            val peakD = record.electricPeak?.let { rp -> prev?.electricPeak?.let { pp -> rp - pp } }
-                            val valleyD = record.electricValley?.let { rv -> prev?.electricValley?.let { pv -> rv - pv } }
-                            val waterD = record.waterTotal?.let { rw -> prev?.waterTotal?.let { pw -> rw - pw } }
-                            val gasD = record.gasTotal?.let { rg -> prev?.gasTotal?.let { pg -> rg - pg } }
-                            RecordDeltas(elecD, peakD, valleyD, waterD, gasD)
-                        }
-                    }
+                            AnimatedVisibility(
+                                visible = insight != null && !isCollapsed,
+                                enter = expandVertically(tween(250)) + fadeIn(tween(250)),
+                                exit = shrinkVertically(tween(250)) + fadeOut(tween(250))
+                            ) {
+                                insight?.let { InsightPill(insight = it) }
+                            }
 
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        state = listState,
-                        contentPadding = PaddingValues(
-                            start = 16.dp, end = 16.dp, top = 4.dp, bottom = 88.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        itemsIndexed(items = filteredRecords, key = { _, r -> r.id }) { index, record ->
-                            val (elecDelta, peakDelta, valleyDelta, waterDelta, gasDelta) = recordDeltas[index]
+                            AnimatedVisibility(
+                                visible =
+                                records.isNotEmpty() &&
+                                    tierProgress.currentMonthKwh > 0 &&
+                                    !isCollapsed,
+                                enter = expandVertically(tween(250)) + fadeIn(tween(250)),
+                                exit = shrinkVertically(tween(250)) + fadeOut(tween(250))
+                            ) {
+                                TierProgressBar(tierProgress = tierProgress)
+                            }
 
-                            // 记住 lambda，避免每帧创建新实例阻碍跳过重组
-                            val onDeleteRecord = remember(record.id) {
-                                { deleted: MeterRecord ->
-                                    viewModel.softDelete(deleted)
-                                    coroutineScope.launch {
-                                        val result = snackbarHostState.showSnackbar(
-                                            message = "已删除 · 点击撤销",
-                                            actionLabel = "撤销",
-                                            withDismissAction = true
-                                        )
-                                        if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
-                                        else viewModel.finalizeDelete()
+                            if (records.isNotEmpty()) {
+                                val counts = remember(records, filterCounts) {
+                                    RecordFilter.entries.associateWith { f ->
+                                        when (f) {
+                                            RecordFilter.ALL -> filterCounts["total"]
+                                                ?: records.size
+                                            RecordFilter.ELECTRIC -> filterCounts["electric"] ?: 0
+                                            RecordFilter.WATER -> filterCounts["water"] ?: 0
+                                            RecordFilter.GAS -> filterCounts["gas"] ?: 0
+                                            RecordFilter.WITH_NOTES -> filterCounts["notes"] ?: 0
+                                        }
                                     }
-                                    Unit
+                                }
+                                FilterBar(
+                                    currentFilter = currentFilter,
+                                    onFilterChange = { currentFilter = it },
+                                    counts = counts
+                                )
+                                DateFilterBar(
+                                    startDate = filterStartDate,
+                                    endDate = filterEndDate,
+                                    onStartClick = { showStartDatePicker = true },
+                                    onEndClick = { showEndDatePicker = true },
+                                    onClear = {
+                                        filterStartDate = null
+                                        filterEndDate = null
+                                    }
+                                )
+                            }
+
+                            if (records.isEmpty() && !showAddSheet && !showBatchImport) {
+                                HomeEmptyState(
+                                    onAddClick = { showAddSheet = true },
+                                    onBatchImport = { showBatchImport = true }
+                                )
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    state = listState,
+                                    contentPadding = PaddingValues(
+                                        start = 16.dp,
+                                        end = 16.dp,
+                                        top = 4.dp,
+                                        bottom = 88.dp
+                                    ),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    itemsIndexed(items = filteredRecords, key = { _, r ->
+                                        r.id
+                                    }) { index, record ->
+                                        val (
+                                            elecDelta,
+                                            peakDelta,
+                                            valleyDelta,
+                                            waterDelta,
+                                            gasDelta
+                                        ) = recordDeltas[index]
+
+                                        // 记住 lambda，避免每帧创建新实例阻碍跳过重组
+                                        val onEditRecord = remember(record.id) {
+                                            { r: MeterRecord -> editingRecord = r }
+                                        }
+                                        val onOpenDetail = remember(record.id) {
+                                            { r: MeterRecord -> detailRecord = r }
+                                        }
+                                        val itemModifier = with(sharedTransitionScope) {
+                                            Modifier
+                                                .animateItem(
+                                                    fadeInSpec = tween(200),
+                                                    fadeOutSpec = tween(150),
+                                                    placementSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                                        stiffness = Spring.StiffnessMediumLow
+                                                    )
+                                                )
+                                                .sharedBounds(
+                                                    rememberSharedContentState(key = record.id),
+                                                    animatedVisibilityScope = animatedContentScope
+                                                )
+                                        }
+
+                                        TimelineItem(
+                                            record = record,
+                                            electricDelta = elecDelta,
+                                            peakDelta = peakDelta,
+                                            valleyDelta = valleyDelta,
+                                            waterDelta = waterDelta,
+                                            gasDelta = gasDelta,
+                                            onDelete = deleteWithUndo,
+                                            onEdit = onEditRecord,
+                                            onClick = onOpenDetail,
+                                            modifier = itemModifier
+                                        )
+                                    }
                                 }
                             }
-                            val onEditRecord = remember(record.id) {
-                                { r: MeterRecord -> editingRecord = r }
-                            }
-
-                            TimelineItem(
-                                record = record,
-                                electricDelta = elecDelta,
-                                peakDelta = peakDelta,
-                                valleyDelta = valleyDelta,
-                                waterDelta = waterDelta,
-                                gasDelta = gasDelta,
-                                onDelete = onDeleteRecord,
-                                onEdit = onEditRecord,
-                                modifier = Modifier.animateItem(
-                                    fadeInSpec = tween(200),
-                                    fadeOutSpec = tween(150),
-                                    placementSpec = spring(
-                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                        stiffness = Spring.StiffnessMediumLow
-                                    )
-                                )
-                            )
                         }
                     }
                 }
@@ -478,7 +577,9 @@ fun MainScreen(
                         onPeakValleyExpandedChange = viewModel::setPeakValleyExpanded,
                         latestRecord = records.firstOrNull(),
                         prefillRecord = pendingOcrData,
-                        quickTags = commonTags.ifEmpty { listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机") },
+                        quickTags = commonTags.ifEmpty {
+                            listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机")
+                        },
                         onSave = { recordData ->
                             viewModel.validateAndSave(recordData)
                             viewModel.clearPendingOcr()
@@ -531,7 +632,9 @@ fun MainScreen(
                 ) {
                     EditRecordSheet(
                         record = record,
-                        quickTags = commonTags.ifEmpty { listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机") },
+                        quickTags = commonTags.ifEmpty {
+                            listOf("❄️开冰箱", "🔇关冰箱", "👥两家合用", "❄️空调", "🧺洗衣机")
+                        },
                         onSave = { recordData ->
                             viewModel.updateRecord(record, recordData)
                             editingRecord = null
@@ -546,7 +649,8 @@ fun MainScreen(
     // ── 日期选择器 ──
     if (showStartDatePicker) {
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = filterStartDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+            initialSelectedDateMillis =
+            filterStartDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
                 ?: System.currentTimeMillis()
         )
         DatePickerDialog(
@@ -554,7 +658,9 @@ fun MainScreen(
             confirmButton = {
                 TextButton({
                     state.selectedDateMillis?.let {
-                        val selected = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val selected = Instant.ofEpochMilli(
+                            it
+                        ).atZone(ZoneId.systemDefault()).toLocalDate()
                         if (filterEndDate != null && selected.isAfter(filterEndDate)) {
                             filterStartDate = filterEndDate
                             filterEndDate = selected
@@ -570,15 +676,23 @@ fun MainScreen(
             },
             colors = DatePickerDefaults.colors(containerColor = AppSurface)
         ) {
-            DatePicker(state, colors = DatePickerDefaults.colors(containerColor = AppSurface,
-                selectedDayContainerColor = ElectricColor, selectedDayContentColor = AppBackground,
-                todayContentColor = ElectricColor, todayDateBorderColor = ElectricColor))
+            DatePicker(
+                state,
+                colors = DatePickerDefaults.colors(
+                    containerColor = AppSurface,
+                    selectedDayContainerColor = ElectricColor,
+                    selectedDayContentColor = AppBackground,
+                    todayContentColor = ElectricColor,
+                    todayDateBorderColor = ElectricColor
+                )
+            )
         }
     }
 
     if (showEndDatePicker) {
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = filterEndDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+            initialSelectedDateMillis =
+            filterEndDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
                 ?: System.currentTimeMillis()
         )
         DatePickerDialog(
@@ -586,7 +700,9 @@ fun MainScreen(
             confirmButton = {
                 TextButton({
                     state.selectedDateMillis?.let {
-                        val selected = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val selected = Instant.ofEpochMilli(
+                            it
+                        ).atZone(ZoneId.systemDefault()).toLocalDate()
                         if (filterStartDate != null && selected.isBefore(filterStartDate)) {
                             filterEndDate = filterStartDate
                             filterStartDate = selected
@@ -602,9 +718,16 @@ fun MainScreen(
             },
             colors = DatePickerDefaults.colors(containerColor = AppSurface)
         ) {
-            DatePicker(state, colors = DatePickerDefaults.colors(containerColor = AppSurface,
-                selectedDayContainerColor = ElectricColor, selectedDayContentColor = AppBackground,
-                todayContentColor = ElectricColor, todayDateBorderColor = ElectricColor))
+            DatePicker(
+                state,
+                colors = DatePickerDefaults.colors(
+                    containerColor = AppSurface,
+                    selectedDayContainerColor = ElectricColor,
+                    selectedDayContentColor = AppBackground,
+                    todayContentColor = ElectricColor,
+                    todayDateBorderColor = ElectricColor
+                )
+            )
         }
     }
 }
@@ -671,7 +794,12 @@ private fun AnomalyWarningDialog(
                     Text("确认保存", color = ElectricColor, fontFamily = MonoFontFamily)
                 }
                 TextButton(onClick = onMeterReplacement) {
-                    Text("标记为换表", color = WarningNeon, fontFamily = MonoFontFamily, fontSize = 13.sp)
+                    Text(
+                        "标记为换表",
+                        color = WarningNeon,
+                        fontFamily = MonoFontFamily,
+                        fontSize = 13.sp
+                    )
                 }
             }
         },
@@ -721,7 +849,11 @@ private fun FABColumn(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MainFAB(onClick: () -> Unit, onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+private fun MainFAB(
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val btnScale by animateFloatAsState(
@@ -829,18 +961,33 @@ private fun FilterBar(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (isSelected) chipColor.copy(alpha = 0.12f) else AppCard.copy(alpha = 0.45f))
+                    .background(
+                        if (isSelected) {
+                            chipColor.copy(
+                                alpha = 0.12f
+                            )
+                        } else {
+                            AppCard.copy(alpha = 0.45f)
+                        }
+                    )
                     .then(
-                        if (isSelected) Modifier.border(
-                            width = 1.dp,
-                            color = chipColor.copy(alpha = 0.25f),
-                            shape = RoundedCornerShape(16.dp)
-                        ) else Modifier
+                        if (isSelected) {
+                            Modifier.border(
+                                width = 1.dp,
+                                color = chipColor.copy(alpha = 0.25f),
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                        } else {
+                            Modifier
+                        }
                     )
                     .clickable { onFilterChange(filter) }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
                         when (filter) {
                             RecordFilter.ALL -> "全部"
@@ -881,7 +1028,13 @@ private fun DateFilterBar(
     onClear: () -> Unit
 ) {
     val hasFilter = startDate != null || endDate != null
-    val dateBg = if (hasFilter) ElectricColor.copy(alpha = 0.12f) else ElectricColor.copy(alpha = 0.06f)
+    val dateBg = if (hasFilter) {
+        ElectricColor.copy(
+            alpha = 0.12f
+        )
+    } else {
+        ElectricColor.copy(alpha = 0.06f)
+    }
 
     Row(
         modifier = Modifier
@@ -897,7 +1050,10 @@ private fun DateFilterBar(
                 .clickable { onStartClick() }
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text("📅", fontSize = 11.sp)
                 Text(
                     startDate?.let { "从 ${it.format(DateDotFmt)}" } ?: "开始日期",
@@ -916,7 +1072,10 @@ private fun DateFilterBar(
                 .clickable { onEndClick() }
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text("📅", fontSize = 11.sp)
                 Text(
                     endDate?.let { "到 ${it.format(DateDotFmt)}" } ?: "结束日期",
@@ -959,7 +1118,12 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
         modifier = Modifier
             .fillMaxWidth()
             .background(AppBackground)
-            .padding(start = 20.dp, end = 20.dp, top = if (collapsed) 6.dp else 8.dp, bottom = if (collapsed) 4.dp else 6.dp)
+            .padding(
+                start = 20.dp,
+                end = 20.dp,
+                top = if (collapsed) 6.dp else 8.dp,
+                bottom = if (collapsed) 4.dp else 6.dp
+            )
     ) {
         if (collapsed) {
             // ── 折叠态：单行紧凑图标+标题 ──
@@ -967,18 +1131,28 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                 Box(
                     modifier = Modifier
                         .size(22.dp)
-                        .shadow(3.dp, RoundedCornerShape(6.dp), ambientColor = ElectricColor.copy(0.2f), spotColor = ElectricColor.copy(0.2f))
+                        .shadow(
+                            3.dp,
+                            RoundedCornerShape(6.dp),
+                            ambientColor = ElectricColor.copy(0.2f),
+                            spotColor = ElectricColor.copy(0.2f)
+                        )
                         .clip(RoundedCornerShape(6.dp))
                         .background(
                             Brush.radialGradient(
-                                colors = listOf(ElectricColor.copy(alpha = 0.18f), ElectricColor.copy(alpha = 0.06f))
+                                colors = listOf(
+                                    ElectricColor.copy(alpha = 0.18f),
+                                    ElectricColor.copy(alpha = 0.06f)
+                                )
                             )
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.Bolt, contentDescription = "闪电图标",
-                        tint = ElectricColor, modifier = Modifier.size(12.dp)
+                        Icons.Default.Bolt,
+                        contentDescription = "闪电图标",
+                        tint = ElectricColor,
+                        modifier = Modifier.size(12.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -990,7 +1164,12 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                     fontSize = 15.sp
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                Text("$recordCount", color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 11.sp)
+                Text(
+                    "$recordCount",
+                    color = TextTertiary,
+                    fontFamily = MonoFontFamily,
+                    fontSize = 11.sp
+                )
             }
         } else {
             // ── 展开态：图标+大标题+统计行 ──
@@ -999,18 +1178,28 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                     Box(
                         modifier = Modifier
                             .size(26.dp)
-                            .shadow(4.dp, RoundedCornerShape(8.dp), ambientColor = ElectricColor.copy(0.3f), spotColor = ElectricColor.copy(0.3f))
+                            .shadow(
+                                4.dp,
+                                RoundedCornerShape(8.dp),
+                                ambientColor = ElectricColor.copy(0.3f),
+                                spotColor = ElectricColor.copy(0.3f)
+                            )
                             .clip(RoundedCornerShape(8.dp))
                             .background(
                                 Brush.radialGradient(
-                                    colors = listOf(ElectricColor.copy(alpha = 0.18f), ElectricColor.copy(alpha = 0.06f))
+                                    colors = listOf(
+                                        ElectricColor.copy(alpha = 0.18f),
+                                        ElectricColor.copy(alpha = 0.06f)
+                                    )
                                 )
                             ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Default.Bolt, contentDescription = null,
-                            tint = ElectricColor, modifier = Modifier.size(14.dp)
+                            Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = ElectricColor,
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
@@ -1030,19 +1219,27 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
                             .background(ElectricColor.copy(alpha = 0.08f))
-                            .border(1.dp, ElectricColor.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                            .border(
+                                1.dp,
+                                ElectricColor.copy(alpha = 0.1f),
+                                RoundedCornerShape(10.dp)
+                            )
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "$recordCount",
-                                color = ElectricColor, fontFamily = MonoFontFamily,
-                                fontWeight = FontWeight.Bold, fontSize = 13.sp
+                                color = ElectricColor,
+                                fontFamily = MonoFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 "条记录",
-                                color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 11.sp
+                                color = TextTertiary,
+                                fontFamily = MonoFontFamily,
+                                fontSize = 11.sp
                             )
                         }
                     }
@@ -1050,7 +1247,9 @@ private fun HomeTopBar(recordCount: Int, collapsed: Boolean = false) {
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             "添加第一条能耗数据",
-                            color = TextTertiary, fontFamily = MonoFontFamily, fontSize = 12.sp
+                            color = TextTertiary,
+                            fontFamily = MonoFontFamily,
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -1241,9 +1440,18 @@ private fun TierProgressBar(tierProgress: MainViewModel.TierProgress) {
                     .background(
                         Brush.horizontalGradient(
                             when (tierProgress.tierColor) {
-                                MainViewModel.TierLevel.Tier3 -> listOf(ErrorNeon, ErrorNeon.copy(alpha = 0.6f))
-                                MainViewModel.TierLevel.Tier2 -> listOf(WarningNeon, WarningNeon.copy(alpha = 0.6f))
-                                MainViewModel.TierLevel.Tier1 -> listOf(ElectricColor, ElectricColor.copy(alpha = 0.6f))
+                                MainViewModel.TierLevel.Tier3 -> listOf(
+                                    ErrorNeon,
+                                    ErrorNeon.copy(alpha = 0.6f)
+                                )
+                                MainViewModel.TierLevel.Tier2 -> listOf(
+                                    WarningNeon,
+                                    WarningNeon.copy(alpha = 0.6f)
+                                )
+                                MainViewModel.TierLevel.Tier1 -> listOf(
+                                    ElectricColor,
+                                    ElectricColor.copy(alpha = 0.6f)
+                                )
                             }
                         )
                     )
@@ -1311,11 +1519,7 @@ private fun TierProgressBar(tierProgress: MainViewModel.TierProgress) {
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-private fun QuickActionChip(
-    icon: String,
-    label: String,
-    onClick: () -> Unit
-) {
+private fun QuickActionChip(icon: String, label: String, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -1363,14 +1567,26 @@ private fun InsightPill(insight: com.example.energyflow.data.InsightGenerator.In
     var expanded by remember { mutableStateOf(false) }
 
     val bgColor = when (insight.level) {
-        com.example.energyflow.data.InsightGenerator.Insight.Level.CRITICAL -> ErrorNeon.copy(alpha = 0.08f)
-        com.example.energyflow.data.InsightGenerator.Insight.Level.WARNING -> WarningNeon.copy(alpha = 0.08f)
-        com.example.energyflow.data.InsightGenerator.Insight.Level.INFO -> ElectricColor.copy(alpha = 0.06f)
+        com.example.energyflow.data.InsightGenerator.Insight.Level.CRITICAL -> ErrorNeon.copy(
+            alpha = 0.08f
+        )
+        com.example.energyflow.data.InsightGenerator.Insight.Level.WARNING -> WarningNeon.copy(
+            alpha = 0.08f
+        )
+        com.example.energyflow.data.InsightGenerator.Insight.Level.INFO -> ElectricColor.copy(
+            alpha = 0.06f
+        )
     }
     val borderColor = when (insight.level) {
-        com.example.energyflow.data.InsightGenerator.Insight.Level.CRITICAL -> ErrorNeon.copy(alpha = 0.2f)
-        com.example.energyflow.data.InsightGenerator.Insight.Level.WARNING -> WarningNeon.copy(alpha = 0.2f)
-        com.example.energyflow.data.InsightGenerator.Insight.Level.INFO -> ElectricColor.copy(alpha = 0.15f)
+        com.example.energyflow.data.InsightGenerator.Insight.Level.CRITICAL -> ErrorNeon.copy(
+            alpha = 0.2f
+        )
+        com.example.energyflow.data.InsightGenerator.Insight.Level.WARNING -> WarningNeon.copy(
+            alpha = 0.2f
+        )
+        com.example.energyflow.data.InsightGenerator.Insight.Level.INFO -> ElectricColor.copy(
+            alpha = 0.15f
+        )
     }
     val textColor = when (insight.level) {
         com.example.energyflow.data.InsightGenerator.Insight.Level.CRITICAL -> ErrorNeon

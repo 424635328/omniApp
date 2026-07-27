@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -34,15 +33,17 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.energyflow.ui.theme.AppCard
 import com.example.energyflow.data.DailyWeather
+import com.example.energyflow.ui.theme.AppCard
 import com.example.energyflow.ui.theme.AppSurface
 import com.example.energyflow.ui.theme.ElectricColor
 import com.example.energyflow.ui.theme.ElectricEnd
@@ -52,11 +53,11 @@ import com.example.energyflow.ui.theme.NeonBlue
 import com.example.energyflow.ui.theme.StaticPeakColor
 import com.example.energyflow.ui.theme.TextSecondary
 import com.example.energyflow.ui.utils.Formatters.formatDecimal1
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 private val DateLabelFormatter = DateTimeFormatter.ofPattern("MM/dd")
 
@@ -87,6 +88,7 @@ fun ConsumptionLineChart(
     val flingScope = rememberCoroutineScope()
     val currentOnSelectedIndexChange by rememberUpdatedState(onSelectedIndexChange)
     val currentSelectedIndex by rememberUpdatedState(selectedIndex)
+    val haptic = LocalHapticFeedback.current
 
     // 数据变化时重播动画
     LaunchedEffect(consumptions, showCost) {
@@ -208,18 +210,29 @@ fun ConsumptionLineChart(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(240.dp)
-                .clearAndSetSemantics {}  // Canvas 内建的无障碍已通过父 Box 覆盖
+                .clearAndSetSemantics {} // Canvas 内建的无障碍已通过父 Box 覆盖
                 .pointerInput(consumptions, showCost) {
                     detectTapGestures { offset ->
                         val paddingLeft = 54f
                         val chartWidth = size.width - paddingLeft - 20f
-                        val xStep = if (consumptions.size > 1)
-                            chartWidth / (consumptions.size - 1) else chartWidth
+                        val xStep = if (consumptions.size > 1) {
+                            chartWidth / (consumptions.size - 1)
+                        } else {
+                            chartWidth
+                        }
                         val index = ((offset.x - paddingLeft) / xStep).roundToInt()
                             .coerceIn(0, consumptions.size - 1)
-                        currentOnSelectedIndexChange(
-                            if (currentSelectedIndex == index) -1 else index
-                        )
+                        val newIndex = if (currentSelectedIndex == index) -1 else index
+                        if (newIndex != -1) {
+                            haptic.performHapticFeedback(
+                                if (currentSelectedIndex == -1) {
+                                    HapticFeedbackType.LongPress
+                                } else {
+                                    HapticFeedbackType.TextHandleMove
+                                }
+                            )
+                        }
+                        currentOnSelectedIndexChange(newIndex)
                     }
                 }
                 .pointerInput(consumptions) {
@@ -239,8 +252,11 @@ fun ConsumptionLineChart(
                                 if (isHorizontal == true && abs(velocityX) > 200f) {
                                     flingScope.launch {
                                         flingDecelerate(velocityX) { delta ->
-                                            val maxPan = if (scale > 1f)
-                                                (size.width * (scale - 1f) * 0.5f) else 0f
+                                            val maxPan = if (scale > 1f) {
+                                                (size.width * (scale - 1f) * 0.5f)
+                                            } else {
+                                                0f
+                                            }
                                             panX = (panX + delta).coerceIn(-maxPan, maxPan)
                                         }
                                     }
@@ -270,7 +286,7 @@ fun ConsumptionLineChart(
                             val delta = change.position - lastPos
 
                             // 估算速度 (px/ms)
-                            velocityX = (delta.x / dt) * 16f  // 归一化到 ~60fps 帧
+                            velocityX = (delta.x / dt) * 16f // 归一化到 ~60fps 帧
 
                             lastPos = change.position
                             lastTime = now
@@ -285,13 +301,18 @@ fun ConsumptionLineChart(
                             when (isHorizontal) {
                                 true -> {
                                     change.consume()
-                                    val maxPan = if (scale > 1f)
-                                        (size.width * (scale - 1f) * 0.5f) else 0f
+                                    val maxPan = if (scale > 1f) {
+                                        (size.width * (scale - 1f) * 0.5f)
+                                    } else {
+                                        0f
+                                    }
                                     panX = (panX + delta.x).coerceIn(-maxPan, maxPan)
                                     currentOnSelectedIndexChange(-1)
                                 }
                                 false -> { /* 垂直滑动 → 传递父容器 */ }
-                                null -> { change.consume() }
+                                null -> {
+                                    change.consume()
+                                }
                             }
                         }
                     }
@@ -322,9 +343,10 @@ fun ConsumptionLineChart(
             // 计算所有数据点
             val points = consumptions.mapIndexed { index, consumption ->
                 val x = paddingLeft + index * xStep
-                val value = if (showCost) consumption.estimatedCost else consumption.dailyConsumption
+                val value =
+                    if (showCost) consumption.estimatedCost else consumption.dailyConsumption
                 val y = paddingTop + chartHeight -
-                        ((value - minValue) / valueRange * chartHeight).toFloat()
+                    ((value - minValue) / valueRange * chartHeight).toFloat()
                 Offset(x, y)
             }
 
@@ -465,7 +487,7 @@ fun ConsumptionLineChart(
                     for (fc in forecastConsumptions) {
                         val fv = if (showCost) fc.estimatedCost else fc.dailyConsumption
                         val fy = paddingTop + chartHeight -
-                                ((fv - minValue) / valueRange * chartHeight).toFloat()
+                            ((fv - minValue) / valueRange * chartHeight).toFloat()
                         lineTo(fx, fy)
                         fx += xStep
                     }
@@ -542,12 +564,9 @@ private fun Path.cubicSmoothTo(from: Offset, to: Offset) {
  * @param initialVelocity 初始速度 (px/frame, ~60fps)
  * @param onDelta 每帧回调，参数为本次位移增量
  */
-private suspend fun flingDecelerate(
-    initialVelocity: Float,
-    onDelta: (Float) -> Unit
-) {
-    val friction = 0.85f       // 每帧衰减系数
-    val minVelocity = 0.5f     // 停止阈值
+private suspend fun flingDecelerate(initialVelocity: Float, onDelta: (Float) -> Unit) {
+    val friction = 0.85f // 每帧衰减系数
+    val minVelocity = 0.5f // 停止阈值
     var velocity = initialVelocity
 
     while (abs(velocity) > minVelocity) {
@@ -580,7 +599,11 @@ private fun buildA11yDescription(
         DateTimeFormatter.ofPattern("M月d日")
     ) ?: ""
 
-    return "能耗趋势图，共${consumptions.size}个数据点。最高${"%.1f".format(maxVal)}$unitLabel，出现在${maxDate}；最低${"%.1f".format(minVal)}$unitLabel，平均${"%.1f".format(avgVal)}$unitLabel。双指缩放，左右滑动查看。"
+    return "能耗趋势图，共${consumptions.size}个数据点。最高${"%.1f".format(
+        maxVal
+    )}$unitLabel，出现在$maxDate；最低${"%.1f".format(
+        minVal
+    )}$unitLabel，平均${"%.1f".format(avgVal)}$unitLabel。双指缩放，左右滑动查看。"
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -644,7 +667,13 @@ private fun DrawScope.drawTooltip(
 ) {
     val selPoint = points[selectedIndex]
     val selValue = values[selectedIndex]
-    val selLabel = if (showCost) "¥${formatDecimal1(selValue)}" else "${formatDecimal1(selValue)} $unitLabel"
+    val selLabel = if (showCost) {
+        "¥${formatDecimal1(
+            selValue
+        )}"
+    } else {
+        "${formatDecimal1(selValue)} $unitLabel"
+    }
     val selDate = consumptions[selectedIndex].date.format(
         DateTimeFormatter.ofPattern("MM.dd")
     )
@@ -672,8 +701,8 @@ private fun DrawScope.drawTooltip(
     val row1W = dw + vw + 12f
 
     val wHighStr = selWeather?.let { "H${it.tempMax.toInt()}°" } ?: ""
-    val wLowStr  = selWeather?.let { "L${it.tempMin.toInt()}°" } ?: ""
-    val sepStr   = if (hasWeather) "  ·  " else ""
+    val wLowStr = selWeather?.let { "L${it.tempMin.toInt()}°" } ?: ""
+    val sepStr = if (hasWeather) "  ·  " else ""
     val whw = tempMaxPaint.measureText(wHighStr)
     val wsw = sepLabelPaint.measureText(sepStr)
     val wlw = tempMinPaint.measureText(wLowStr)
@@ -711,10 +740,16 @@ private fun DrawScope.drawTooltip(
     // 第一行：日期 | 数值
     val row1Y = baseY + 20f
     drawContext.canvas.nativeCanvas.drawText(
-        dateStr, left + tooltipPadH, row1Y, tooltipDatePaint
+        dateStr,
+        left + tooltipPadH,
+        row1Y,
+        tooltipDatePaint
     )
     drawContext.canvas.nativeCanvas.drawText(
-        valueStr, right - tooltipPadH, row1Y, tooltipValuePaint
+        valueStr,
+        right - tooltipPadH,
+        row1Y,
+        tooltipValuePaint
     )
 
     if (hasWeather) {
