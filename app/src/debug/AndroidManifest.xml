@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Debug-only UI 组件目录，独立启动器入口 -->
+        <activity
+            android:name="com.example.energyflow.catalog.CatalogActivity"
+            android:exported="true"
+            android:label="EnergyFlow Catalog"
+            android:theme="@style/Theme.EnergyFlow">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

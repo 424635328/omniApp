@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<baseline version="1.0">
+    <file name="src/commonMain/kotlin/com/example/energyflow/shared/AnomalyDetector.kt">
+        <error line="1" column="1" source="standard:filename" />
+        <error line="26" column="9" source="standard:function-signature" />
+        <error line="27" column="9" source="standard:function-signature" />
+        <error line="28" column="9" source="standard:function-signature" />
+        <error line="28" column="31" source="standard:function-signature" />
+        <error line="63" column="1" source="standard:indent" />
+    </file>
+    <file name="src/commonMain/kotlin/com/example/energyflow/shared/CarbonFootprint.kt">
+        <error line="71" column="16" source="standard:multiline-if-else" />
+    </file>
+    <file name="src/commonMain/kotlin/com/example/energyflow/shared/CostEngine.kt">
+        <error line="75" column="14" source="standard:wrapping" />
+        <error line="76" column="1" source="standard:indent" />
+        <error line="76" column="61" source="standard:wrapping" />
+        <error line="77" column="16" source="standard:multiline-if-else" />
+    </file>
+    <file name="src/commonMain/kotlin/com/example/energyflow/shared/PredictiveAnalyzer.kt">
+        <error line="1" column="1" source="standard:filename" />
+        <error line="3" column="1" source="standard:import-ordering" />
+        <error line="27" column="35" source="standard:no-multi-spaces" />
+        <error line="28" column="34" source="standard:no-multi-spaces" />
+        <error line="29" column="36" source="standard:no-multi-spaces" />
+        <error line="35" column="48" source="standard:no-multi-spaces" />
+        <error line="36" column="34" source="standard:no-multi-spaces" />
+        <error line="37" column="41" source="standard:no-multi-spaces" />
+        <error line="38" column="41" source="standard:no-multi-spaces" />
+        <error line="39" column="41" source="standard:no-multi-spaces" />
+        <error line="42" column="9" source="standard:class-signature" />
+        <error line="43" column="9" source="standard:class-signature" />
+        <error line="43" column="35" source="standard:class-signature" />
+        <error line="49" column="46" source="standard:no-multi-spaces" />
+        <error line="49" column="47" source="standard:value-parameter-comment" />
+        <error line="97" column="32" source="standard:binary-expression-wrapping" />
+        <error line="97" column="69" source="standard:binary-expression-wrapping" />
+        <error line="97" column="99" source="standard:binary-expression-wrapping" />
+        <error line="97" column="101" source="standard:max-line-length" />
+        <error line="107" column="33" source="standard:wrapping" />
+        <error line="111" column="17" source="standard:wrapping" />
+        <error line="119" column="33" source="standard:wrapping" />
+        <error line="124" column="17" source="standard:wrapping" />
+        <error line="132" column="33" source="standard:wrapping" />
+        <error line="136" column="17" source="standard:wrapping" />
+        <error line="144" column="33" source="standard:wrapping" />
+        <error line="148" column="17" source="standard:wrapping" />
+        <error line="154" column="45" source="standard:argument-list-wrapping" />
+        <error line="154" column="52" source="standard:argument-list-wrapping" />
+        <error line="154" column="66" source="standard:argument-list-wrapping" />
+        <error line="154" column="79" source="standard:argument-list-wrapping" />
+        <error line="154" column="94" source="standard:argument-list-wrapping" />
+        <error line="154" column="101" source="standard:max-line-length" />
+        <error line="154" column="103" source="standard:argument-list-wrapping" />
+        <error line="154" column="106" source="standard:argument-list-wrapping" />
+        <error line="193" column="70" source="standard:no-multi-spaces" />
+        <error line="254" column="16" source="standard:multiline-if-else" />
+        <error line="282" column="47" source="standard:binary-expression-wrapping" />
+        <error line="282" column="88" source="standard:argument-list-wrapping" />
+        <error line="282" column="93" source="standard:argument-list-wrapping" />
+        <error line="282" column="96" source="standard:argument-list-wrapping" />
+        <error line="282" column="101" source="standard:max-line-length" />
+        <error line="349" column="59" source="standard:no-multi-spaces" />
+        <error line="425" column="30" source="standard:binary-expression-wrapping" />
+        <error line="425" column="96" source="standard:binary-expression-wrapping" />
+        <error line="425" column="101" source="standard:max-line-length" />
+        <error line="499" column="47" source="standard:no-multi-spaces" />
+        <error line="503" column="53" source="standard:no-multi-spaces" />
+        <error line="532" column="36" source="standard:binary-expression-wrapping" />
+        <error line="532" column="73" source="standard:binary-expression-wrapping" />
+        <error line="532" column="95" source="standard:binary-expression-wrapping" />
+        <error line="532" column="101" source="standard:max-line-length" />
+        <error line="541" column="54" source="standard:no-multi-spaces" />
+        <error line="577" column="9" source="standard:class-signature" />
+        <error line="578" column="9" source="standard:class-signature" />
+        <error line="578" column="35" source="standard:class-signature" />
+        <error line="582" column="9" source="standard:class-signature" />
+        <error line="583" column="9" source="standard:class-signature" />
+        <error line="584" column="9" source="standard:class-signature" />
+        <error line="584" column="29" source="standard:class-signature" />
+        <error line="596" column="66" source="standard:function-expression-body" />
+        <error line="607" column="37" source="standard:binary-expression-wrapping" />
+        <error line="607" column="52" source="standard:argument-list-wrapping" />
+        <error line="607" column="62" source="standard:argument-list-wrapping" />
+        <error line="607" column="65" source="standard:argument-list-wrapping" />
+        <error line="607" column="66" source="standard:argument-list-wrapping" />
+        <error line="607" column="83" source="standard:argument-list-wrapping" />
+        <error line="607" column="89" source="standard:argument-list-wrapping" />
+        <error line="607" column="100" source="standard:argument-list-wrapping" />
+        <error line="607" column="101" source="standard:argument-list-wrapping" />
+        <error line="607" column="101" source="standard:max-line-length" />
+        <error line="612" column="55" source="standard:function-expression-body" />
+    </file>
+</baseline>

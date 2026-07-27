@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<baseline version="1.0">
+    <file name="src/main/java/com/example/energyflow/data/ThemeDistColors.kt">
+        <error line="8" column="90" source="standard:argument-list-wrapping" />
+        <error line="8" column="100" source="standard:argument-list-wrapping" />
+        <error line="8" column="101" source="standard:max-line-length" />
+        <error line="9" column="92" source="standard:argument-list-wrapping" />
+        <error line="9" column="101" source="standard:max-line-length" />
+        <error line="9" column="102" source="standard:argument-list-wrapping" />
+        <error line="11" column="93" source="standard:argument-list-wrapping" />
+        <error line="11" column="101" source="standard:max-line-length" />
+        <error line="11" column="103" source="standard:argument-list-wrapping" />
+        <error line="12" column="90" source="standard:argument-list-wrapping" />
+        <error line="12" column="100" source="standard:argument-list-wrapping" />
+        <error line="12" column="101" source="standard:max-line-length" />
+        <error line="14" column="92" source="standard:argument-list-wrapping" />
+        <error line="14" column="101" source="standard:max-line-length" />
+        <error line="14" column="102" source="standard:argument-list-wrapping" />
+        <error line="15" column="100" source="standard:trailing-comma-on-declaration-site" />
+    </file>
+    <file name="src/main/java/com/example/energyflow/ui/theme/Color.kt">
+        <error line="16" column="40" source="standard:no-multi-spaces" />
+        <error line="17" column="37" source="standard:no-multi-spaces" />
+        <error line="18" column="40" source="standard:no-multi-spaces" />
+        <error line="19" column="37" source="standard:no-multi-spaces" />
+        <error line="20" column="40" source="standard:no-multi-spaces" />
+        <error line="21" column="43" source="standard:no-multi-spaces" />
+        <error line="25" column="41" source="standard:no-multi-spaces" />
+        <error line="26" column="38" source="standard:no-multi-spaces" />
+        <error line="27" column="35" source="standard:no-multi-spaces" />
+        <error line="28" column="38" source="standard:no-multi-spaces" />
+        <error line="33" column="39" source="standard:no-multi-spaces" />
+        <error line="34" column="37" source="standard:no-multi-spaces" />
+        <error line="35" column="36" source="standard:no-multi-spaces" />
+        <error line="36" column="34" source="standard:no-multi-spaces" />
+        <error line="37" column="34" source="standard:no-multi-spaces" />
+        <error line="38" column="32" source="standard:no-multi-spaces" />
+        <error line="41" column="35" source="standard:no-multi-spaces" />
+        <error line="42" column="37" source="standard:no-multi-spaces" />
+        <error line="43" column="38" source="standard:no-multi-spaces" />
+        <error line="44" column="34" source="standard:no-multi-spaces" />
+        <error line="45" column="41" source="standard:no-multi-spaces" />
+        <error line="80" column="53" source="standard:trailing-comma-on-declaration-site" />
+        <error line="88" column="37" source="standard:multiline-if-else" />
+        <error line="92" column="16" source="standard:multiline-if-else" />
+        <error line="101" column="30" source="standard:wrapping" />
+        <error line="101" column="30" source="standard:argument-list-wrapping" />
+        <error line="102" column="47" source="standard:no-multi-spaces" />
+        <error line="103" column="47" source="standard:no-multi-spaces" />
+        <error line="104" column="43" source="standard:no-multi-spaces" />
+        <error line="105" column="41" source="standard:no-multi-spaces" />
+        <error line="106" column="41" source="standard:no-multi-spaces" />
+        <error line="107" column="9" source="standard:wrapping" />
+        <error line="107" column="10" source="standard:argument-list-wrapping" />
+        <error line="121" column="48" source="standard:no-multi-spaces" />
+        <error line="122" column="50" source="standard:no-multi-spaces" />
+        <error line="125" column="101" source="standard:max-line-length" />
+        <error line="126" column="101" source="standard:max-line-length" />
+        <error line="127" column="101" source="standard:max-line-length" />
+        <error line="128" column="101" source="standard:max-line-length" />
+        <error line="129" column="101" source="standard:max-line-length" />
+        <error line="145" column="45" source="standard:no-multi-spaces" />
+        <error line="148" column="47" source="standard:no-multi-spaces" />
+    </file>
+    <file name="src/main/java/com/example/energyflow/ui/theme/Shapes.kt">
+        <error line="12" column="44" source="standard:no-multi-spaces" />
+        <error line="13" column="40" source="standard:no-multi-spaces" />
+        <error line="14" column="41" source="standard:no-multi-spaces" />
+        <error line="15" column="40" source="standard:no-multi-spaces" />
+        <error line="16" column="44" source="standard:no-multi-spaces" />
+    </file>
+    <file name="src/main/java/com/example/energyflow/ui/theme/Theme.kt">
+        <error line="253" column="41" source="standard:trailing-comma-on-call-site" />
+        <error line="284" column="23" source="standard:statement-wrapping" />
+        <error line="284" column="44" source="standard:statement-wrapping" />
+        <error line="285" column="30" source="standard:statement-wrapping" />
+        <error line="285" column="56" source="standard:statement-wrapping" />
+        <error line="292" column="16" source="standard:statement-wrapping" />
+        <error line="304" column="16" source="standard:no-multi-spaces" />
+        <error line="305" column="16" source="standard:no-multi-spaces" />
+        <error line="306" column="16" source="standard:no-multi-spaces" />
+        <error line="307" column="16" source="standard:no-multi-spaces" />
+        <error line="308" column="16" source="standard:no-multi-spaces" />
+        <error line="309" column="14" source="standard:no-multi-spaces" />
+        <error line="316" column="64" source="standard:function-expression-body" />
+    </file>
+    <file name="src/main/java/com/example/energyflow/ui/theme/Type.kt">
+        <error line="20" column="35" source="standard:no-multi-spaces" />
+        <error line="28" column="36" source="standard:no-multi-spaces" />
+        <error line="36" column="36" source="standard:no-multi-spaces" />
+        <error line="44" column="36" source="standard:no-multi-spaces" />
+        <error line="52" column="36" source="standard:no-multi-spaces" />
+        <error line="60" column="35" source="standard:no-multi-spaces" />
+        <error line="92" column="33" source="standard:no-multi-spaces" />
+        <error line="100" column="32" source="standard:no-multi-spaces" />
+        <error line="108" column="32" source="standard:no-multi-spaces" />
+        <error line="116" column="33" source="standard:no-multi-spaces" />
+        <error line="124" column="33" source="standard:no-multi-spaces" />
+        <error line="132" column="33" source="standard:no-multi-spaces" />
+    </file>
+</baseline>

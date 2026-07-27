@@ -11,4 +11,6 @@ plugins {
     alias(libs.plugins.kover) apply false
     alias(libs.plugins.baselineprofile) apply false
     alias(libs.plugins.benchmark) apply false
+    alias(libs.plugins.ktlint) apply false
+    alias(libs.plugins.roborazzi) apply false
 }

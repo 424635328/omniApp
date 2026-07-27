@@ -4,6 +4,12 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ktlint)
+}
+
+ktlint {
+    android.set(true)
+    baseline.set(file("ktlint-baseline.xml"))
 }
 
 kotlin {

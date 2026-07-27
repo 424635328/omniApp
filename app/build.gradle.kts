@@ -9,6 +9,13 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.kover)
     alias(libs.plugins.baselineprofile)
+    alias(libs.plugins.ktlint)
+    alias(libs.plugins.roborazzi)
+}
+
+ktlint {
+    android.set(true)
+    baseline.set(file("ktlint-baseline.xml"))
 }
 
 android {
@@ -48,6 +55,11 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
     kotlin {
         @Suppress("UnnecessaryOptInUsage")
@@ -94,6 +106,12 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
 
+    // Database module (Room entities, DAO, database, Hilt module)
+    implementation(project(":core:database"))
+
+    // Design system module (theme, colors, typography, shapes)
+    implementation(project(":core:designsystem"))
+
     // Shared KMP module
     implementation(project(":shared"))
     implementation(libs.kotlinx.datetime)
@@ -119,6 +137,13 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.client.mock)
+    // Screenshot tests (Roborazzi + Robolectric)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

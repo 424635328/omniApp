@@ -25,5 +25,7 @@ dependencyResolutionManagement {
 rootProject.name = "EnergyFlow"
 include(":app")
 include(":baselineprofile")
+include(":core:database")
+include(":core:designsystem")
 include(":shared")
  
