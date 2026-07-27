@@ -10,6 +10,7 @@ import java.time.LocalDateTime
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import android.app.Application
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -21,7 +22,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35])
+@Config(sdk = [35], application = Application::class)
 class TimelineItemScreenshotTest {
 
     @get:Rule
